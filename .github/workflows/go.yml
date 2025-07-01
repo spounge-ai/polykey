@@ -1,0 +1,43 @@
+name: Polykey CI (Go Build Test)
+
+# This workflow runs on any push or pull request to the main branch
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    # Checks out a copy of your repository
+    - uses: actions/checkout@v4
+
+    # Sets up the Go programming language environment
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22' # Using a recent version of Go
+
+    # --- ADDED STEPS START HERE ---
+
+    # Installs the protoc compiler, which is required by go generate
+    - name: Install protoc
+      uses: arduino/setup-protoc@v2
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+    # Runs the go:generate directive in your .go files to create the .pb.go code
+    - name: Generate Go code from .proto
+      run: go generate ./...
+
+    # --- ADDED STEPS END HERE ---
+
+    # Builds the entire project to ensure it compiles
+    - name: Build
+      run: go build -v ./...
+
+    # Runs all tests in the project
+    - name: Test
+      run: go test -v ./...
