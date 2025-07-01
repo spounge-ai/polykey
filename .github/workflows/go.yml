@@ -1,6 +1,5 @@
-name: Polykey CI (Go Build Test)
+name: PolyKey CI (Go Build & Test)
 
-# This workflow runs on any push or pull request to the main branch
 on:
   push:
     branches: [ "main" ]
@@ -10,34 +9,42 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-    # Checks out a copy of your repository
-    - uses: actions/checkout@v4
 
-    # Sets up the Go programming language environment
-    - name: Set up Go
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go 1.24.1
       uses: actions/setup-go@v5
       with:
-        go-version: '1.22' # Using a recent version of Go
+        go-version: 1.24.1
 
-    # --- ADDED STEPS START HERE ---
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
 
-    # Installs the protoc compiler, which is required by go generate
-    - name: Install protoc
+    - name: Install protoc compiler
       uses: arduino/setup-protoc@v2
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-    # Runs the go:generate directive in your .go files to create the .pb.go code
-    - name: Generate Go code from .proto
+    - name: Install protoc Go plugins
+      run: |
+        go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.6
+        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+
+    - name: Ensure GOPATH/bin is in PATH
+      run: echo "${{ env.GOPATH }}/bin" >> $GITHUB_PATH
+
+    - name: Generate Go code from .proto files
       run: go generate ./...
 
-    # --- ADDED STEPS END HERE ---
-
-    # Builds the entire project to ensure it compiles
-    - name: Build
+    - name: Build the project
       run: go build -v ./...
 
-    # Runs all tests in the project
-    - name: Test
+    - name: Run tests
       run: go test -v ./...
