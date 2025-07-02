@@ -53,3 +53,33 @@ func Encrypt(key []byte, plaintext []byte) ([]byte, error) {
 	return output, nil
 
 }
+
+
+func Decrypt(key []byte, ciphertext []byte) ([]byte, error) {
+	if err:= validateKey(key); err != nil {
+		return nil, err
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil{
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM cipher: %w", err)
+	}
+
+	nonceSize := aesgcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, fmt.Errorf("ciphertext too short: %d bytes, expected at least %d bytes", len(ciphertext), nonceSize)
+	}
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt: %w", err)
+	}
+	return plaintext, nil
+}
+
+
