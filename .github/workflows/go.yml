@@ -27,7 +27,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
 
-    # --- Protobuf Setup (Keep these if you generate code in CI) ---
+    # --- Protobuf Setup ---
     - name: Install protoc compiler
       uses: arduino/setup-protoc@v2
       with:
@@ -38,22 +38,20 @@ jobs:
         go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.6
         go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 
-    - name: Ensure GOPATH/bin is in PATH
-      run: echo "${{ env.GOPATH }}/bin" >> $GITHUB_PATH
+    - name: Ensure Go bin is in PATH
+      run: echo "$HOME/go/bin" >> $GITHUB_PATH
 
     - name: Generate Go code from .proto files
       run: go generate ./...
     # --- End Protobuf Setup ---
 
-
-    # --- Standard Go Build and Test (Keep these to verify code directly) ---
+    # --- Standard Go Build and Test ---
     - name: Build Go project
       run: go build -v ./...
 
     - name: Run Go tests
       run: go test -v ./...
     # --- End Standard Go Build and Test ---
-
 
     # --- Docker Build and Push ---
     - name: Set up Docker Buildx
@@ -66,12 +64,16 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Set lowercase repo name for Docker tag
+      id: set_lowercase
+      run: echo "repo_lower=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
-        tags: ghcr.io/${{ github.repository }}:latest # Tag with GHCR and repo name
+        tags: ghcr.io/${{ steps.set_lowercase.outputs.repo_lower }}:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
     # --- End Docker Build and Push ---
