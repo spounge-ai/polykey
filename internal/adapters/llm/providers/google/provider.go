@@ -35,6 +35,7 @@ func (p *GoogleProvider) Close() error {
     return nil // Placeholder return
 }
 
+
 // Generate implements the llm.LLMProvider interface for text generation.
 // Input: context.Context for cancellation/timeouts, pointer to llm.LLMRequest.
 // Output: Pointer to llm.LLMResponse, error.
