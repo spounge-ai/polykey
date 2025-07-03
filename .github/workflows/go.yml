@@ -1,4 +1,4 @@
-name: PolyKey CI (Go Build & Test)
+name: PolyKey CI (Go Build, Test, & Docker) # Updated name
 
 on:
   push:
@@ -27,6 +27,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
 
+    # --- Protobuf Setup (Keep these if you generate code in CI) ---
     - name: Install protoc compiler
       uses: arduino/setup-protoc@v2
       with:
@@ -42,9 +43,35 @@ jobs:
 
     - name: Generate Go code from .proto files
       run: go generate ./...
+    # --- End Protobuf Setup ---
 
-    - name: Build the project
+
+    # --- Standard Go Build and Test (Keep these to verify code directly) ---
+    - name: Build Go project
       run: go build -v ./...
 
-    - name: Run tests
+    - name: Run Go tests
       run: go test -v ./...
+    # --- End Standard Go Build and Test ---
+
+
+    # --- Docker Build and Push ---
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ghcr.io/${{ github.repository }}:latest # Tag with GHCR and repo name
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    # --- End Docker Build and Push ---
