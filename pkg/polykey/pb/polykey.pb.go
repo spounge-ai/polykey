@@ -576,7 +576,7 @@ const file_polykey_proto_rawDesc = "" +
 	"\tUpdateBot\x12\x19.polykey.UpdateBotRequest\x1a\f.polykey.Bot\x12>\n" +
 	"\tDeleteBot\x12\x19.polykey.DeleteBotRequest\x1a\x16.google.protobuf.Empty\x124\n" +
 	"\bListBots\x12\x18.polykey.ListBotsRequest\x1a\f.polykey.Bot0\x01\x12D\n" +
-	"\fSetBotAPIKey\x12\x1c.polykey.SetBotAPIKeyRequest\x1a\x16.google.protobuf.EmptyB.Z,github.com/SpoungeAI/polykey-service/polykeyb\x06proto3"
+	"\fSetBotAPIKey\x12\x1c.polykey.SetBotAPIKeyRequest\x1a\x16.google.protobuf.EmptyB2Z0github.com/SpoungeAI/polykey-service/pkg/polykeyb\x06proto3"
 
 var (
 	file_polykey_proto_rawDescOnce sync.Once
