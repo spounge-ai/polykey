@@ -1,5 +1,6 @@
 package google
 
+/*
 import (
 	"fmt"
 
@@ -13,7 +14,7 @@ type Config struct {
 	APIKey string `json:"api_key" yaml:"api_key" validate:"required"`
 
 	// Default settings for Gemini models - can be overridden by request parameters.
-	DefaultModel       string  `json:"default_model" yaml:"default_model" validate:"required"` // e.g., "gemini-pro", "gemini-1.5-flash-latest"
+	DefaultModel       string  `json:"default_model" yaml:"default_model" validate:"required"`
 	DefaultTemperature float64 `json:"default_temperature" yaml:"default_temperature"`
 	DefaultMaxTokens   int     `json:"default_max_tokens" yaml:"default_max_tokens"`
 	DefaultTimeoutSec  int     `json:"default_timeout_sec" yaml:"default_timeout_sec"`
@@ -28,7 +29,7 @@ type Config struct {
 // Used by: Application configuration loading. Depends on: None.
 func NewDefaultConfig() Config {
 	return Config{
-		DefaultModel:          "gemini-1.5-flash-latest",
+		DefaultModel:          "gemini-2.5-flash-preview",
 		DefaultTemperature:    0.7,
 		DefaultMaxTokens:      500,
 		DefaultTimeoutSec:     30,
@@ -45,5 +46,10 @@ func (c Config) Validate() error {
 	if err := validate.Struct(c); err != nil {
 		return fmt.Errorf("google config validation failed: %w", err)
 	}
+
+
 	return nil
 }
+
+
+*/
