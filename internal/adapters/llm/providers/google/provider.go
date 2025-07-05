@@ -4,11 +4,11 @@ import (
 	"context"
   
 	"fmt"
-    "github.com/SpoungeAI/polykey-service/internal/adapters/llm"  // Import the generic LLM types
+    "github.com/SpoungeAI/polykey-service/internal/adapters/llm"  
 	"google.golang.org/genai"
+    geminipb "github.com/SpoungeAI/polykey-service/proto/google/gemini"
 )
 
-// GoogleGeminiProvider implements the LLMProvider interface for Google's Gemini models
 type GoogleGeminiProvider struct {
 	client *genai.Client
 	cfg *llm.ProviderConfig
@@ -30,3 +30,6 @@ func NewGoogleGeminiProvider(ctx context.Context, cfg *llm.ProviderConfig) (*Goo
         cfg:    cfg,
     }, nil
 }
+
+
+func (p *GoogleGeminiProvider) GenerateText

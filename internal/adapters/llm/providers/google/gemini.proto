@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package gemini;
+
+option go_package = "github.com/SpoungeAI/polykey-service/proto/google/gemini";
+
+// Text prompt message
+message TextPrompt {
+  string text = 1;
+}
+
+// GenerateTextRequest matches the Google Gemini Text Generation API
+message GenerateTextRequest {
+  string model = 1;                // Model name, e.g., "gemini-1"
+  TextPrompt prompt = 2;           // Input prompt
+  float temperature = 3;           // Sampling temperature
+  int32 max_output_tokens = 4;     // Maximum tokens to generate
+  int32 top_p = 5;                 // Nucleus sampling parameter
+  int32 top_k = 6;                 // Top-k sampling parameter
+  bool stop_sequences = 7;         // To specify stopping conditions (simplified)
+}
+
+// Text generation candidate
+message TextCandidate {
+  string output = 1;               // Generated text
+  int32 token_count = 2;           // Number of tokens generated
+}
+
+// GenerateTextResponse matches the API's response structure
+message GenerateTextResponse {
+  repeated TextCandidate candidates = 1;   // One or more generation candidates
+  int32 prompt_token_usage = 2;             // Tokens consumed by prompt
+  int32 completion_token_usage = 3;         // Tokens generated
+  int32 total_token_usage = 4;              // Total tokens used
+}
