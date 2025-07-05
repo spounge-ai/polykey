@@ -3,62 +3,30 @@ package llm
 import (
 	"context"
 	"fmt"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// LLMProvider defines the interface that all LLM providers must implement.
-// This allows for easy swapping between different providers (OpenAI, Google, Anthropic, etc.)
+// LLMProvider defines the interface that all LLM providers must implement
 type LLMProvider interface {
-	// GenerateText generates text from a prompt
 	GenerateText(ctx context.Context, req *LLMRequest) (*LLMResponse, error)
-	
-	// GenerateTextStream generates text with streaming response
 	GenerateTextStream(ctx context.Context, req *LLMRequest) (LLMStreamResponse, error)
-	
-	// GenerateEmbedding generates vector embeddings for text
 	GenerateEmbedding(ctx context.Context, req *LLMRequest) (*LLMResponse, error)
-	
-	// ChatCompletion handles conversational responses
 	ChatCompletion(ctx context.Context, req *LLMRequest) (*LLMResponse, error)
-	
-	// ChatCompletionStream handles conversational responses with streaming
 	ChatCompletionStream(ctx context.Context, req *LLMRequest) (LLMStreamResponse, error)
-	
-	// GetName returns the provider's name for logging/debugging
 	GetName() string
-	
-	// Close cleans up any resources
 	Close() error
 }
 
 // LLMStreamResponse represents a streaming response from an LLM
 type LLMStreamResponse interface {
-	// Next returns the next chunk of the response
 	Next() (*LLMResponse, error)
-	
-	// Close closes the stream
 	Close() error
-}
-
-// ProviderConfig contains configuration for any LLM provider
-type ProviderConfig struct {
-	APIKey      string
-	BaseURL     string
-	Model       string
-	Temperature float64
-	MaxTokens   int
-	TopP        float64
-	TopK        int
-	
-	// Provider-specific fields
-	ProjectID string // For Google Vertex AI
-	Location  string // For Google Vertex AI
-	Timeout   int    // Request timeout in seconds
 }
 
 // LLMManager handles multiple providers and routing
 type LLMManager struct {
-	providers map[string]LLMProvider
-	defaultProviderName   string
+	providers           map[string]LLMProvider
+	defaultProviderName string
 }
 
 // NewLLMManager creates a new LLM manager
@@ -102,6 +70,70 @@ func (m *LLMManager) GenerateText(ctx context.Context, req *LLMRequest) (*LLMRes
 	if err != nil {
 		return nil, err
 	}
-	
 	return provider.GenerateText(ctx, req)
 }
+
+// for dev testing, we make this for dev testing, but can move to worker engine for langchaining.
+func (r *LLMRequest) ToProtoRequest() (*GenerateTextRequest, error) {
+	req := &GenerateTextRequest{
+		Provider: r.Provider,
+		Model:    r.Model,
+		Prompt:   r.Prompt,
+	}
+	
+	if r.ModelParams != nil {
+		params, err := structpb.NewStruct(r.ModelParams)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert model params: %w", err)
+		}
+		req.ModelParams = params
+	}
+	
+	return req, nil
+}
+
+func FromProtoRequest(req *GenerateTextRequest) (*LLMRequest, error) {
+	llmReq := &LLMRequest{
+		Provider: req.Provider,
+		Model:    req.Model,
+		Prompt:   req.Prompt,
+	}
+	
+	return llmReq, nil
+}
+
+func (r *LLMResponse) ToProtoResponse() *GenerateTextResponse {
+	candidates := make([]*TextCandidate, len(r.Candidates))
+	for i := range r.Candidates {
+		candidates[i] = &TextCandidate{
+			Output:     r.Candidates[i].Output,
+			TokenCount: r.Candidates[i].TokenCount,
+		}
+	}
+
+	return &GenerateTextResponse{
+		Candidates:           candidates,
+		PromptTokenUsage:     r.PromptTokenUsage,
+		CompletionTokenUsage: r.CompletionTokenUsage,
+		TotalTokenUsage:      r.TotalTokenUsage,
+	}
+}
+
+func FromProtoResponse(resp *GenerateTextResponse) *LLMResponse {
+	candidates := make([]TextCandidate, len(resp.Candidates))
+	for i, c := range resp.Candidates {
+		candidates[i] = TextCandidate{
+			Output:     c.Output,
+			TokenCount: c.TokenCount,
+		}
+	}
+	
+	return &LLMResponse{
+		Candidates:           candidates,
+		PromptTokenUsage:     resp.PromptTokenUsage,
+		CompletionTokenUsage: resp.CompletionTokenUsage,
+		TotalTokenUsage:      resp.TotalTokenUsage,
+	}
+}
+
+ 

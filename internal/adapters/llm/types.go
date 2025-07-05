@@ -1,39 +1,39 @@
 package llm
 
+
+// Request/Response structs
 type LLMRequest struct {
-	Prompt     string   // Text prompt for generation
-	Text       string   // For embedding requests
-	Inputs     []string // Optional batch inputs
-	History    []Message // For chat-style requests
-	
-	Model       string   // Optional override of default model
-	Temperature float64  // Optional override of default temperature
-	MaxTokens   int      // Optional override of default max tokens
-	TopP        float64  // Optional override of top-p
-	TopK        int      // Optional override of top-k
-	
-	Provider    string   // Which provider to use (empty = default)
+	Provider    string                 `json:"provider"`
+	Model       string                 `json:"model"`
+	Prompt      string                 `json:"prompt"`
+	Messages    []Message              `json:"messages,omitempty"`
+	ModelParams map[string]interface{} `json:"model_params,omitempty"`
+	MaxTokens   *int                   `json:"max_tokens,omitempty"`
+	Stream      bool                   `json:"stream,omitempty"`
 }
 
-// Message represents a single turn in a conversation.
 type Message struct {
-	Role    string // e.g., "user", "assistant", "system"
-	Content string
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
-// LLMResponse represents a result from an LLM.
 type LLMResponse struct {
-	Content   string      // Main output
-	Embedding []float32   // For embedding requests
-	Usage     Usage       // Token usage metadata
-	Messages  []Message   // For chat completions (streaming or history-based)
+	Candidates           []TextCandidate        `json:"candidates"`
+	PromptTokenUsage     int32                  `json:"prompt_token_usage"`
+	CompletionTokenUsage int32                  `json:"completion_token_usage"`
+	TotalTokenUsage      int32                  `json:"total_token_usage"`
+	Error                string                 `json:"error,omitempty"`
+	Provider             string                 `json:"provider,omitempty"`
+	Model                string                 `json:"model,omitempty"`
+	Metadata             map[string]interface{} `json:"metadata,omitempty"`
+	Embeddings           [][]float32            `json:"embeddings,omitempty"`
 }
 
-// Usage captures token/resource usage info.
-type Usage struct {
-	PromptTokens     int
-	CompletionTokens int
-	TotalTokens      int
+// ProviderConfig contains the minimal configuration needed for any provider.
+type ProviderConfig struct {
+	APIKey    string
+	BaseURL   string
+	Model     string
+	MaxTokens int
+	Timeout   int // Request timeout in seconds
 }
-
- 
