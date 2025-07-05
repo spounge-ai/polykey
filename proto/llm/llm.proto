@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package llm;
+
+option go_package = "github.com/SpoungeAI/polykey-service/internal/adapters/llm";
+
+import "google/protobuf/struct.proto";
+
+
+message GenerateTextRequest {
+  string provider = 1;
+  string model = 2;
+  string prompt = 3;
+  google.protobuf.Struct model_params = 4;
+}
+
+message TextCandidate {
+  string output = 1;
+  int32 token_count = 2;
+}
+
+message GenerateTextResponse {
+  repeated TextCandidate candidates = 1;
+  int32 prompt_token_usage = 2;
+  int32 completion_token_usage = 3;
+  int32 total_token_usage = 4;
+}
+
+service LLMService {
+  rpc GenerateText(GenerateTextRequest) returns (GenerateTextResponse);
+}
