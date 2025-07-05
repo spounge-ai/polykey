@@ -27,7 +27,7 @@ type GenerateTextRequest struct {
 	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
 	Model         string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
 	Prompt        string                 `protobuf:"bytes,3,opt,name=prompt,proto3" json:"prompt,omitempty"`
-	Params        *structpb.Struct       `protobuf:"bytes,4,opt,name=params,proto3" json:"params,omitempty"`
+	ModelParams   *structpb.Struct       `protobuf:"bytes,4,opt,name=model_params,json=modelParams,proto3" json:"model_params,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -83,9 +83,9 @@ func (x *GenerateTextRequest) GetPrompt() string {
 	return ""
 }
 
-func (x *GenerateTextRequest) GetParams() *structpb.Struct {
+func (x *GenerateTextRequest) GetModelParams() *structpb.Struct {
 	if x != nil {
-		return x.Params
+		return x.ModelParams
 	}
 	return nil
 }
@@ -214,12 +214,12 @@ var File_llm_proto protoreflect.FileDescriptor
 
 const file_llm_proto_rawDesc = "" +
 	"\n" +
-	"\tllm.proto\x12\x03llm\x1a\x1cgoogle/protobuf/struct.proto\"\x90\x01\n" +
+	"\tllm.proto\x12\x03llm\x1a\x1cgoogle/protobuf/struct.proto\"\x9b\x01\n" +
 	"\x13GenerateTextRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
-	"\x06prompt\x18\x03 \x01(\tR\x06prompt\x12/\n" +
-	"\x06params\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x06params\"H\n" +
+	"\x06prompt\x18\x03 \x01(\tR\x06prompt\x12:\n" +
+	"\fmodel_params\x18\x04 \x01(\v2\x17.google.protobuf.StructR\vmodelParams\"H\n" +
 	"\rTextCandidate\x12\x16\n" +
 	"\x06output\x18\x01 \x01(\tR\x06output\x12\x1f\n" +
 	"\vtoken_count\x18\x02 \x01(\x05R\n" +
@@ -255,7 +255,7 @@ var file_llm_proto_goTypes = []any{
 	(*structpb.Struct)(nil),      // 3: google.protobuf.Struct
 }
 var file_llm_proto_depIdxs = []int32{
-	3, // 0: llm.GenerateTextRequest.params:type_name -> google.protobuf.Struct
+	3, // 0: llm.GenerateTextRequest.model_params:type_name -> google.protobuf.Struct
 	1, // 1: llm.GenerateTextResponse.candidates:type_name -> llm.TextCandidate
 	0, // 2: llm.LLMService.GenerateText:input_type -> llm.GenerateTextRequest
 	2, // 3: llm.LLMService.GenerateText:output_type -> llm.GenerateTextResponse

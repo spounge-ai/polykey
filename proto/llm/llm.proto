@@ -11,7 +11,7 @@ message GenerateTextRequest {
   string provider = 1;
   string model = 2;
   string prompt = 3;
-  google.protobuf.Struct params = 4;
+  google.protobuf.Struct model_params = 4;
 }
 
 message TextCandidate {

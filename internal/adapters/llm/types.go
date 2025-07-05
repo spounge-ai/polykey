@@ -1,5 +1,5 @@
 package llm
-// Add Provider field to LLMRequest for provider selection
+
 type LLMRequest struct {
 	Prompt     string   // Text prompt for generation
 	Text       string   // For embedding requests
@@ -35,3 +35,5 @@ type Usage struct {
 	CompletionTokens int
 	TotalTokens      int
 }
+
+ 
