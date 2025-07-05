@@ -6,7 +6,7 @@ import (
 	"fmt"
     "github.com/SpoungeAI/polykey-service/internal/adapters/llm"  
 	"google.golang.org/genai"
-    geminipb "github.com/SpoungeAI/polykey-service/proto/google/gemini"
+    //geminipb "github.com/SpoungeAI/polykey-service/proto/google/gemini"
 )
 
 type GoogleGeminiProvider struct {
@@ -31,5 +31,4 @@ func NewGoogleGeminiProvider(ctx context.Context, cfg *llm.ProviderConfig) (*Goo
     }, nil
 }
 
-
-func (p *GoogleGeminiProvider) GenerateText
+ 
