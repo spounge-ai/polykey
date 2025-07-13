@@ -1,4 +1,4 @@
-name: PolyKey CI (Go Build, Test, & Docker) # Updated name
+name: PolyKey CI (Go Build, Test, & Docker)
 
 on:
   push:
@@ -27,33 +27,12 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
 
-    # --- Protobuf Setup ---
-    - name: Install protoc compiler
-      uses: arduino/setup-protoc@v2
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Install protoc Go plugins
-      run: |
-        go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.6
-        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
-
-    - name: Ensure Go bin is in PATH
-      run: echo "$HOME/go/bin" >> $GITHUB_PATH
-
-    - name: Generate Go code from .proto files
-      run: go generate ./...
-    # --- End Protobuf Setup ---
-
-    # --- Standard Go Build and Test ---
     - name: Build Go project
       run: go build -v ./...
 
     - name: Run Go tests
       run: go test -v ./...
-    # --- End Standard Go Build and Test ---
 
-    # --- Docker Build and Push ---
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
@@ -76,4 +55,3 @@ jobs:
         tags: ghcr.io/${{ steps.set_lowercase.outputs.repo_lower }}:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
-    # --- End Docker Build and Push ---
