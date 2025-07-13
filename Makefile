@@ -1,65 +1,143 @@
-.PHONY: all build-server run-server run-dev-client docker-build docker-run docker-push clean help
+.DEFAULT_GOAL := help
 
-BIN_DIR := bin
-SERVER_NAME := polykey
-SERVER_MAIN_PKG := ./cmd/polykey
-CLIENT_MAIN_PKG := ./cmd/dev_client
-DOCKER_IMAGE := ghcr.io/$(shell echo ${GITHUB_REPOSITORY} | tr '[:upper:]' '[:lower:]'):latest
-GO := go
-PWD := $(shell pwd)
+# ==============================================================================
+# VARIABLES
+# ==============================================================================
+# Binaries
+BIN_DIR 				:= bin
+SERVER_BINARY 			:= $(BIN_DIR)/polykey
+CLIENT_BINARY 			:= $(BIN_DIR)/dev_client
 
-HOST_PORT ?= 50052
-CONTAINER_PORT ?= 50051
+# Go
+GO 						:= go
+GO_BUILD_FLAGS 			:= -a -installsuffix cgo
+# LDFLAGS: -s strips debugging symbols, -w strips DWARF information. Reduces binary size and makes it harder to reverse-engineer.
+LDFLAGS 				:= -ldflags="-s -w"
+CGO_ENABLED 			:= CGO_ENABLED=0
+GOOS 					:= GOOS=linux
 
-all: build-server
+# Docker & Compose
+COMPOSE_FILE 			:= compose.yml
+DOCKER_CMD 				:= docker compose -f $(COMPOSE_FILE)
+SERVER_ADDR 			:= localhost:50051
 
-build-server: $(BIN_DIR)/$(SERVER_NAME)
 
-$(BIN_DIR)/$(SERVER_NAME): $(shell find $(SERVER_MAIN_PKG) -name '*.go')
-	@echo "Building $(SERVER_NAME)..."
+# ==============================================================================
+# COMMANDS
+# ==============================================================================
+
+.PHONY: all build build-server build-client run run-server run-client test test-race test-integration compose-up compose-down compose-dev compose-logs clean prune help help-setup
+
+all: build ## Build both server and client binaries
+
+# ------------------------------------------------------------------------------
+# Build Commands
+# ------------------------------------------------------------------------------
+build: build-server build-client ## Build both server and client binaries
+
+build-server: ## Build the server binary for a Linux environment
+	@echo "--> Building server..."
 	@mkdir -p $(BIN_DIR)
-	@$(GO) build -o $(BIN_DIR)/$(SERVER_NAME) $(SERVER_MAIN_PKG)
-	@echo "Build complete: $(BIN_DIR)/$(SERVER_NAME)"
+	$(CGO_ENABLED) $(GOOS) $(GO) build $(GO_BUILD_FLAGS) $(LDFLAGS) -o $(SERVER_BINARY) ./cmd/polykey
 
-run-server:
-	@echo "Running $(SERVER_NAME)..."
-	@$(BIN_DIR)/$(SERVER_NAME)
+build-client: ## Build the client binary for a Linux environment
+	@echo "--> Building client..."
+	@mkdir -p $(BIN_DIR)
+	$(CGO_ENABLED) $(GOOS) $(GO) build $(GO_BUILD_FLAGS) $(LDFLAGS) -o $(CLIENT_BINARY) ./cmd/dev_client
 
-run-dev-client:
-	@echo "Running dev client..."
-	@$(GO) run $(CLIENT_MAIN_PKG)/main.go
-	@echo "Dev client finished."
+# ------------------------------------------------------------------------------
+# Local Run Commands
+# ------------------------------------------------------------------------------
+run-server: ## Run the server locally using 'go run'
+	@echo "--> Starting server locally..."
+	@$(GO) run ./cmd/polykey
 
-docker-build:
-	@echo "Building Docker image..."
-	docker build \
-		--pull \
-		--cache-from=type=local,src=/tmp/.buildx-cache \
-		--cache-to=type=local,dest=/tmp/.buildx-cache \
-		-t polykey-server .
+run-client: ## Run the client locally, targeting localhost
+	@echo "--> Starting client locally..."
+	@POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) run ./cmd/dev_client
 
-docker-run: docker-build
-	@echo "Running Docker container (host port: $(HOST_PORT) → container port: $(CONTAINER_PORT))..."
-	docker run --rm -p $(HOST_PORT):$(CONTAINER_PORT) polykey-server
+# ------------------------------------------------------------------------------
+# Testing Commands
+# ------------------------------------------------------------------------------
+test: ## Run all unit tests
+	@echo "--> Running unit tests..."
+	@$(GO) test ./...
 
-docker-push: docker-build
-	@echo "Pushing Docker image to registry..."
-	docker push $(DOCKER_IMAGE)
-	@echo "Image pushed: $(DOCKER_IMAGE)"
+test-race: ## Run all unit tests with the race detector
+	@echo "--> Running unit tests with race detector..."
+	@$(GO) test -race ./...
 
-clean:
-	@echo "Cleaning..."
+test-integration: compose-up ## Run integration tests against the Docker environment
+	@echo "--> Running integration tests..."
+	@echo "Waiting for server to be healthy..."
+	@sleep 5
+	@POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) test -v -tags=integration ./...
+	@$(MAKE) compose-down
+
+# ------------------------------------------------------------------------------
+# Docker Compose Commands
+# ------------------------------------------------------------------------------
+compose-dev: ## Build and run the full dev environment (server & client)
+	@echo "--> Starting development environment with Docker Compose..."
+	@$(DOCKER_CMD) --profile dev up --build
+
+compose-up: ## Build and run only the server via Docker Compose
+	@echo "--> Starting server with Docker Compose..."
+	@$(DOCKER_CMD) up --build -d polykey-server
+
+compose-down: ## Stop and remove all Docker Compose containers
+	@echo "--> Stopping Docker Compose environment..."
+	@$(DOCKER_CMD) down
+
+compose-logs: ## View logs from all running containers
+	@echo "--> Tailing logs..."
+	@$(DOCKER_CMD) logs -f
+
+# ------------------------------------------------------------------------------
+# Cleaning Commands
+# ------------------------------------------------------------------------------
+clean: ## Clean local build artifacts
+	@echo "--> Cleaning local binaries..."
 	@rm -rf $(BIN_DIR)
-	@echo "Clean complete."
 
-help:
-	@echo "Makefile commands:"
-	@echo "  all               - Build the polykey server binary (default)"
-	@echo "  build-server      - Build the server binary into $(BIN_DIR)/$(SERVER_NAME)"
-	@echo "  run-server        - Run the server binary locally"
-	@echo "  run-dev-client    - Run the dev client locally"
-	@echo "  docker-build      - Build the Docker image for the server"
-	@echo "  docker-run        - Run the server in a Docker container"
-	@echo "  docker-push       - Push the server image to GHCR"
-	@echo "  clean             - Remove build artifacts"
-	@echo "  help              - Show this help message"
+prune: compose-down ## Stop containers AND remove volumes and images
+	@echo "--> Pruning Docker resources..."
+	@$(DOCKER_CMD) down -v --rmi all --remove-orphans
+	@docker image prune -f
+
+# ------------------------------------------------------------------------------
+# Help
+# ------------------------------------------------------------------------------
+help: ## ✨ Show this help message
+	@echo "Usage: make [command]"
+	@echo ""
+	@echo "Available commands:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+
+# ------------------------------------------------------------------------------
+# Setup Help
+# ------------------------------------------------------------------------------
+help-setup: ## 📖 Explain the project's testing and running patterns
+	@echo "\033[1;33mPolykey Service: How to Test and Run\033[0m"
+	@echo ""
+	@echo "\033[1;36m--- Testing Patterns ---\033[0m"
+	@echo "1. \033[1;32mUnit Tests (Fast & Local):\033[0m"
+	@echo "   Run quick checks on your local machine."
+	@echo "   \033[35m> make test\033[0m or \033[35m> make test-race\033[0m"
+	@echo ""
+	@echo "2. \033[1;32mIntegration Tests (Full Stack):\033[0m"
+	@echo "   Tests the full application using Docker. Slower but more thorough."
+	@echo "   \033[35m> make test-integration\033[0m"
+	@echo ""
+	@echo "\033[1;36m--- Functional Run Patterns ---\033[0m"
+	@echo "1. \033[1;32mRunning Locally (Go):\033[0m"
+	@echo "   Ideal for quick, iterative development."
+	@echo "   - In Terminal 1: \033[35m> make run-server\033[0m"
+	@echo "   - In Terminal 2: \033[35m> make run-client\033[0m"
+	@echo ""
+	@echo "2. \033[1;32mRunning with Docker (Compose):\033[0m"
+	@echo "   Runs the complete, containerized environment."
+	@echo "   - To start everything: \033[35m> make compose-dev\033[0m"
+	@echo "   - To stop everything:  \033[35m> make compose-down\033[0m"
