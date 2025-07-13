@@ -8,7 +8,7 @@ import (
     "google.golang.org/grpc"
     "google.golang.org/grpc/credentials/insecure"
 
-    pkv1 "github.com/spoungeai/spounge-proto/gen/go/polykey/v1"
+    pk "github.com/spoungeai/spounge-proto/gen/go/polykey/v1"
     "google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -26,7 +26,7 @@ func main() {
     }
     defer conn.Close()
 
-    client := pkv1.NewPolykeyServiceClient(conn)
+    client := pk.NewPolykeyServiceClient(conn)
 
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
@@ -39,7 +39,7 @@ func main() {
         log.Fatalf("failed to create parameters struct: %v", err)
     }
 
-    req := &pkv1.ExecuteToolRequest{
+    req := &pk.ExecuteToolRequest{
         ToolName:   "example_tool",
         Parameters: params,
         UserId:     "user-123",
@@ -57,11 +57,11 @@ func main() {
 
     // Handle the output oneof field
     switch output := resp.Output.(type) {
-    case *pkv1.ExecuteToolResponse_StringOutput:
+    case *pk.ExecuteToolResponse_StringOutput:
         log.Printf("String Output: %s", output.StringOutput)
-    case *pkv1.ExecuteToolResponse_StructOutput:
+    case *pk.ExecuteToolResponse_StructOutput:
         log.Printf("Struct Output: %v", output.StructOutput)
-    case *pkv1.ExecuteToolResponse_FileOutput:
+    case *pk.ExecuteToolResponse_FileOutput:
         log.Printf("File Output: %+v", output.FileOutput)
     default:
         log.Println("No output returned")
