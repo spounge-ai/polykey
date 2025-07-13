@@ -1,0 +1,40 @@
+services:
+  polykey-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+    ports:
+      - "50051:50051"
+    environment:
+      - POLYKEY_ENV=docker
+      - POLYKEY_LOG_LEVEL=debug
+    networks:
+      - polykey-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "50051"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  polykey-dev-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev-client
+    environment:
+      - POLYKEY_SERVER_ADDR=polykey-server:50051
+      - POLYKEY_ENV=docker
+      - POLYKEY_LOG_LEVEL=debug
+    depends_on:
+      polykey-server:
+        condition: service_healthy
+    networks:
+      - polykey-network
+    profiles:
+      - dev # Only start with --profile dev
+
+networks:
+  polykey-network:
+    driver: bridge
