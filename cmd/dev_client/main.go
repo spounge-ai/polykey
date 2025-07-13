@@ -8,45 +8,64 @@ import (
     "google.golang.org/grpc"
     "google.golang.org/grpc/credentials/insecure"
 
-    pb "github.com/SpoungeAI/polykey-service/pkg/polykey/pb"
+    pkv1 "github.com/spoungeai/spounge-proto/gen/go/polykey/v1"
+    "google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
-    address = "localhost:50051" // Server address
+    address = "localhost:50051"
 )
 
 func main() {
     log.Println("Starting dev_client...")
 
-    conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+    // Connect to gRPC server
+    conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
     if err != nil {
         log.Fatalf("did not connect: %v", err)
     }
     defer conn.Close()
-    c := pb.NewPolyKeyClient(conn)
 
-    ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+    client := pkv1.NewPolykeyServiceClient(conn)
+
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
 
-    createReq := &pb.CreateBotRequest{
-        Name:          "Client Bot",
-        SystemPrompt:  "Created from dev_client.",
-        ModelProvider: "test",
-    }
-    log.Printf("Attempting to Create Bot: %v", createReq.Name)
-    createdBot, err := c.CreateBot(ctx, createReq)
+    // Prepare parameters as a protobuf Struct (empty here, but add your fields as needed)
+    params, err := structpb.NewStruct(map[string]interface{}{
+        "example_param": "value",
+    })
     if err != nil {
-        log.Fatalf("could not create bot: %v", err)
+        log.Fatalf("failed to create parameters struct: %v", err)
     }
-    log.Printf("Bot Created Successfully: %v (ID: %s)", createdBot.Name, createdBot.Id)
 
-    getReq := &pb.GetBotRequest{BotId: createdBot.Id}
-    log.Printf("Attempting to Get Bot with ID: %s", getReq.BotId)
-    retrievedBot, err := c.GetBot(ctx, getReq)
-    if err != nil {
-        log.Fatalf("could not get bot: %v", err)
+    req := &pkv1.ExecuteToolRequest{
+        ToolName:   "example_tool",
+        Parameters: params,
+        UserId:     "user-123",
+        // WorkflowRunId and Metadata can be added if you have them
     }
-    log.Printf("Bot Retrieved Successfully: %v (ID: %s)", retrievedBot.Name, retrievedBot.Id)
+
+    log.Printf("Calling ExecuteTool with tool_name: %s", req.ToolName)
+
+    resp, err := client.ExecuteTool(ctx, req)
+    if err != nil {
+        log.Fatalf("ExecuteTool failed: %v", err)
+    }
+
+    log.Printf("ExecuteTool status: %v", resp.Status)
+
+    // Handle the output oneof field
+    switch output := resp.Output.(type) {
+    case *pkv1.ExecuteToolResponse_StringOutput:
+        log.Printf("String Output: %s", output.StringOutput)
+    case *pkv1.ExecuteToolResponse_StructOutput:
+        log.Printf("Struct Output: %v", output.StructOutput)
+    case *pkv1.ExecuteToolResponse_FileOutput:
+        log.Printf("File Output: %+v", output.FileOutput)
+    default:
+        log.Println("No output returned")
+    }
 
     log.Println("dev_client finished.")
 }
