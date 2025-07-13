@@ -1,0 +1,28 @@
+# Stage 1: build dependencies cache and tools
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Copy only go.mod and go.sum first to cache dependencies
+COPY go.mod go.sum ./
+
+# Download dependencies (caches in image layer)
+RUN go mod download
+
+# Copy full source code
+COPY . .
+
+# This step is optional: pre-build the dev client binary for faster startup
+RUN go build -o /polykey-dev-client ./cmd/dev_client
+
+# Final dev image (you can keep it alpine or switch to something else)
+FROM golang:1.24-alpine
+
+WORKDIR /app
+
+# Copy everything from builder stage
+COPY --from=builder /app /app
+COPY --from=builder /polykey-dev-client /usr/local/bin/polykey-dev-client
+
+# Default command runs the dev client binary (change as needed)
+CMD ["polykey-dev-client"]
