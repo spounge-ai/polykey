@@ -1,40 +1,46 @@
-<p>
-  <img src="./SpoungeBordered.png" alt="Polykey Icon" width="80" align="left" style="margin-right: 1em;" />
-  <strong style="font-size: 2em;">Polykey</strong><br/>
-  <em>A gRPC router microservice for LLMs and third-party APIs, built for the Spounge platform.</em>
+<p align="center">
+  <a href="https://github.com/SpoungeAI/polykey-service" title="PolyKey Repository" style="display: inline-block; vertical-align: middle;">
+    <img src="./SpoungeBordered.png" alt="Spounge Logo" width="90" />
+  </a>
+  <span style="display: inline-block; vertical-align: middle; font-size: 3em; font-weight: bold; margin-left: 0.5em;">
+    Polykey
+  </span>
 </p>
 
+<p align="center">
+  <em style="font-size: 0.95em;">A gRPC router microservice for LLMs and third-party APIs.</em>
+</p>
 
-<p style="margin-top: 2em;">
-  <img src="https://img.shields.io/github/actions/workflow/status/SpoungeAI/polykey-service/ci.yml?label=Build&style=flat" alt="Build Status" />
-  &nbsp;&nbsp;
-  <a href="https://github.com/SpoungeAI/polykey-service/pkgs/container/polykey-service" aria-label="Docker image on GHCR">
+<p align="center">
+  <a href="https://github.com/SpoungeAI/polykey-service/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/SpoungeAI/polykey-service/ci.yml?label=Build&style=flat&color=brightgreen" alt="Build Status" />
+  </a>
+  <a href="https://github.com/SpoungeAI/polykey-service/pkgs/container/polykey-service">
     <img src="https://img.shields.io/badge/Docker-GHCR-blue?logo=docker&style=flat" alt="Docker | GHCR" />
   </a>
-  &nbsp;&nbsp;
-  <img src="https://img.shields.io/github/go-mod/go-version/SpoungeAI/polykey-service?style=flat" alt="Go Module Version" />
-  &nbsp;&nbsp;
-  <a href="./LICENSE" aria-label="License MIT">
+  <a href="https://github.com/SpoungeAI/polykey-service/blob/main/go.mod">
+    <img src="https://img.shields.io/github/go-mod/go-version/SpoungeAI/polykey-service?style=flat" alt="Go Module Version" />
+  </a>
+  <a href="./LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue?style=flat" alt="License: MIT" />
   </a>
-  &nbsp;&nbsp;
-  <a href="https://github.com/SpoungeAI/polykey-service/wiki" aria-label="Documentation">
+  <a href="https://github.com/SpoungeAI/polykey-service/wiki">
     <img src="https://img.shields.io/badge/docs-polykey--service-blue?style=flat" alt="Docs" />
   </a>
 </p>
+
 
 <hr style="width: 100%; height: 4px; background-color: #888; border: none; margin: 2em auto 1em;" />
 
 
 
 This repository contains:
-- The core service logic
+- A OpenRouter-esque logic for LLMs and 3rd Party APIs.
 - A command-line test client
 - A full, containerized development setup using Docker + Make
 
 The project emphasizes **clarity, reproducibility, and extensibility**, with a unified output format for both running and testing the service.
 
----
 
 ## ⚙️ Core Features
 
@@ -44,8 +50,6 @@ The project emphasizes **clarity, reproducibility, and extensibility**, with a u
 - **Dynamic Config:** Smart config loader supports CLI flags, environment variables, and runtime context.
 - **Unified Reporting:** A custom log "beautifier" prints Jest-style output for both app runs and tests.
 - **Graceful Shutdown:** Handles system signals (`SIGINT`, `SIGTERM`) for clean exits.
-
----
 
 ## 👨‍💻 Workflow
 
@@ -92,28 +96,20 @@ This workflow is useful for quickly testing a single component without the overh
 
     ▶ RUNS Polykey Dev Client
 
-    ──────────
-    SETUP
-    ──────────
+    ────────── SETUP ──────────
       ✓ Configuration (server=localhost:50051)
 
-    ──────────
-    CONNECTION
-    ──────────
+    ────────── CONNECTION ──────────
       ✓ Network Connectivity
         Connection state changed ... (state=READY)
       ✓ gRPC Connection
 
-    ──────────
-    EXECUTION
-    ──────────
+    ────────── EXECUTION ──────────
       ✓ Tool Execution (tool=example_tool)
 
     ========================================
     PASS  All 4 checks passed
     ```
-
----
 
 ## 🧪 Running Tests
 
@@ -130,21 +126,16 @@ Example output:
 ```
 ▶ RUNS Go Test Suite
 
-──────────
-internal/config
-──────────
+────────── internal/config ──────────
   ✓ TestDetectRuntime (0.1ms)
   ✓ TestLoadConfig (0.2ms)
 
-cmd/dev_client
-──────────
+────────── cmd/dev_client ──────────
   ✓ TestSomethingInClient (0.1ms)
 
 ========================================
  PASS  All 3 tests passed
 ```
-
----
 
 ## 🧱 Architecture
 
@@ -161,8 +152,6 @@ The `ConfigLoader` (`internal/config/config.go`) reads settings from:
 * **Dockerfile:** Multi-stage build for lean, secure binaries
 * **Docker Compose:** Orchestrates services (`polykey-server`, `polykey-dev-client`) and manages health checks
 
----
-
 ## 🎨 Beautifier Internals
 
 The beautifier is a custom Go formatter (`test/utils/beautify.go`) that parses JSON logs and produces clean, Jest-style reports for both app runs and tests.
@@ -170,8 +159,6 @@ The beautifier is a custom Go formatter (`test/utils/beautify.go`) that parses J
 It supports logs from the dev client (`make run-client`) and Go tests (`make test`).
 
 For detailed usage and how to extend it, see [test/README.md](test/README.md).
-
----
 
 ## 📄 License
 
