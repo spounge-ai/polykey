@@ -63,26 +63,26 @@ run-server: ## 🚀 Run the server locally using 'go run'
 	@echo "$(GREEN)▶ Running server locally...$(RESET)"
 	@$(GO) run ./cmd/polykey
 
-run-client: ## 🚀 Run the client locally, targeting localhost
-	@echo "$(GREEN)▶ Running client locally...$(RESET)"
-	@POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) run ./cmd/dev_client
+run-test-client: ## 🚀 Run client with human-readable (text) logs
+	@echo "$(GREEN)▶ Running client with @Meoya/Contour...$(RESET)"
+	@LOG_FORMAT=text POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) run ./cmd/dev_client
 
 # ------------------------------------------------------------------------------
 # Testing Commands
 # ------------------------------------------------------------------------------
-test: ## 🧪 Run unit tests with clean, formatted output
+test: ## 🧪 Run unit tests and show a PASS/FAIL summary
 	@echo "$(CYAN)▶ Running unit tests...$(RESET)"
-	@$(GO) test -v -json ./... | tparse -all -format=dotted
+	@$(GO) test -v -json ./... | tparse
 
-test-race: ## 🧪 Run unit tests with the race detector and clean output
+test-race: ## 🧪 Run unit tests with the race detector and show a summary
 	@echo "$(CYAN)▶ Running unit tests with race detector...$(RESET)"
-	@$(GO) test -race -v -json ./... | tparse -all -format=dotted
+	@$(GO) test -race -v -json ./... | tparse
 
-test-integration: compose-up ## 🧪 Run integration tests with clean, formatted output
+test-integration: compose-up ## 🧪 Run integration tests and show a summary
 	@echo "$(CYAN)▶ Running integration tests...$(RESET)"
 	@echo "    (Waiting for server to become healthy)"
 	@sleep 5
-	@POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) test -v -json -tags=integration ./... | tparse -all -format=dotted
+	@POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) test -v -json -tags=integration ./... | tparse
 	@$(MAKE) compose-down
 
 # ------------------------------------------------------------------------------
