@@ -27,13 +27,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.24.1'
           cache: true # Enable Go module caching
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.59
+          version: v2.2.2
 
   # ----------------------------------------------------------------------------
   # Job 2: Run Unit Tests
