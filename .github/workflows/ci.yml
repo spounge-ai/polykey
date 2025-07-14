@@ -1,17 +1,18 @@
 # FILE: .github/workflows/ci.yml
 #
-# Main CI pipeline: Runs on every push and pull request to main.
+# Main CI pipeline: Runs on every push and pull request to main/ci.
 # - Runs unit tests.
 # - Runs integration tests on pull requests.
+# - Builds and scans a Docker image on pull requests.
 # - Builds, scans, and pushes a Docker image on pushes to main.
 
 name: PolyKey CI (Go Build, Test, & Docker)
 
 on:
   push:
-    branches: [ "main, ci" ]
+    branches: [ "main", "ci" ]
   pull_request:
-    branches: [ "main, ci" ]
+    branches: [ "main", "ci" ]
 
 jobs:
   # ----------------------------------------------------------------------------
@@ -23,16 +24,16 @@ jobs:
   #   steps:
   #     - name: Checkout code
   #       uses: actions/checkout@v4
-
+  #
   #     - name: Set up Go
   #       uses: actions/setup-go@v5
   #       with:
   #         go-version: '1.24.1'
-  #         cache: true # Enable Go module caching
-          
+  #         cache: true
+  #
   #     - name: Install tparse
   #       run: go install github.com/mfridman/tparse@latest
-
+  #
   #     - name: Run golangci-lint
   #       uses: golangci/golangci-lint-action@v7
   #       with:
@@ -51,8 +52,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
-          cache: true # Enable Go module caching
+          go-version: '1.24.1'
+          cache: true
 
       - name: Download dependencies
         run: go mod tidy
@@ -61,7 +62,7 @@ jobs:
         run: go install github.com/mfridman/tparse@latest
 
       - name: Run Unit Tests with Race Detector
-        run: make test-race
+        run: make test-race 
 
   # ----------------------------------------------------------------------------
   # Job 3: Run Integration Tests
@@ -79,7 +80,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.24.1' 
           cache: true
 
       - name: Download dependencies
@@ -89,30 +90,30 @@ jobs:
         run: go install github.com/mfridman/tparse@latest
 
       - name: Run Integration Tests
-        run: make test-integration
+        # Pipe output to tparse for a clean, readable summary
+        run: make test-integration  
 
   # ----------------------------------------------------------------------------
   # Job 4: Build, Scan, and Push Docker Image
-  # Runs only on pushes to the main branch (e.g., after a PR merge).
+  # Runs on pull requests (build & scan) and pushes to main (build, scan, & push).
   # ----------------------------------------------------------------------------
-  build-and-push-docker:
-    name: Build & Push Docker Image
+  build-scan-push:
+    name: Build, Scan & Push Docker Image
     runs-on: ubuntu-latest
     needs: [unit-test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
-      packages: write # Required to push to GHCR
+      packages: write 
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        id: buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -129,11 +130,10 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build Docker image
-        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: false # Build but don't push yet
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=docker,dest=/tmp/image.tar
@@ -151,8 +151,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Push Docker image to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           docker load --input /tmp/image.tar
-          for tag in ${{ steps.meta.outputs.tags }}; do
-            docker push "$tag"
-          done
+          docker push --all-tags ghcr.io/${{ github.repository }}
