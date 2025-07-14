@@ -1,20 +1,21 @@
-<div>
-  <table>
+<div style="padding: 0 0 1em 0; margin: 0;">
+  <table style="border-collapse: collapse; padding: 0; margin: 0;">
     <tr>
-      <td>
-        <img src="SpoungeBordered.png" alt="Polykey Icon" width="100" />
+      <td style="padding: 0 1em 0 0; margin: 0;"> <!-- right padding added here -->
+        <img src="SpoungeBordered.png" alt="Polykey Icon" width="100" style="display: block; margin: 0; padding: 0;" />
       </td>
-      <td style="padding-left: 1em; text-align: left;">
-        <div style="font-size: 2.5em; font-weight: bold; line-height: 1.2;">
+      <td style="padding: 0 1em 0 0; margin: 0; text-align: left;">
+        <div style="font-size: 2.5em; font-weight: bold; line-height: 1.2; margin: 0 0 0.3em 0; padding-right: 1em;"> <!-- bottom margin added -->
           Polykey
         </div>
-        <div style="font-style: italic; font-size: 1em;">
+        <div style="font-style: italic; font-size: 1em; margin: 0; padding-right: 1em;">
           A gRPC router microservice for LLMs and third-party APIs, built for the Spounge platform.
         </div>
       </td>
     </tr>
   </table>
 </div>
+
 
 <p>
   <img src="https://img.shields.io/github/actions/workflow/status/SpoungeAI/polykey-service/polykey-build.yml?label=build&style=flat" alt="Build Status" />
@@ -34,7 +35,7 @@
   </a>
 </p>
 
-<hr style="width: 60%; margin: 2em auto 1em;" />
+<hr style="width: 100%; height: 4px; background-color: #888; border: none; margin: 2em auto 1em;" />
 
 
 
