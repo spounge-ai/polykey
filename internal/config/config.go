@@ -209,7 +209,9 @@ func (cl *ConfigLoader) isDockerHostReachable() bool {
 	for _, addr := range addresses {
 		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 		if err == nil {
-			conn.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				fmt.Printf("failed to close connection: %v", closeErr)
+			}
 			return true
 		}
 	}
@@ -228,6 +230,11 @@ func (nt *NetworkTester) TestConnection(ctx context.Context, address string) err
 	if err != nil {
 		return fmt.Errorf("failed to connect to %s: %w", address, err)
 	}
-	defer conn.Close()
+	defer func() {
+    if closeErr := conn.Close(); closeErr != nil {
+        // Log the error or handle as appropriate
+        fmt.Printf("failed to close connection: %v", closeErr)
+    }
+	}()
 	return nil
 }

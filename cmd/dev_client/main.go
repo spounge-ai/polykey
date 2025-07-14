@@ -73,6 +73,7 @@ func (c *Client) ExecuteTool(ctx context.Context, req *pk.ExecuteToolRequest) (*
 	return resp, nil
 }
 
+
 func (c *Client) logResponse(resp *pk.ExecuteToolResponse) {
 	if resp.Status != nil {
 		c.logger.Info("Tool execution completed",
@@ -206,7 +207,9 @@ func createGRPCConnection(cfg *config.Config, logger *slog.Logger) (*grpc.Client
 	}
 
 	if err := waitForConnection(ctx, conn, logger); err != nil {
-		conn.Close()
+		if cerr := conn.Close(); cerr != nil {
+			logger.Warn("failed to close connection", "error", cerr)
+		}
 		return nil, fmt.Errorf("connection failed: %w", err)
 	}
 
