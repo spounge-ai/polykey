@@ -1,0 +1,66 @@
+# File: .github/workflows/ci.yml
+name: PolyKey CI (Go Build, Test, & Docker)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # --- lint and unit-test jobs are unchanged ---
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.59
+
+  unit-test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Run Unit Tests with Race Detector
+        run: make test-race
+
+  # --- integration-test job is unchanged ---
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-test
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Run Integration Tests
+        run: make test-integration
+
+  # --- This job now CALLS the reusable workflow ---
+  build-and-push-docker:
+    name: Build & Push Docker Image
+    needs: [lint, unit-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/reusable-docker-build.yml
+    with:
+      tag: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest
+    secrets:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

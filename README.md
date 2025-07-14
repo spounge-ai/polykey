@@ -1,37 +1,34 @@
-<div style="padding: 0 0 1em 0; margin: 0;">
-  <table style="border-collapse: collapse; padding: 0; margin: 0;">
-    <tr>
-      <td style="padding: 0 1em 0 0; margin: 0;"> <!-- right padding added here -->
-        <img src="SpoungeBordered.png" alt="Polykey Icon" width="100" style="display: block; margin: 0; padding: 0;" />
-      </td>
-      <td style="padding: 0 1em 0 0; margin: 0; text-align: left;">
-        <div style="font-size: 2.5em; font-weight: bold; line-height: 1.2; margin: 0 0 0.3em 0; padding-right: 1em;"> <!-- bottom margin added -->
-          Polykey
-        </div>
-        <div style="font-style: italic; font-size: 1em; margin: 0; padding-right: 1em;">
-          A gRPC router microservice for LLMs and third-party APIs, built for the Spounge platform.
-        </div>
-      </td>
-    </tr>
-  </table>
+<div style="display: flex; align-items: center; padding-bottom: 1em;">
+
+  <img src="SpoungeBordered.png" alt="Polykey Icon" width="100" style="margin-right: 1em; flex-shrink: 0;" />
+
+  <div style="text-align: left;">
+    <div style="font-size: 2.5em; font-weight: bold; line-height: 1.2; margin-bottom: 0.3em;">
+      Polykey
+    </div>
+    <div style="font-style: italic; font-size: 1em;">
+      A gRPC router microservice for LLMs and third-party APIs, built for the Spounge platform.
+    </div>
+  </div>
+
 </div>
 
 
 <p>
-  <img src="https://img.shields.io/github/actions/workflow/status/SpoungeAI/polykey-service/polykey-build.yml?label=build&style=flat" alt="Build Status" />
+  <img src="https://img.shields.io/github/actions/workflow/status/SpoungeAI/polykey-service/polykey-build.yml?label=Build&style=flat" alt="Build Status" />
   &nbsp;&nbsp;
   <a href="https://github.com/SpoungeAI/polykey-service/pkgs/container/polykey-service" aria-label="Docker image on GHCR">
-    <img src="https://img.shields.io/badge/docker%20%7C%20ghcr-blue?logo=docker&style=flat" alt="Docker | GHCR" />
+    <img src="https://img.shields.io/badge/Docker-GHCR-blue?logo=docker&style=flat" alt="Docker | GHCR" />
   </a>
   &nbsp;&nbsp;
   <img src="https://img.shields.io/github/go-mod/go-version/SpoungeAI/polykey-service?style=flat" alt="Go Module Version" />
   &nbsp;&nbsp;
   <a href="./LICENSE" aria-label="License MIT">
-    <img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat" alt="License: MIT" />
+    <img src="https://img.shields.io/badge/license-MIT-blue?style=flat" alt="License: MIT" />
   </a>
   &nbsp;&nbsp;
   <a href="https://github.com/SpoungeAI/polykey-service/wiki" aria-label="Documentation">
-    <img src="https://img.shields.io/badge/docs-polykey--service-blue.svg?style=flat" alt="Docs" />
+    <img src="https://img.shields.io/badge/docs-polykey--service-blue?style=flat" alt="Docs" />
   </a>
 </p>
 
@@ -192,5 +189,6 @@ For detailed usage and how to extend it, see [test/README.md](test/README.md).
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
 
-```
- 
+## Contact
+
+🧽 For questions, support, or to report bugs, please open an issue or contact the maintainers at [dev@spounge.com](mailto:dev@spounge.com).
