@@ -16,35 +16,38 @@ on:
 
 jobs:
   # ----------------------------------------------------------------------------
-  # Job 1: Lint Go Code (Temporarily Disabled)
+  # Job 1: Lint Go Code
   # ----------------------------------------------------------------------------
-    lint:
-      name: Lint
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-        - name: Set up Go
-          uses: actions/setup-go@v5
-          with:
-            go-version: '1.24.1'
-            cache: true
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
 
-        - name: Install tparse
-          run: go install github.com/mfridman/tparse@latest
-
-        - name: Run golangci-lint
-          uses: golangci/golangci-lint-action@v7
-          with:
-            version: v2.2.2
-
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          # Repaired: Use a specific, valid version of golangci-lint.
+          # The previous version 'v2.2.2' was invalid.
+          version: v1.59.1
+  
+  
+  
   # ----------------------------------------------------------------------------
   # Job 2: Run Unit Tests
   # ----------------------------------------------------------------------------
   unit-test:
     name: Unit Tests
     runs-on: ubuntu-latest
+    # Improved: Ensure linting passes before running tests.
+    needs: [lint]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -64,6 +67,7 @@ jobs:
       - name: Run Unit Tests with Race Detector
         run: make test-race 
 
+
   # ----------------------------------------------------------------------------
   # Job 3: Run Integration Tests
   # Runs only on pull requests, after unit tests succeed.
@@ -71,6 +75,7 @@ jobs:
   integration-test:
     name: Integration Tests
     runs-on: ubuntu-latest
+    # Improved: Depends on unit-test job to ensure sequential execution.
     needs: [unit-test]
     if: github.event_name == 'pull_request'
     steps:
@@ -92,7 +97,9 @@ jobs:
       - name: Run Integration Tests
         # Pipe output to tparse for a clean, readable summary
         run: make test-integration  
+  
 
+  
   # ----------------------------------------------------------------------------
   # Job 4: Build, Scan, and Push Docker Image
   # Runs on pull requests (build & scan) and pushes to main (build, scan, & push).
@@ -100,6 +107,7 @@ jobs:
   build-scan-push:
     name: Build, Scan & Push Docker Image
     runs-on: ubuntu-latest
+    # Improved: Depends on unit-test job to ensure sequential execution.
     needs: [unit-test]
     permissions:
       contents: read
@@ -129,7 +137,9 @@ jobs:
             type=sha,prefix=,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build Docker image
+      - name: Build Docker image and export to tar
+        # This step builds the image but does not push it.
+        # It exports the image to a tarball for scanning in the next step.
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -141,7 +151,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan image for vulnerabilities with Trivy
-        uses: aquasecurity/trivy-action@master
+        # Repaired: Pin action to a specific version for security and reproducibility.
+        uses: aquasecurity/trivy-action@0.24.0
         with:
           input: /tmp/image.tar
           format: 'table'
@@ -151,6 +162,8 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Push Docker image to GHCR
+        # This step runs only on a push to the main branch.
+        # It loads the scanned image from the tarball and pushes it to GHCR.
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           docker load --input /tmp/image.tar
