@@ -4,106 +4,122 @@
 # VARIABLES
 # ==============================================================================
 # Binaries
-BIN_DIR 				:= bin
-SERVER_BINARY 			:= $(BIN_DIR)/polykey
-CLIENT_BINARY 			:= $(BIN_DIR)/dev_client
+BIN_DIR                 := bin
+SERVER_BINARY           := $(BIN_DIR)/polykey
+CLIENT_BINARY           := $(BIN_DIR)/dev_client
 
 # Go
-GO 						:= go
-GO_BUILD_FLAGS 			:= -a -installsuffix cgo
-# LDFLAGS: -s strips debugging symbols, -w strips DWARF information. Reduces binary size and makes it harder to reverse-engineer.
-LDFLAGS 				:= -ldflags="-s -w"
-CGO_ENABLED 			:= CGO_ENABLED=0
-GOOS 					:= GOOS=linux
+GO                      := go
+# Flags for final, cross-compiled production builds (slower)
+GO_BUILD_FLAGS_PROD     := -a -installsuffix cgo -ldflags="-s -w"
+# Flags for fast, local development builds (uses cache)
+GO_BUILD_FLAGS_LOCAL    := -ldflags="-s -w"
+CGO_ENABLED             := CGO_ENABLED=0
+GOOS                    := GOOS=linux
 
 # Docker & Compose
-COMPOSE_FILE 			:= compose.yml
-DOCKER_CMD 				:= docker compose -f $(COMPOSE_FILE)
-SERVER_ADDR 			:= localhost:50051
+COMPOSE_FILE            := compose.yml
+DOCKER_CMD              := docker compose -f $(COMPOSE_FILE)
+SERVER_ADDR             := localhost:50051
+
+# Colors
+GREEN                   := \033[0;32m
+YELLOW                  := \033[0;33m
+CYAN                    := \033[0;36m
+RESET                   := \033[0m
 
 
 # ==============================================================================
 # COMMANDS
 # ==============================================================================
 
-.PHONY: all build build-server build-client run run-server run-client test test-race test-integration compose-up compose-down compose-dev compose-logs clean prune help help-setup
+.PHONY: all build build-local build-server build-client run run-server run-client test test-race test-integration compose-up compose-down compose-dev compose-logs clean-all clean-local docker-clean docker-prune help help-setup
 
-all: build ## Build both server and client binaries
+all: build-local ## ✨ Build local development binaries
 
 # ------------------------------------------------------------------------------
 # Build Commands
 # ------------------------------------------------------------------------------
-build: build-server build-client ## Build both server and client binaries
-
-build-server: ## Build the server binary for a Linux environment
-	@echo "--> Building server..."
+build: ## 🏭 Build production-ready binaries for Linux (slow, full rebuild)
+	@echo "$(YELLOW)▶ Building production server binary...$(RESET)"
 	@mkdir -p $(BIN_DIR)
-	$(CGO_ENABLED) $(GOOS) $(GO) build $(GO_BUILD_FLAGS) $(LDFLAGS) -o $(SERVER_BINARY) ./cmd/polykey
-
-build-client: ## Build the client binary for a Linux environment
-	@echo "--> Building client..."
+	@$(CGO_ENABLED) $(GOOS) $(GO) build $(GO_BUILD_FLAGS_PROD) -o $(SERVER_BINARY) ./cmd/polykey
+	@echo "$(YELLOW)▶ Building production client binary...$(RESET)"
 	@mkdir -p $(BIN_DIR)
-	$(CGO_ENABLED) $(GOOS) $(GO) build $(GO_BUILD_FLAGS) $(LDFLAGS) -o $(CLIENT_BINARY) ./cmd/dev_client
+	@$(CGO_ENABLED) $(GOOS) $(GO) build $(GO_BUILD_FLAGS_PROD) -o $(CLIENT_BINARY) ./cmd/dev_client
+
+build-local: ## 🛠️  Build development binaries using cache (fast)
+	@echo "$(YELLOW)▶ Building local server binary...$(RESET)"
+	@mkdir -p $(BIN_DIR)
+	@$(GO) build $(GO_BUILD_FLAGS_LOCAL) -o $(SERVER_BINARY) ./cmd/polykey
+	@echo "$(YELLOW)▶ Building local client binary...$(RESET)"
+	@mkdir -p $(BIN_DIR)
+	@$(GO) build $(GO_BUILD_FLAGS_LOCAL) -o $(CLIENT_BINARY) ./cmd/dev_client
 
 # ------------------------------------------------------------------------------
 # Local Run Commands
 # ------------------------------------------------------------------------------
-run-server: ## Run the server locally using 'go run'
-	@echo "--> Starting server locally..."
+run-server: ## 🚀 Run the server locally using 'go run'
+	@echo "$(GREEN)▶ Running server locally...$(RESET)"
 	@$(GO) run ./cmd/polykey
 
-run-client: ## Run the client locally, targeting localhost
-	@echo "--> Starting client locally..."
+run-client: ## 🚀 Run the client locally, targeting localhost
+	@echo "$(GREEN)▶ Running client locally...$(RESET)"
 	@POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) run ./cmd/dev_client
 
 # ------------------------------------------------------------------------------
 # Testing Commands
 # ------------------------------------------------------------------------------
-test: ## Run all unit tests
-	@echo "--> Running unit tests..."
-	@$(GO) test ./...
+test: ## 🧪 Run unit tests with clean, formatted output
+	@echo "$(CYAN)▶ Running unit tests...$(RESET)"
+	@$(GO) test -v -json ./... | tparse -all -format=dotted
 
-test-race: ## Run all unit tests with the race detector
-	@echo "--> Running unit tests with race detector..."
-	@$(GO) test -race ./...
+test-race: ## 🧪 Run unit tests with the race detector and clean output
+	@echo "$(CYAN)▶ Running unit tests with race detector...$(RESET)"
+	@$(GO) test -race -v -json ./... | tparse -all -format=dotted
 
-test-integration: compose-up ## Run integration tests against the Docker environment
-	@echo "--> Running integration tests..."
-	@echo "Waiting for server to be healthy..."
+test-integration: compose-up ## 🧪 Run integration tests with clean, formatted output
+	@echo "$(CYAN)▶ Running integration tests...$(RESET)"
+	@echo "    (Waiting for server to become healthy)"
 	@sleep 5
-	@POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) test -v -tags=integration ./...
+	@POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) test -v -json -tags=integration ./... | tparse -all -format=dotted
 	@$(MAKE) compose-down
 
 # ------------------------------------------------------------------------------
 # Docker Compose Commands
 # ------------------------------------------------------------------------------
-compose-dev: ## Build and run the full dev environment (server & client)
-	@echo "--> Starting development environment with Docker Compose..."
+compose-dev: ## 🐳 Build and run the full dev environment (server & client)
+	@echo "$(CYAN)▶ Starting full dev environment with Docker Compose...$(RESET)"
 	@$(DOCKER_CMD) --profile dev up --build
 
-compose-up: ## Build and run only the server via Docker Compose
-	@echo "--> Starting server with Docker Compose..."
+compose-up: ## 🐳 Build and run only the server via Docker Compose
+	@echo "$(CYAN)▶ Starting server with Docker Compose...$(RESET)"
 	@$(DOCKER_CMD) up --build -d polykey-server
 
-compose-down: ## Stop and remove all Docker Compose containers
-	@echo "--> Stopping Docker Compose environment..."
+compose-down: ## 🐳 Stop and remove all Docker Compose containers
+	@echo "$(YELLOW)▶ Stopping Docker Compose environment...$(RESET)"
 	@$(DOCKER_CMD) down
 
-compose-logs: ## View logs from all running containers
-	@echo "--> Tailing logs..."
+compose-logs: ## 🐳 View logs from all running containers
+	@echo "$(CYAN)▶ Tailing logs...$(RESET)"
 	@$(DOCKER_CMD) logs -f
 
 # ------------------------------------------------------------------------------
 # Cleaning Commands
 # ------------------------------------------------------------------------------
-clean: ## Clean local build artifacts
-	@echo "--> Cleaning local binaries..."
+clean-all: clean-local docker-prune ## 🧹 Clean everything (local binaries and all Docker resources)
+
+clean-local: ## 🧹 Clean local build artifacts only
+	@echo "$(YELLOW)▶ Cleaning local binaries from ./bin...$(RESET)"
 	@rm -rf $(BIN_DIR)
 
-prune: compose-down ## Stop containers AND remove volumes and images
-	@echo "--> Pruning Docker resources..."
+docker-clean: ## 🐳 Stop containers, remove networks and volumes
+	@echo "$(YELLOW)▶ Cleaning project Docker containers, networks, and volumes...$(RESET)"
+	@$(DOCKER_CMD) down -v --remove-orphans
+
+docker-prune: ## 🐳 Clean everything Docker-related for the project, INCLUDING IMAGES
+	@echo "$(YELLOW)▶ Pruning project Docker resources (containers, networks, volumes, and images)...$(RESET)"
 	@$(DOCKER_CMD) down -v --rmi all --remove-orphans
-	@docker image prune -f
 
 # ------------------------------------------------------------------------------
 # Help
