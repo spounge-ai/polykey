@@ -76,34 +76,34 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		return
 	}
 
-	switch {
-	case msg == "Configuration loaded":
+	switch  msg{
+	case "Configuration loaded":
 		printSuiteHeader(&s.currentSuite, "SETUP")
 		details := fmt.Sprintf("server=%v", entry["server"])
 		printStep("PASS", "Configuration", details)
 		s.passes++
-	case msg == "Network connectivity test passed":
+	case "Network connectivity test passed":
 		printSuiteHeader(&s.currentSuite, "CONNECTION")
 		printStep("PASS", "Network Connectivity", "")
 		s.passes++
-	case msg == "gRPC connection established successfully":
+	case "gRPC connection established successfully":
 		printSuiteHeader(&s.currentSuite, "CONNECTION")
 		printStep("PASS", "gRPC Connection", "")
 		s.passes++
-	case msg == "Executing tool":
+	case "Executing tool":
 		printSuiteHeader(&s.currentSuite, "EXECUTION")
 		details := fmt.Sprintf("tool=%v", entry["tool_name"])
 		printStep("PASS", "Tool Execution", details)
 		s.passes++
-	case msg == "Tool execution completed":
+	case "Tool execution completed":
 		printSuiteHeader(&s.currentSuite, "EXECUTION")
 		details := fmt.Sprintf("'%s'", entry["status_message"])
 		fmt.Printf("    %s└─ Status: %s%s%s\n", ColorGray, ColorCyan, details, ColorReset)
-	case msg == "Received struct output":
+	case "Received struct output":
 		printSuiteHeader(&s.currentSuite, "EXECUTION")
 		details := fmt.Sprintf("fields=%v", entry["field_count"])
 		fmt.Printf("    %s└─ Received Output %s(%s)%s\n", ColorGray, ColorGray, details, ColorReset)
-	case msg == "Application failed":
+	case "Application failed":
 		printSuiteHeader(&s.currentSuite, "ERROR")
 		details := fmt.Sprintf("%v", entry["error"])
 		printStep("FAIL", "Application Run", details)
