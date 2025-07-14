@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/SpoungeAI/polykey-service/internal/config"
+	"github.com/SpoungeAI/polykey-service/test/utils"
 	cmn "github.com/spoungeai/spounge-proto/gen/go/common/v1"
 	pk "github.com/spoungeai/spounge-proto/gen/go/polykey/v1"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -107,7 +110,8 @@ func (c *Client) logResponse(resp *pk.ExecuteToolResponse) {
 }
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	logBuffer := new(bytes.Buffer)
+	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
 
@@ -124,16 +128,15 @@ func main() {
 
 	if err := run(ctx, logger); err != nil {
 		logger.Error("Application failed", "error", err)
-		os.Exit(1)
 	}
 
-	logger.Info("Application completed successfully")
+	logLines := strings.Split(logBuffer.String(), "\n")
+	utils.PrintJestReport(logLines)
 }
 
 func run(ctx context.Context, logger *slog.Logger) error {
 	logger.Info("Starting polykey client...")
 
-	// Load configuration
 	loader := config.NewConfigLoader()
 	cfg, err := loader.Load()
 	if err != nil {
@@ -145,12 +148,10 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		"server", cfg.ServerAddress,
 	)
 
-	// Test network connectivity first
 	if err := testNetworkConnection(ctx, cfg, logger); err != nil {
 		return fmt.Errorf("network test failed: %w", err)
 	}
 
-	// Create client
 	client, err := NewClient(cfg, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
@@ -161,7 +162,6 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 	}()
 
-	// Execute test request
 	if err := executeTestRequest(ctx, client, logger); err != nil {
 		return fmt.Errorf("test request failed: %w", err)
 	}
