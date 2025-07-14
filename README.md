@@ -1,8 +1,8 @@
 
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: light)" srcset="./docs/light.svg">
-  <img alt="spounge-polykey-logo" src="./docs/dark.svg" width="50%" height="50%">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/dark.svg">
+  <img alt="spounge-polykey-logo" src="./docs/light.svg" width="50%" height="50%">
 </picture>
 
   A gRPC router microservice for LLMs and third-party APIs for [@Spounge](https://github.com/spounge-ai).
