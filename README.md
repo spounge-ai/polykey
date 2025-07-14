@@ -1,14 +1,9 @@
 <p align="center">
-  <a href="https://github.com/SpoungeAI/polykey-service" title="PolyKey Repository" style="display: inline-block; vertical-align: middle;">
-    <img src="./SpoungeBordered.png" alt="Spounge Logo" width="90" />
-  </a>
-  <span style="display: inline-block; vertical-align: middle; font-size: 3em; font-weight: bold; margin-left: 0.5em;">
-    Polykey
-  </span>
+  <img src="./PolykeyBanner.png" alt="Polykey Banner" />
 </p>
 
 <p align="center">
-  <em style="font-size: 0.95em;">A gRPC router microservice for LLMs and third-party APIs.</em>
+  <em>A gRPC router microservice for LLMs and third-party APIs.</em>
 </p>
 
 <p align="center">
