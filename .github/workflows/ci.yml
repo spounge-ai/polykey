@@ -149,8 +149,8 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
-
+          
       - name: Push Docker image to GHCR
         run: |
           docker load --input /tmp/image.tar
-          docker push --all-tags ${{ steps.meta.outputs.tags }}
+          docker push --all-tags ghcr.io/${{ github.repository }}
