@@ -17,10 +17,10 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
-	"github.com/SpoungeAI/polykey-service/internal/config"
-	"github.com/SpoungeAI/polykey-service/test/utils"
-	cmn "github.com/spoungeai/spounge-proto/gen/go/common/v1"
-	pk "github.com/spoungeai/spounge-proto/gen/go/polykey/v1"
+	"github.com/spounge-ai/polykey-service/internal/config"
+	"github.com/spounge-ai/polykey-service/test/utils"
+	cmn "github.com/spounge-ai/spounge-proto/gen/go/common/v1"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

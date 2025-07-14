@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 
-	pk "github.com/spoungeai/spounge-proto/gen/go/polykey/v1"
-	"github.com/SpoungeAI/polykey-service/internal/service"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v1"
+	"github.com/spounge-ai/polykey-service/internal/service"
 )
 
 type Server struct {

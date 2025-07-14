@@ -7,8 +7,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	pk "github.com/spoungeai/spounge-proto/gen/go/polykey/v1"
-	cmn "github.com/spoungeai/spounge-proto/gen/go/common/v1"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v1"
+	cmn "github.com/spounge-ai/spounge-proto/gen/go/common/v1"
 )
 
 type mockService struct{}
