@@ -9,10 +9,10 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/SpoungeAI/polykey-service/internal/server"
-	"github.com/SpoungeAI/polykey-service/internal/service"
+	"github.com/spounge-ai/polykey-service/internal/server"
+	"github.com/spounge-ai/polykey-service/internal/service"
 
-	pk "github.com/spoungeai/spounge-proto/gen/go/polykey/v1"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v1"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	pk "github.com/spoungeai/spounge-proto/gen/go/polykey/v1"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v1"
 )
 
 type Service interface {
