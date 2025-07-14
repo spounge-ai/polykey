@@ -62,7 +62,7 @@ jobs:
         run: go install github.com/mfridman/tparse@latest
 
       - name: Run Unit Tests with Race Detector
-        run: make test-race | tparse -all -follow
+        run: make test-race 
 
   # ----------------------------------------------------------------------------
   # Job 3: Run Integration Tests
@@ -91,7 +91,7 @@ jobs:
 
       - name: Run Integration Tests
         # Pipe output to tparse for a clean, readable summary
-        run: make test-integration | tparse -all -follow
+        run: make test-integration  
 
   # ----------------------------------------------------------------------------
   # Job 4: Build, Scan, and Push Docker Image
