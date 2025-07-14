@@ -1,21 +1,12 @@
-<div style="display: flex; align-items: center; padding-bottom: 1em;">
-
-  <img src="SpoungeBordered.png" alt="Polykey Icon" width="100" style="margin-right: 1em; flex-shrink: 0;" />
-
-  <div style="text-align: left;">
-    <div style="font-size: 2.5em; font-weight: bold; line-height: 1.2; margin-bottom: 0.3em;">
-      Polykey
-    </div>
-    <div style="font-style: italic; font-size: 1em;">
-      A gRPC router microservice for LLMs and third-party APIs, built for the Spounge platform.
-    </div>
-  </div>
-
-</div>
-
-
 <p>
-  <img src="https://img.shields.io/github/actions/workflow/status/SpoungeAI/polykey-service/polykey-build.yml?label=Build&style=flat" alt="Build Status" />
+  <img src="./SpoungeBordered.png" alt="Polykey Icon" width="80" align="left" style="margin-right: 1em;" />
+  <strong style="font-size: 2em;">Polykey</strong><br/>
+  <em>A gRPC router microservice for LLMs and third-party APIs, built for the Spounge platform.</em>
+</p>
+
+
+<p style="margin-top: 2em;">
+  <img src="https://img.shields.io/github/actions/workflow/status/SpoungeAI/polykey-service/ci.yml?label=Build&style=flat" alt="Build Status" />
   &nbsp;&nbsp;
   <a href="https://github.com/SpoungeAI/polykey-service/pkgs/container/polykey-service" aria-label="Docker image on GHCR">
     <img src="https://img.shields.io/badge/Docker-GHCR-blue?logo=docker&style=flat" alt="Docker | GHCR" />
@@ -33,9 +24,6 @@
 </p>
 
 <hr style="width: 100%; height: 4px; background-color: #888; border: none; margin: 2em auto 1em;" />
-
-
-
 
 
 

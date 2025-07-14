@@ -157,3 +157,10 @@ help-setup: ## 📖 Explain the project's testing and running patterns
 	@echo "   Runs the complete, containerized environment."
 	@echo "   - To start everything: \033[35m> make compose-dev\033[0m"
 	@echo "   - To stop everything:  \033[35m> make compose-down\033[0m"
+
+
+install-deps:  
+	@echo "$(GREEN)▶ Downloading Go module dependencies...$(RESET)"
+	@$(GO) mod tidy
+	@echo "$(GREEN)▶ Installing development tools...$(RESET)"
+	@$(GO) install github.com/kylelemons/tparse@latest
