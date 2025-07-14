@@ -1,28 +1,22 @@
-<p align="center">
-  <img src="./PolykeyBanner.png" alt="Polykey Banner" />
-</p>
 
-<p align="center">
-  <em>A gRPC router microservice for LLMs and third-party APIs.</em>
-</p>
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="./docs/light.svg">
+  <img alt="spounge-polykey-logo" src="./docs/dark.svg" width="50%" height="50%">
+</picture>
 
-<p align="center">
-  <a href="https://github.com/SpoungeAI/polykey-service/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/SpoungeAI/polykey-service/ci.yml?label=Build&style=flat&color=brightgreen" alt="Build Status" />
-  </a>
-  <a href="https://github.com/SpoungeAI/polykey-service/pkgs/container/polykey-service">
-    <img src="https://img.shields.io/badge/Docker-GHCR-blue?logo=docker&style=flat" alt="Docker | GHCR" />
-  </a>
-  <a href="https://github.com/SpoungeAI/polykey-service/blob/main/go.mod">
-    <img src="https://img.shields.io/github/go-mod/go-version/SpoungeAI/polykey-service?style=flat" alt="Go Module Version" />
-  </a>
-  <a href="./LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-blue?style=flat" alt="License: MIT" />
-  </a>
-  <a href="https://github.com/SpoungeAI/polykey-service/wiki">
-    <img src="https://img.shields.io/badge/docs-polykey--service-blue?style=flat" alt="Docs" />
-  </a>
-</p>
+  A gRPC router microservice for LLMs and third-party APIs for [@Spounge](https://github.com/spounge-ai).
+
+[![Build Status](https://img.shields.io/github/actions/workflow/status/SpoungeAI/polykey-service/ci.yml?label=Build&style=flat&color=brightgreen)](https://github.com/SpoungeAI/polykey-service/actions/workflows/ci.yml)
+[![Docker | GHCR](https://img.shields.io/badge/Docker-GHCR-blue?logo=docker&style=flat)](https://github.com/SpoungeAI/polykey-service/pkgs/container/polykey-service)
+[![Go Module Version](https://img.shields.io/github/go-mod/go-version/SpoungeAI/polykey-service?style=flat)](https://github.com/SpoungeAI/polykey-service/blob/main/go.mod)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)](./LICENSE)
+[![Docs](https://img.shields.io/badge/docs-polykey--service-blue?style=flat)](https://github.com/SpoungeAI/polykey-service/wiki)
+
+
+</div>
+
+
 
 
 <hr style="width: 100%; height: 4px; background-color: #888; border: none; margin: 2em auto 1em;" />
