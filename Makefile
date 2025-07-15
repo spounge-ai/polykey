@@ -1,4 +1,5 @@
 .DEFAULT_GOAL := help
+MAKEFLAGS += --no-print-directory
 
 # ==============================================================================
 # PHONY TARGETS
@@ -60,6 +61,9 @@ build-local: ## 🛠️  Build development binaries using cache (fast)
 	@echo "$(YELLOW)▶ Building local client binary...$(RESET)"
 	@$(MAKE) ._build_binary FLAGS="$(GO_BUILD_FLAGS_LOCAL)" GOOS="" BINARY="$(CLIENT_BINARY)" CMD_NAME="dev_client"
 
+build-production: ## 🏭 Build production images with compression
+	@echo "$(CYAN)▶ Building production images with compression...$(RESET)"
+	@$(DOCKER_CMD) build --build-arg COMPRESS_BINARIES=true --target production
 # ------------------------------------------------------------------------------
 # Local Run Commands
 # ------------------------------------------------------------------------------
@@ -90,6 +94,8 @@ test-integration: compose-up ## 🧪 Run integration tests (waits for server to 
 	done;
 	@echo "$(GREEN)    Server is healthy! Running tests...$(RESET)"
 	@POLYKEY_SERVER_ADDR=$(SERVER_ADDR) $(GO) test -v -json -tags=integration ./... | tparse
+	@echo "$(GREEN)▶ Running dev client test...$(RESET)"
+	@$(MAKE) run-test-client
 	@$(MAKE) compose-down
 
 # ------------------------------------------------------------------------------
@@ -115,7 +121,6 @@ compose-logs: ## 🐳 View logs from containers (e.g., 'make compose-logs s=poly
 	else \
 		$(DOCKER_CMD) logs -f $(s); \
 	fi
-
 
 compose-run-client: ## 📞 Run the dev-client task (requires 'make compose-up' to be running)
 	@echo "$(GREEN)▶ Calling server with dev-client...$(RESET)"
@@ -148,6 +153,19 @@ docker-prune: ## ☠️  [DESTRUCTIVE] Clean everything, INCLUDING IMAGES. Asks 
 	else \
 		echo "Prune operation cancelled."; \
 	fi
+
+
+# ------------------------------------------------------------------------------
+# CI
+# ------------------------------------------------------------------------------
+
+ci-check: ## 🔍 Run all CI checks locally
+	@echo "$(CYAN)▶ Running CI checks locally...$(RESET)"
+	@golangci-lint run
+	@$(MAKE) test
+	@$(MAKE) test-integration
+	@echo "$(GREEN)✅ All CI checks passed!$(RESET)"
+
 
 # ------------------------------------------------------------------------------
 # Setup & Help
