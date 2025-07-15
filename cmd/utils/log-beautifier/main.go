@@ -100,9 +100,11 @@ func printStep(status, message, details string) {
 
 	if status == "PASS" || status == "FAIL" {
 		if _, err := os.Stdout.WriteString("\033[1A\033[K"); err != nil {
-			// fallback for environments that do not support cursor movement
+			// Ignoring error: terminal may not support cursor movement
+			_ = err
 		}
 	}
+
 
 	if details != "" {
 		fmt.Printf("  %s%s%s %s %s(%s)%s\n", color, symbol, ColorReset, message, ColorGray, details, ColorReset)
