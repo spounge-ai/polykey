@@ -35,7 +35,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./.golangci-cache
-          key: ${{ runner.os }}-golangci-lint-${{ hashFiles('**/go.mod') }}
+          key: ${{ runner.os }}-golangci-lint-${{ hashFiles('go.mod') }}
           restore-keys: |
             ${{ runner.os }}-golangci-lint-
 
