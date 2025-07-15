@@ -107,14 +107,24 @@ compose-down: ## 🐳 Stop and remove all Docker Compose containers
 	@echo "$(YELLOW)▶ Stopping Docker Compose environment...$(RESET)"
 	@$(DOCKER_CMD) down --remove-orphans
 
-compose-logs: ## 🐳 View logs from containers (e.g., make compose-logs service=polykey-dev-client)
-	@echo "$(CYAN)▶ Tailing logs for: $(or $(service), 'all services')...$(RESET)"
-	@$(DOCKER_CMD) logs -f $(service)
+compose-logs: ## 🐳 View logs from containers (e.g., 'make compose-logs s=polykey-server b=true')
+	@echo "$(CYAN)▶ Tailing logs for: $(or $(s), 'all services')...$(RESET)"
+	@if [ "$(b)" = "true" ]; then \
+		echo "$(CYAN)    (Beautified output enabled. Using 'go run ./cmd/utils/log-beautifier')$(RESET)"; \
+		$(DOCKER_CMD) logs -f $(s) | go run ./cmd/utils/log-beautifier; \
+	else \
+		$(DOCKER_CMD) logs -f $(s); \
+	fi
 
-compose-run-client: ## 📞 Run the dev-client as a one-shot task against the running server
+
+compose-run-client: ## 📞 Run the dev-client task (requires 'make compose-up' to be running)
 	@echo "$(GREEN)▶ Calling server with dev-client...$(RESET)"
-	@$(DOCKER_CMD) run --rm polykey-dev-client
+	@$(DOCKER_CMD) run --rm --no-deps polykey-dev-client
 
+compose-reboot: ## ♻️ Reboot the server environment (down + up)
+	@echo "$(YELLOW)▶ Rebooting Docker Compose environment...$(RESET)"
+	@$(MAKE) compose-down
+	@$(MAKE) compose-up
 # ------------------------------------------------------------------------------
 # Cleaning Commands
 # ------------------------------------------------------------------------------

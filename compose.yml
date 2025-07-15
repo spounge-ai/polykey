@@ -12,12 +12,11 @@ services:
     networks:
       - polykey-network
     healthcheck:
-      # Use CMD-SHELL to better isolate the health check process
-      test: ["CMD-SHELL", "grpc_health_probe -addr=:50051"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "/bin/grpc_health_probe", "-addr=:50051"]
+      interval: 5s
+      timeout: 3s
       retries: 5
-      start_period: 15s
+      start_period: 30s
 
   polykey-dev-client:
     build:

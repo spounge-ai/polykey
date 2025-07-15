@@ -242,7 +242,7 @@ func waitForConnection(ctx context.Context, conn *grpc.ClientConn, logger *slog.
 }
 
 func executeTestRequest(ctx context.Context, client *Client, logger *slog.Logger) error {
-	params, err := structpb.NewStruct(map[string]interface{}{
+	params, err := structpb.NewStruct(map[string]any{
 		"example_param": "value",
 		"timestamp":     time.Now().Unix(),
 	})
