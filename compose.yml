@@ -12,11 +12,12 @@ services:
     networks:
       - polykey-network
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "50051"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      # Use the gRPC health probe for a more reliable check
+      test: ["CMD", "grpc-health-probe", "-addr=localhost:50051"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   polykey-dev-client:
     build:
@@ -29,11 +30,13 @@ services:
       - POLYKEY_LOG_LEVEL=debug
     depends_on:
       polykey-server:
+        # Wait for the server to be healthy before starting
         condition: service_healthy
     networks:
       - polykey-network
+    # Only start this service when the 'dev' profile is active
     profiles:
-      - dev # Only start with --profile dev
+      - dev
 
 networks:
   polykey-network:

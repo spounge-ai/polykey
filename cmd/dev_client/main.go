@@ -144,26 +144,23 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	logger.Info("Configuration loaded",
-		"runtime", loader.Detector.DetectRuntime(),
-		"server", cfg.ServerAddress,
-	)
-
-	if err := testNetworkConnection(ctx, cfg, logger); err != nil {
-		return fmt.Errorf("network test failed: %w", err)
-	}
-
 	client, err := NewClient(cfg, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
-	defer func() {
-		if closeErr := client.Close(); closeErr != nil {
-			logger.Error("Failed to close client", "error", closeErr)
-		}
-	}()
+	defer client.Close()
 
-	if err := executeTestRequest(ctx, client, logger); err != nil {
+	toolName := "example_tool"
+	if len(os.Args) > 1 {
+		toolName = os.Args[1]
+	}
+
+	userId := "user-123"
+	if len(os.Args) > 2 {
+		userId = os.Args[2]
+	}
+
+	if err := executeTestRequest(ctx, client, logger, toolName, userId); err != nil {
 		return fmt.Errorf("test request failed: %w", err)
 	}
 
@@ -241,7 +238,7 @@ func waitForConnection(ctx context.Context, conn *grpc.ClientConn, logger *slog.
 	return nil
 }
 
-func executeTestRequest(ctx context.Context, client *Client, logger *slog.Logger) error {
+func executeTestRequest(ctx context.Context, client *Client, logger *slog.Logger, toolName, userId string) error {
 	params, err := structpb.NewStruct(map[string]interface{}{
 		"example_param": "value",
 		"timestamp":     time.Now().Unix(),
@@ -251,9 +248,9 @@ func executeTestRequest(ctx context.Context, client *Client, logger *slog.Logger
 	}
 
 	req := &pk.ExecuteToolRequest{
-		ToolName:      "example_tool",
+		ToolName:      toolName,
 		Parameters:    params,
-		UserId:        "user-123",
+		UserId:        userId,
 		WorkflowRunId: "wf-run-456",
 		Metadata: &cmn.Metadata{
 			Fields: map[string]string{
@@ -267,16 +264,8 @@ func executeTestRequest(ctx context.Context, client *Client, logger *slog.Logger
 	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	resp, err := client.ExecuteTool(requestCtx, req)
-	if err != nil {
-		return err
-	}
-
-	if resp.Status == nil {
-		logger.Warn("Response missing status field")
-	}
-
-	return nil
+	_, err = client.ExecuteTool(requestCtx, req)
+	return err
 }
 
 func truncateString(s string, maxLen int) string {
