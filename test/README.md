@@ -1,156 +1,109 @@
-# Polykey Beautifier - (Porting to @Meoya/Contour)
+# PolyKey – Makefile Guide
 
-This guide shows how to use the project's `Makefile` and custom logging framework for streamlined development and testing. It's tailored for Spounge's codebase but modular enough to plug into other projects. A custom formatter provides unified, human-readable output for both app runs and tests—replacing tools like `tparse`.
+This project uses a `Makefile` to manage development, testing, and container workflows.
 
-## ▶️ Running the Application
+## Commands
 
-The primary way to run the `dev_client` is with a `make` command that automatically formats the output into a clean, Jest-style report.
+### Build
 
-### Commands
+| Command            | Description                                   |
+| ------------------ | --------------------------------------------- |
+| `make build`       | Build production binaries for Linux.          |
+| `make build-local` | Build development binaries for your local OS. |
 
-* **`make run-client`**
-  This is the main command for local development. The application runs, captures its own logs in memory, and then calls our custom beautifier at the end to produce a readable report.
+### Run Locally (No Docker)
 
-  **Example Output:**
-  ```sh
-  ▶ RUNS Polykey Dev Client
-  
-  ────────── SETUP ──────────
-    ✓ Configuration (server=localhost:50051)
-  
-  ────────── CONNECTION ──────────
-    ✓ Network Connectivity
-      Initial connection state ... (state=IDLE)
-      Connection state changed ... (state=CONNECTING)
-      Connection state changed ... (state=READY)
-    ✓ gRPC Connection
-  
-  ────────── EXECUTION ──────────
-    ✓ Tool Execution (tool=example_tool)
-      └─ Status: 'Tool 'example_tool' executed successfully'
-      └─ Received Output (fields=3)
-  
-  ========================================
-   PASS  All 4 checks passed
-``
+| Command                | Description                         |
+| ---------------------- | ----------------------------------- |
+| `make run-server`      | Run the gRPC server locally.        |
+| `make run-test-client` | Run the development client locally. |
 
-  * **`make run-client-json`**
-    Use this command if you need to see the raw, machine-readable JSON logs. This is useful for debugging the log output itself.
+### Testing
 
-## 🧪 Running Tests
+| Command                 | Description                            |
+| ----------------------- | -------------------------------------- |
+| `make test`             | Run unit tests.                        |
+| `make test-race`        | Run unit tests with the race detector. |
+| `make test-integration` | Run full integration tests in Docker.  |
 
-The test commands use the **exact same beautifier** to provide a consistent look and feel. This replaces the need for external tools like `tparse`.
+### Docker Compose
 
-### Commands
+| Command                   | Description                                   |
+| ------------------------- | --------------------------------------------- |
+| `make compose-up`         | Start `polykey-server` and dependencies.      |
+| `make compose-dev`        | Start full dev environment (server + client). |
+| `make compose-run-client` | Run the client against the running server.    |
+| `make compose-logs`       | Show logs from running containers.            |
+| `make compose-down`       | Stop and remove containers and networks.      |
 
-  * **`make test`**: Runs all unit tests.
+ 
+# Saved Info:
 
-  * **`make test-race`**: Runs all unit tests with the race detector enabled.
+ PolyKey Server: Future Improvements
+This document outlines recommended future enhancements to elevate the PolyKey gRPC server to a fully production-grade, scalable, and observable service.
 
-  * **`make test-integration`**: Runs the integration test suite against a live Docker environment.
+1. Advanced Configuration Management
+As the service grows, managing configuration via simple environment variables becomes insufficient. Adopting a dedicated configuration library is essential for operational flexibility.
 
-**Example Test Output:**
+Recommendation: Integrate Viper.
 
-```sh
-▶ RUNS Go Test Suite
+Benefits:
 
-────────── config ──────────
-  ✓ TestDetectRuntime (0.1ms)
-  ✓ TestLoadConfig (0.2ms)
+Unified Configuration: Manage settings from files (e.g., config.yaml), environment variables, and command-line flags in a single, prioritized system.
 
-────────── dev_client ──────────
-  ✓ TestSomethingInClient (0.1ms)
+Dynamic Reloading: Allows for configuration changes without restarting the server.
 
-========================================
- PASS  All 3 tests passed
-```
+Type-Safe Access: Reduces runtime errors by unmarshaling configuration into Go structs.
 
-## ⚙️ Beautifier Internals: How It Works
+2. Enhanced Observability
+To effectively monitor and debug the service in a production environment, we must move beyond basic logging.
 
-The custom log formatter is a Go package located at `test/utils/beautify.go`. It is designed to parse a collection of JSON log lines and print a formatted, human-readable report.
+2.1. Metrics for Monitoring and Alerting
+Recommendation: Instrument the server to expose key performance indicators as Prometheus metrics.
 
-### Input Data Format
+Implementation:
 
-The beautifier is designed to consume **newline-delimited JSON**. It intelligently detects one of two formats:
+Use a library like grpc-go-prometheus to automatically collect standard gRPC metrics (request latency, error counts, active connections).
 
-1.  **Application Logs (`slog`)**: Standard structured logs from our application. The key field it looks for is `"msg"`.
+Expose these metrics on a separate, internal-only HTTP port (e.g., :9090).
 
-    ```json
-    {"time":"...","level":"INFO","msg":"Configuration loaded","server":"localhost:50051"}
-    ```
+Benefits: Enables the creation of Grafana dashboards for real-time health monitoring and allows for sophisticated alerting rules based on service performance.
 
-2.  **Test Logs (`go test -json`)**: The standard output from Go's test runner. The key fields it looks for are `"Test"` and `"Action"`.
+2.2. Distributed Tracing
+In a microservices architecture, tracing a single request across multiple services is critical for debugging latency and errors.
 
-    ```json
-    {"Time":"...","Action":"pass","Package":"...","Test":"TestLoadConfig","Elapsed":0.00}
-    ```
+Recommendation: Adopt OpenTelemetry for Go.
 
-### How to Call It
+Implementation:
 
-The beautifier is invoked in two different ways depending on the context:
+Add an OpenTelemetry interceptor to the gRPC server to automatically propagate trace contexts.
 
-1.  **For the Application (`make run-client`):**
-    The `dev_client`'s `main.go` function calls the beautifier utility **internally**. It captures all logs to an in-memory buffer, and at the end of execution, it passes the collected logs to `utils.PrintJestReport()`.
+Export traces to a compatible backend like Jaeger or Honeycomb.
 
-2.  **For Tests (`make test`):**
-    The `Makefile` **pipes** the JSON output from `go test` directly to the beautifier script, which reads from standard input.
+Benefits: Provides a complete, end-to-end visualization of request lifecycles, making it invaluable for identifying performance bottlenecks.
 
-    ```makefile
-    test:
-    	@$(GO) test -v -json ./... | $(GO) run ./test/utils/beautify.go
-    ```
+3. Performance Profiling
+For diagnosing high CPU or memory usage, Go's built-in pprof tool is the industry standard.
 
-## 🔧 How to Extend the Beautifier
+Recommendation: Expose the pprof endpoints over HTTP.
 
-Adding a new formatted step to the report is a simple, two-step process.
+Implementation:
 
-### The Concept
+Import net/http/pprof.
 
-1.  The application (`cmd/dev_client/main.go`) logs important events as structured JSON to an in-memory buffer.
+Start a simple HTTP server on a private, internal-only port (e.g., :6060).
 
-2.  The beautifier utility (`test/utils/beautify.go`) reads these JSON logs and looks for specific `msg` fields to decide what to print.
+Benefits: Allows developers to connect to a running instance of the service to analyze its real-time performance characteristics and generate flame graphs to pinpoint bottlenecks.
 
-### Step 1: Add a Log Message in Your Application
+4. Advanced Error Handling and Reporting
+While the current interceptor logs errors, a more robust system would centralize error reporting.
 
-In your application code (e.g., in `cmd/dev_client/main.go`), add a new, specific log message for the event you want to report.
+Recommendation: Integrate an external error tracking service like Sentry or BugSnag.
 
-**Example:** Let's say you want to add a step for "Validating Parameters".
+Implementation:
 
-```go
-// In a function within main.go
-func executeTestRequest(...) error {
-    // ... existing code ...
+Modify the logging interceptor to capture and send any non-OK gRPC status codes to the error tracking service.
 
-    logger.Info("Parameters validated successfully") // <-- ADD THIS LINE
+Include rich context with each error report, such as request metadata and user ID.
 
-    resp, err := client.ExecuteTool(requestCtx, req)
-    // ...
-}
-```
-
-### Step 2: Add a Case in the Beautifier
-
-Now, open `test/utils/beautify.go` and add a `case` to the `switch` statement inside the `processAppLogEntry` function to handle your new message.
-
-```go
-// In test/utils/beautify.go
-
-func processAppLogEntry(entry LogEntry, s *state) {
-    // ... existing code ...
-	switch {
-    // ... existing cases ...
-
-    // ADD THIS NEW CASE
-    case msg == "Parameters validated successfully":
-        printSuiteHeader(&s.currentSuite, "EXECUTION") // Or a new suite like "VALIDATION"
-        printStep("PASS", "Parameter Validation", "")
-        s.passes++
-
-    // ... existing cases ...
-    }
-}
-```
-
-Run `make run-client`, your new "Parameter Validation" step will automatically appear in the final report. This pattern works for both successful steps and new failure conditions.
-
-```
+Benefits: Provides a centralized dashboard for viewing, triaging, and debugging application errors, complete with stack traces and contextual information.

@@ -12,10 +12,10 @@ services:
     networks:
       - polykey-network
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "50051"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "/bin/grpc_health_probe", "-addr=:50051"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
       start_period: 30s
 
   polykey-dev-client:
@@ -33,7 +33,7 @@ services:
     networks:
       - polykey-network
     profiles:
-      - dev # Only start with --profile dev
+      - dev
 
 networks:
   polykey-network:

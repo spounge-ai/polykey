@@ -1,39 +1,64 @@
-# Multi-stage Dockerfile for both server and dev client
-FROM golang:1.24 AS builder
+FROM golang:1.24.1-alpine3.20 AS builder
 
+ARG TARGETOS TARGETARCH
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN apk --no-cache add git make upx
+
+# Use the official, recommended method to install the health probe
+COPY --from=ghcr.io/grpc-ecosystem/grpc-health-probe:v0.4.38 /ko-app/grpc-health-probe /bin/grpc_health_probe
 
 WORKDIR /app
 
-# Copy go mod files
 COPY go.mod go.sum ./
-RUN go mod download
 
-# Copy source code
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
+
 COPY . .
 
-# Build binaries
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/polykey cmd/polykey/main.go
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/dev_client cmd/dev_client/main.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH \
+    go build -ldflags="-w -s" -trimpath -a -installsuffix cgo -o bin/polykey cmd/polykey/main.go && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH \
+    go build -ldflags="-w -s" -trimpath -a -installsuffix cgo -o bin/dev_client cmd/dev_client/main.go
 
-# Server stage
-FROM alpine:latest AS server
+# --- UPX Compression Stage ---
+FROM builder AS upx_compressor
+RUN upx --best --lzma /app/bin/polykey && \
+    upx --best --lzma /app/bin/dev_client
+
+FROM builder AS tester
+
+RUN go install github.com/mfridman/tparse@latest
+
+CMD ["make", "test"]
+
+FROM alpine:3.20 AS server
 RUN apk --no-cache add ca-certificates netcat-openbsd
-WORKDIR /root/
+WORKDIR /app/
+COPY --from=builder /bin/grpc_health_probe /bin/
 COPY --from=builder /app/bin/polykey .
 EXPOSE 50051
 CMD ["./polykey"]
 
-# Dev client stage
-FROM alpine:latest AS dev-client
+FROM alpine:3.20 AS dev-client
 RUN apk --no-cache add ca-certificates netcat-openbsd
-WORKDIR /root/
+WORKDIR /app/
 COPY --from=builder /app/bin/dev_client .
 CMD ["./dev_client"]
 
-# Development stage (includes both binaries)
-FROM alpine:latest AS development
-RUN apk --no-cache add ca-certificates netcat-openbsd
-WORKDIR /root/
-COPY --from=builder /app/bin/polykey .
-COPY --from=builder /app/bin/dev_client .
-CMD ["./polykey"]
+FROM scratch AS production
+
+COPY --from=alpine:3.20 /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+# Also copy the health probe to the production image
+COPY --from=builder /bin/grpc_health_probe /bin/
+COPY --from=upx_compressor --chown=appuser:appgroup /app/bin/polykey /polykey
+
+USER appuser:appgroup
+EXPOSE 50051
+CMD ["/polykey"]
