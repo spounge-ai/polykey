@@ -42,6 +42,7 @@ jobs:
       - name: Run Linter
         run: |
           docker run --rm \
+            --user $(id -u):$(id -g) \
             -v $(pwd)/.golangci-cache:/root/.cache/golangci-lint \
             polykey-tester:ci-${{ github.sha }} \
             golangci-lint run --timeout=5m ./...
@@ -91,7 +92,10 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
+          # Combines the speed of the GHA cache with the persistence of the registry cache
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-to: type=gha,mode=max
 
       - name: Generate SBOM
