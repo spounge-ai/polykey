@@ -147,7 +147,6 @@ install-deps: ## 📦 Install Go modules and development tools
 	@$(GO) mod tidy
 	@echo "$(GREEN)▶ Installing development tools...$(RESET)"
 	@$(GO) install github.com/mfridman/tparse@latest
-	@$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	@$(GO) install github.com/grpc-ecosystem/grpc-health-probe@latest
 
 help: ## ✨ Show this help message

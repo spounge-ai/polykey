@@ -15,9 +15,27 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test:
-    name: Lint and Test
+  lint:
+    name: Lint Codebase
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.59.1
+
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -36,22 +54,6 @@ jobs:
           tags: polykey-tester:ci-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Cache golangci-lint results
-        uses: actions/cache@v4
-        with:
-          path: ./.golangci-cache
-          key: ${{ runner.os }}-golangci-lint-${{ hashFiles('go.mod') }}
-          restore-keys: |
-            ${{ runner.os }}-golangci-lint-
-
-      - name: Run Linter
-        run: |
-          docker run --rm \
-            --user $(id -u):$(id -g) \
-            -v $(pwd)/.golangci-cache:/tmp/.cache \
-            polykey-tester:ci-${{ github.sha }} \
-            golangci-lint run --cache-dir /tmp/.cache --timeout=5m ./...
 
       - name: Run Unit Tests
         run: docker run --rm polykey-tester:ci-${{ github.sha }} make test
