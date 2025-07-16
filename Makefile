@@ -271,11 +271,12 @@ security-clean-cache: ## 🧹 Clean Trivy caches (local and Docker volume) to sa
 	@docker volume rm trivy-cache 2>/dev/null || true
 	@echo "$(GREEN)▶ Trivy cache cleaned$(RESET)"
 
+	
 security-scan-local-cache: ## 🔍 Run security scan with local Trivy (with cache for CI)
 	@echo "$(CYAN)▶ Running security scan with local Trivy (cached)...$(RESET)"
 	@if [ ! -d "bin" ]; then \
 		echo "$(YELLOW)⚠️ bin/ directory not found. Building binaries first...$(RESET)"; \
-	 	$(MAKE) build-local; \
+		$(MAKE) build-local; \
 	fi
 	@if ! command -v trivy > /dev/null 2>&1; then \
 		echo "$(YELLOW)⚠️ Trivy not found. Falling back to Docker with cache...$(RESET)"; \
@@ -283,8 +284,14 @@ security-scan-local-cache: ## 🔍 Run security scan with local Trivy (with cach
 	else \
 		echo "$(GREEN)▶ Using local Trivy installation$(RESET)"; \
 		mkdir -p .trivy-cache; \
-		TRIVY_CACHE_DIR=.trivy-cache trivy fs $(SERVER_BINARY) $(CLIENT_BINARY); \
+		TRIVY_CACHE_DIR=.trivy-cache trivy fs bin/ \
+			--format table \
+			--exit-code 1 \
+			--ignore-unfixed \
+			--vuln-type os,library \
+			--severity CRITICAL,HIGH; \
 	fi
+
 
 ci-check: ## 🔍 Run all CI checks locally (build, lint, test, security scan)
 	@echo "$(CYAN)▶ Running CI checks locally...$(RESET)"
