@@ -19,8 +19,8 @@ import (
 
 	"github.com/spounge-ai/polykey-service/internal/config"
 	"github.com/spounge-ai/polykey-service/test/utils"
-	cmn "github.com/spounge-ai/spounge-proto/gen/go/common/v1"
-	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v1"
+	cmn "github.com/spounge-ai/spounge-proto/gen/go/common/v2"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -53,8 +53,8 @@ func (c *Client) Close() error {
 func (c *Client) ExecuteTool(ctx context.Context, req *pk.ExecuteToolRequest) (*pk.ExecuteToolResponse, error) {
 	c.logger.Info("Executing tool",
 		"tool_name", req.ToolName,
-		"user_id", req.UserId,
-		"workflow_run_id", req.WorkflowRunId,
+		"secret_id", req.SecretId,  
+		"has_metadata", req.Metadata != nil, 
 	)
 
 	resp, err := c.client.ExecuteTool(ctx, req)
@@ -101,12 +101,6 @@ func (c *Client) logResponse(resp *pk.ExecuteToolResponse) {
 		)
 	default:
 		c.logger.Warn("No output returned")
-	}
-
-	if resp.Metadata != nil && len(resp.Metadata.Fields) > 0 {
-		c.logger.Info("Response metadata received",
-			"metadata_fields", len(resp.Metadata.Fields),
-		)
 	}
 }
 
@@ -251,10 +245,9 @@ func executeTestRequest(ctx context.Context, client *Client, logger *slog.Logger
 	}
 
 	req := &pk.ExecuteToolRequest{
-		ToolName:      "example_tool",
-		Parameters:    params,
-		UserId:        "user-123",
-		WorkflowRunId: "wf-run-456",
+		ToolName:   "example_tool",
+		Parameters: params,
+		SecretId:   stringPtr("secret-123"), // Changed from UserId, removed WorkflowRunId
 		Metadata: &cmn.Metadata{
 			Fields: map[string]string{
 				"client_version": "1.0.0",
@@ -284,4 +277,8 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
