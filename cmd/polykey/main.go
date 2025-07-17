@@ -13,12 +13,13 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
 	"github.com/spounge-ai/polykey-service/internal/server"
 	"github.com/spounge-ai/polykey-service/internal/service"
 
-	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v1"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
 func loggingInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
@@ -75,13 +76,31 @@ func main() {
 		grpc.UnaryInterceptor(loggingInterceptor(logger)),
 	)
 
-	healthSrv := health.NewServer()
-	polykeySvc := service.NewMockService()
+	// Enable reflection for debugging
+	reflection.Register(srv)
 
-	pk.RegisterPolykeyServiceServer(srv, server.NewServer(polykeySvc))
+	healthSrv := health.NewServer()
+	
+	// Create service and server with correct interfaces
+	polykeySvc := service.NewMockService()
+	polykeyServer := server.NewServer(polykeySvc)
+
+	// Register the service
+	pk.RegisterPolykeyServiceServer(srv, polykeyServer)
 	grpc_health_v1.RegisterHealthServer(srv, healthSrv)
-	healthSrv.SetServingStatus("polykey.v1.PolykeyService", grpc_health_v1.HealthCheckResponse_SERVING)
+	
+	// Set health status
+	healthSrv.SetServingStatus("polykey.v2.PolykeyService", grpc_health_v1.HealthCheckResponse_SERVING)
 	healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+
+	// Debug: Log registered services
+	logger.Info("Registered services:")
+	for serviceName, serviceInfo := range srv.GetServiceInfo() {
+		logger.Info("Service registered", "name", serviceName, "methods", len(serviceInfo.Methods))
+		for _, method := range serviceInfo.Methods {
+			logger.Info("Method available", "service", serviceName, "method", method.Name)
+		}
+	}
 
 	go func() {
 		logger.Info("server starting", "address", addr)

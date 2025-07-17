@@ -1,3 +1,4 @@
+// File: internal/service/mock.go
 package service
 
 import (
@@ -5,56 +6,62 @@ import (
 	"fmt"
 	"time"
 
+	cmn "github.com/spounge-ai/spounge-proto/gen/go/common/v2"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/structpb"
-
-	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v1"
-	cmn "github.com/spounge-ai/spounge-proto/gen/go/common/v1"
 )
 
-type mockService struct{}
+type MockService struct{}
 
-func NewMockService() Service {
-	return &mockService{}
+// NewMockService creates a new mock service instance
+func NewMockService() *MockService {
+	return &MockService{}
 }
 
-func (s *mockService) ExecuteTool(ctx context.Context, req *pk.ExecuteToolRequest) (*pk.ExecuteToolResponse, error) {
-	output, err := structpb.NewStruct(map[string]interface{}{
-		"tool_executed": req.ToolName,
-		"user_id":       req.UserId,
-		"params_echo":   req.Parameters.AsMap(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &pk.ExecuteToolResponse{
+// ExecuteTool implements the Service interface
+func (m *MockService) ExecuteTool(ctx context.Context, toolName string, parameters *structpb.Struct, secretId *string, metadata *cmn.Metadata) (*pk.ExecuteToolResponse, error) {
+	// Create a successful response
+	response := &pk.ExecuteToolResponse{
 		Status: &cmn.Status{
-			Code:    0,
-			Message: fmt.Sprintf("Tool '%s' executed successfully", req.ToolName),
+			Code:    200,
+			Message: "Tool executed successfully",
 		},
-		Output: &pk.ExecuteToolResponse_StructOutput{
-			StructOutput: output,
-		},
-		Metadata: &cmn.Metadata{
-			Fields: map[string]string{
-				"env": "mock",
-			},
-		},
-	}, nil
-}
-
-func (s *mockService) ExecuteToolStream(req *pk.ExecuteToolStreamRequest, stream pk.PolykeyService_ExecuteToolStreamServer) error {
-	for i := 1; i <= 3; i++ {
-		resp := &pk.ExecuteToolStreamResponse{
-			Status: &cmn.Status{Code: 0, Message: "ok"},
-			Output: &pk.ExecuteToolStreamResponse_StringOutput{
-				StringOutput: fmt.Sprintf("stream chunk %d for tool %s", i, req.ToolName),
-			},
-		}
-		if err := stream.Send(resp); err != nil {
-			return err
-		}
-		time.Sleep(500 * time.Millisecond)
 	}
-	return nil
+
+	// Based on the tool name, return different types of output
+	switch toolName {
+	case "example_tool":
+		response.Output = &pk.ExecuteToolResponse_StringOutput{
+			StringOutput: fmt.Sprintf("Mock execution of %s at %s", toolName, time.Now().Format(time.RFC3339)),
+		}
+	case "struct_tool":
+		structOutput, err := structpb.NewStruct(map[string]interface{}{
+			"result":    "success",
+			"timestamp": time.Now().Unix(),
+			"data":      map[string]interface{}{
+				"processed": true,
+				"count":     42,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create struct output: %w", err)
+		}
+		response.Output = &pk.ExecuteToolResponse_StructOutput{
+			StructOutput: structOutput,
+		}
+	case "file_tool":
+		response.Output = &pk.ExecuteToolResponse_FileOutput{
+			FileOutput: &cmn.File{
+				FileName: "example.txt",
+				MimeType: "text/plain",
+				Content:  []byte("This is mock file content"),
+			},
+		}
+	default:
+		response.Output = &pk.ExecuteToolResponse_StringOutput{
+			StringOutput: fmt.Sprintf("Unknown tool: %s", toolName),
+		}
+	}
+
+	return response, nil
 }
