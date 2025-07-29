@@ -1,8 +1,10 @@
-package utils
+package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -27,6 +29,20 @@ type state struct {
 	tests        map[string]time.Time
 }
 
+func main() {
+	var logLines []string
+	scanner := bufio.NewScanner(os.Stdin)
+	
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			logLines = append(logLines, line)
+		}
+	}
+	
+	PrintJestReport(logLines)
+}
+
 func PrintJestReport(logLines []string) {
 	s := &state{
 		tests: make(map[string]time.Time),
@@ -37,9 +53,6 @@ func PrintJestReport(logLines []string) {
 	fmt.Println()
 
 	for i, line := range logLines {
-		if line == "" {
-			continue
-		}
 		var entry LogEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
@@ -76,7 +89,7 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		return
 	}
 
-	switch  msg{
+	switch msg {
 	case "Configuration loaded":
 		printSuiteHeader(&s.currentSuite, "SETUP")
 		details := fmt.Sprintf("server=%v", entry["server"])
@@ -124,7 +137,7 @@ func processGoTestEntry(entry LogEntry, s *state) {
 	case "run":
 		printSuiteHeader(&s.currentSuite, packageName)
 		s.tests[testName] = time.Now()
-		fmt.Printf("  %s %s%s\n", "○", ColorGray, testName)
+		fmt.Printf("  %s %s%s%s\n", "○", ColorGray, testName, ColorReset)
 	case "pass":
 		duration := time.Since(s.tests[testName]).Round(time.Millisecond)
 		details := fmt.Sprintf("%v", duration)
@@ -141,7 +154,7 @@ func processGoTestEntry(entry LogEntry, s *state) {
 func printSuiteHeader(currentSuite *string, newSuite string) {
 	if *currentSuite != newSuite {
 		separator := strings.Repeat("─", 10)
-		fmt.Printf("\n%s%s %s %s%s\n", ColorGray, separator, ColorBold+newSuite, separator, ColorReset)
+		fmt.Printf("\n%s%s %s%s%s %s%s\n", ColorGray, separator, ColorBold, newSuite, ColorReset, separator, ColorReset)
 		*currentSuite = newSuite
 	}
 }
@@ -161,7 +174,7 @@ func printStep(status, message, details string) {
 }
 
 func printSummary(s *state) {
-	fmt.Println(ColorGray + "\n" + strings.Repeat("=", 40) + ColorReset)
+	fmt.Printf("%s\n%s%s\n", ColorGray, strings.Repeat("=", 40), ColorReset)
 	if len(s.failures) > 0 {
 		fmt.Printf(" %s FAIL %s %d failed, %d passed\n", ColorBgRed, ColorReset, len(s.failures), s.passes)
 	} else {
