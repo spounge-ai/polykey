@@ -38,10 +38,13 @@ test: ## Run tests
 test-race: ## Run tests with race detector
 	@go test -race -v ./...
 
-test-integration: server ## Run integration tests
+test-integration: build-beautifier server ## Run integration tests
 	@sleep 2
-	@POLYKEY_GRPC_PORT=$(PORT) go test -v ./tests/integration/...
+	@POLYKEY_GRPC_PORT=$(PORT) go test -v -json ./tests/integration/... | ./bin/log-beautifier
 	@$(MAKE) kill
+
+build-beautifier:
+	@go build -o $(BIN_DIR)/log-beautifier ./cmd/utils/log-beautifier
 
 clean: kill ## Clean build artifacts
 	@rm -rf $(BIN_DIR) .server_pid server.log
