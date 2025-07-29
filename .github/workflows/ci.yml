@@ -2,9 +2,9 @@ name: PolyKey CI
 
 on:
   push:
-    branches: [ "main", "ci" ]
+    branches: ["ci" ]
   pull_request:
-    branches: [ "main", "ci" ]
+    branches: ["ci" ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
