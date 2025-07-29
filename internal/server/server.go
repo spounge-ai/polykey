@@ -51,12 +51,13 @@ func New(cfg *config.Config) (*Server, int, error) {
 
 	grpcServer := grpc.NewServer(opts...)
 
-	// Create a new Polykey service
+	// Create a new Polykey service using the factory
 	storageService, err := storage.NewVaultStorage(cfg.Vault.Address, cfg.Vault.Token)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create vault storage: %w", err)
 	}
-	polykeyService, err := service.NewPolykeyService(cfg, storageService)
+	serviceFactory := service.NewServiceFactory()
+	polykeyService, err := serviceFactory.Create(cfg, storageService)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create polykey service: %w", err)
 	}

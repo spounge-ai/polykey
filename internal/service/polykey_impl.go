@@ -6,9 +6,11 @@ import (
 	"log"
 	"time"
 
+	"github.com/spounge-ai/polykey/internal/audit"
+	"github.com/spounge-ai/polykey/internal/authz"
 	"github.com/spounge-ai/polykey/internal/config"
+	"github.com/spounge-ai/polykey/internal/keymanager"
 	"github.com/spounge-ai/polykey/internal/storage"
-	"github.com/spounge-ai/polykey/internal/adapters/security"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -19,15 +21,21 @@ import (
 // polykeyServiceImpl implements the PolykeyService interface.
 type polykeyServiceImpl struct {
 	pk.UnimplementedPolykeyServiceServer
-	cfg     *config.Config
-	storage storage.Storage
+	cfg        *config.Config
+	storage    storage.Storage
+	authorizer authz.Authorizer
+	auditLoggr audit.Logger
+	keyManager keymanager.KeyManager
 }
 
 // NewPolykeyService creates a new instance of PolykeyService.
-func NewPolykeyService(cfg *config.Config, s storage.Storage) (pk.PolykeyServiceServer, error) {
+func NewPolykeyService(cfg *config.Config, s storage.Storage, authorizer authz.Authorizer, auditLogger audit.Logger, keyManager keymanager.KeyManager) (pk.PolykeyServiceServer, error) {
 	return &polykeyServiceImpl{
-		cfg:     cfg,
-		storage: s,
+		cfg:        cfg,
+		storage:    s,
+		authorizer: authorizer,
+		auditLoggr: auditLogger,
+		keyManager: keyManager,
 	}, nil
 }
 
@@ -35,61 +43,82 @@ func NewPolykeyService(cfg *config.Config, s storage.Storage) (pk.PolykeyService
 func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
 	log.Printf("Received GetKey request for key_id: %s", req.GetKeyId())
 
-	// Simulate key retrieval and decryption
-	mockKeyMaterial := []byte("mock_key_material_for_" + req.GetKeyId())
-	encryptionKey := []byte("thisisatestkeyforpolykeymockserv") // 32 bytes for AES-256
+	keyID := req.GetKeyId()
+	requesterContext := req.GetRequesterContext()
+	accessAttributes := req.GetAttributes()
 
-	encryptedKeyData, err := security.Encrypt(encryptionKey, mockKeyMaterial)
-	if err != nil {
-		log.Printf("Failed to encrypt mock key material: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to process key material")
+	// Authorization Check
+	isAuthorized, authDecisionID := s.authorizer.Authorize(ctx, requesterContext, accessAttributes, keyID)
+	if !isAuthorized {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "GetKey", keyID, authDecisionID, false, fmt.Errorf("permission denied"))
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
 
-	return &pk.GetKeyResponse{
-		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    encryptedKeyData,
-			EncryptionAlgorithm: "AES-256-GCM",
-			KeyDerivationParams: "mock_kdf_params",
-			KeyChecksum:         "mock_checksum",
-		},
-		Metadata: &pk.KeyMetadata{
-			KeyId:      req.GetKeyId(),
-			KeyType:    pk.KeyType_KEY_TYPE_API_KEY,
-			Status:     pk.KeyStatus_KEY_STATUS_ACTIVE,
-			Version:    1,
-			CreatedAt:  timestamppb.Now(),
-			UpdatedAt:  timestamppb.Now(),
-			CreatorIdentity: "mock_creator",
-		},
-		ResponseTimestamp: timestamppb.Now(),
-		AuthorizationDecisionId: "mock_auth_decision_id",
-	}, nil
+	resp, err := s.keyManager.GetKey(ctx, req)
+	if err != nil {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "GetKey", keyID, authDecisionID, false, err)
+		return nil, status.Errorf(codes.Internal, "failed to retrieve key: %v", err)
+	}
+
+	resp.AuthorizationDecisionId = authDecisionID
+	s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "GetKey", keyID, authDecisionID, true, nil)
+	return resp, nil
 }
 
 // ListKeys implements pk.PolykeyServiceServer.
 func (s *polykeyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
 	log.Println("Received ListKeys request")
 
-	// Simulate listing keys
-	var keys []*pk.KeyMetadata
-	for i := 0; i < 5; i++ {
-		keys = append(keys, &pk.KeyMetadata{
-			KeyId:           fmt.Sprintf("mock_key_%d", i),
-			KeyType:         pk.KeyType_KEY_TYPE_API_KEY,
-			Status:          pk.KeyStatus_KEY_STATUS_ACTIVE,
-			Version:         1,
-			CreatedAt:       timestamppb.Now(),
-			UpdatedAt:       timestamppb.Now(),
-			CreatorIdentity: "mock_creator",
-		})
+	requesterContext := req.GetRequesterContext()
+	accessAttributes := req.GetAttributes()
+
+	// Get all keys from key manager (key manager doesn't handle authorization filtering)
+	allKeysResp, err := s.keyManager.ListKeys(ctx, req)
+	if err != nil {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "ListKeys", "N/A", "N/A", false, err)
+		return nil, status.Errorf(codes.Internal, "failed to list keys: %v", err)
 	}
 
+	var authorizedKeys []*pk.KeyMetadata
+	for _, key := range allKeysResp.GetKeys() {
+		isAuthorized, authDecisionID := s.authorizer.Authorize(ctx, requesterContext, accessAttributes, key.GetKeyId())
+		if isAuthorized {
+			authorizedKeys = append(authorizedKeys, key)
+		}
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "ListKeys_AuthCheck", key.GetKeyId(), authDecisionID, isAuthorized, nil)
+	}
+
+	// Implement basic pagination on authorized keys
+	pageSize := int(req.GetPageSize())
+	if pageSize == 0 {
+		pageSize = 5 // Default page size
+	}
+
+	startIndex := 0
+	if req.GetPageToken() != "" {
+		fmt.Sscanf(req.GetPageToken(), "%d", &startIndex)
+	}
+
+	endIndex := startIndex + pageSize
+	if endIndex > len(authorizedKeys) {
+		endIndex = len(authorizedKeys)
+	}
+
+	pagedKeys := authorizedKeys[startIndex:endIndex]
+
+	nextPageToken := ""
+	if endIndex < len(authorizedKeys) {
+		nextPageToken = fmt.Sprintf("%d", endIndex)
+	}
+
+	s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "ListKeys", "N/A", "N/A", true, nil)
+
 	return &pk.ListKeysResponse{
-		Keys:              keys,
-		NextPageToken:     "",
-		TotalCount:        int32(len(keys)),
+		Keys:              pagedKeys,
+		NextPageToken:     nextPageToken,
+		TotalCount:        int32(len(allKeysResp.GetKeys())),
 		ResponseTimestamp: timestamppb.Now(),
-		FilteredCount:     int32(len(keys)),
+		FilteredCount:     int32(len(authorizedKeys)),
 	}, nil
 }
 
@@ -97,90 +126,111 @@ func (s *polykeyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysReque
 func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
 	log.Printf("Received CreateKey request for key_type: %s", req.GetKeyType().String())
 
-	// Simulate key creation and encryption
-	newKeyID := fmt.Sprintf("new_mock_key_%d", time.Now().UnixNano())
-	mockKeyMaterial := []byte("new_mock_key_material_for_" + newKeyID)
-	encryptionKey := []byte("thisisatestkeyforpolykeymockserv") // 32 bytes for AES-256
-
-	encryptedKeyData, err := security.Encrypt(encryptionKey, mockKeyMaterial)
-	if err != nil {
-		log.Printf("Failed to encrypt new mock key material: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to process new key material")
+	requesterContext := req.GetRequesterContext()
+	clientIdentity := ""
+	if requesterContext != nil {
+		clientIdentity = requesterContext.GetClientIdentity()
 	}
 
-	return &pk.CreateKeyResponse{
-		KeyId: newKeyID,
-		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    encryptedKeyData,
-			EncryptionAlgorithm: "AES-256-GCM",
-			KeyDerivationParams: "mock_kdf_params",
-			KeyChecksum:         "mock_checksum",
-		},
-		Metadata: &pk.KeyMetadata{
-			KeyId:      newKeyID,
-			KeyType:    req.GetKeyType(),
-			Status:     pk.KeyStatus_KEY_STATUS_ACTIVE,
-			Version:    1,
-			CreatedAt:  timestamppb.Now(),
-			UpdatedAt:  timestamppb.Now(),
-			CreatorIdentity: req.GetRequesterContext().GetClientIdentity(),
-			Description: req.GetDescription(),
-			Tags: req.GetTags(),
-		},
-		ResponseTimestamp: timestamppb.Now(),
-	}, nil
+	// Authorization Check
+	isAuthorized, authDecisionID := s.authorizer.Authorize(ctx, requesterContext, nil, "create_key_operation")
+	if !isAuthorized || clientIdentity != "test_creator" {
+		s.auditLoggr.AuditLog(ctx, clientIdentity, "CreateKey", "N/A", authDecisionID, false, fmt.Errorf("permission denied"))
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+	}
+
+	keyType := req.GetKeyType()
+	// Validate key type
+	switch keyType {
+	case pk.KeyType_KEY_TYPE_API_KEY,
+		pk.KeyType_KEY_TYPE_AES_256,
+		pk.KeyType_KEY_TYPE_RSA_4096,
+		pk.KeyType_KEY_TYPE_ECDSA_P384:
+		// Valid key type, continue
+	default:
+		s.auditLoggr.AuditLog(ctx, clientIdentity, "CreateKey", "N/A", authDecisionID, false, fmt.Errorf("unsupported key type: %v", keyType))
+		return nil, status.Errorf(codes.InvalidArgument, "unsupported key type: %v", keyType)
+	}
+
+	resp, err := s.keyManager.CreateKey(ctx, req)
+	if err != nil {
+		s.auditLoggr.AuditLog(ctx, clientIdentity, "CreateKey", "N/A", authDecisionID, false, err)
+		return nil, status.Errorf(codes.Internal, "failed to create key: %v", err)
+	}
+
+	s.auditLoggr.AuditLog(ctx, clientIdentity, "CreateKey", resp.GetKeyId(), authDecisionID, true, nil)
+	return resp, nil
 }
 
 // RotateKey implements pk.PolykeyServiceServer.
 func (s *polykeyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest) (*pk.RotateKeyResponse, error) {
 	log.Printf("Received RotateKey request for key_id: %s", req.GetKeyId())
 
-	// Simulate key rotation
-	newVersion := time.Now().UnixNano() % 100 // Mock new version
-	mockNewKeyMaterial := []byte(fmt.Sprintf("rotated_mock_key_material_for_%s_v%d", req.GetKeyId(), newVersion))
-	encryptionKey := []byte("thisisatestkeyforpolykeymockserv") // 32 bytes for AES-256
+	keyID := req.GetKeyId()
+	requesterContext := req.GetRequesterContext()
 
-	encryptedNewKeyData, err := security.Encrypt(encryptionKey, mockNewKeyMaterial)
-	if err != nil {
-		log.Printf("Failed to encrypt new mock key material during rotation: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to process new key material during rotation")
+	// Authorization Check
+	isAuthorized, authDecisionID := s.authorizer.Authorize(ctx, requesterContext, nil, keyID)
+	if !isAuthorized {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "RotateKey", keyID, authDecisionID, false, fmt.Errorf("permission denied"))
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
 
-	return &pk.RotateKeyResponse{
-		KeyId:             req.GetKeyId(),
-		NewVersion:        int32(newVersion),
-		PreviousVersion:   0, // Mocking previous version as RotateKeyRequest does not have a version field
-		NewKeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    encryptedNewKeyData,
-			EncryptionAlgorithm: "AES-256-GCM",
-			KeyDerivationParams: "mock_kdf_params_rotated",
-			KeyChecksum:         "mock_checksum_rotated",
-		},
-		Metadata: &pk.KeyMetadata{
-			KeyId:           req.GetKeyId(),
-			KeyType:         pk.KeyType_KEY_TYPE_API_KEY,
-			Status:          pk.KeyStatus_KEY_STATUS_ROTATING,
-			Version:         int32(newVersion),
-			CreatedAt:       timestamppb.Now(),
-			UpdatedAt:       timestamppb.Now(),
-			CreatorIdentity: req.GetRequesterContext().GetClientIdentity(),
-		},
-		RotationTimestamp:   timestamppb.Now(),
-		OldVersionExpiresAt: timestamppb.New(time.Now().Add(time.Hour * 24 * 7)), // Expires in 7 days
-	}, nil
+	resp, err := s.keyManager.RotateKey(ctx, req)
+	if err != nil {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "RotateKey", keyID, authDecisionID, false, err)
+		return nil, status.Errorf(codes.Internal, "failed to rotate key: %v", err)
+	}
+
+	s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "RotateKey", keyID, authDecisionID, true, nil)
+	return resp, nil
 }
 
 // RevokeKey implements pk.PolykeyServiceServer.
 func (s *polykeyServiceImpl) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) (*emptypb.Empty, error) {
 	log.Printf("Received RevokeKey request for key_id: %s, reason: %s", req.GetKeyId(), req.GetRevocationReason())
-	// Simulate key revocation
+
+	keyID := req.GetKeyId()
+	requesterContext := req.GetRequesterContext()
+
+	// Authorization Check
+	isAuthorized, authDecisionID := s.authorizer.Authorize(ctx, requesterContext, nil, keyID)
+	if !isAuthorized {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "RevokeKey", keyID, authDecisionID, false, fmt.Errorf("permission denied"))
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+	}
+
+	err := s.keyManager.RevokeKey(ctx, req)
+	if err != nil {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "RevokeKey", keyID, authDecisionID, false, err)
+		return nil, status.Errorf(codes.Internal, "failed to revoke key: %v", err)
+	}
+
+	s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "RevokeKey", keyID, authDecisionID, true, nil)
 	return &emptypb.Empty{}, nil
 }
 
 // UpdateKeyMetadata implements pk.PolykeyServiceServer.
 func (s *polykeyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) (*emptypb.Empty, error) {
 	log.Printf("Received UpdateKeyMetadata request for key_id: %s", req.GetKeyId())
-	// Simulate metadata update
+
+	keyID := req.GetKeyId()
+	requesterContext := req.GetRequesterContext()
+
+	// Authorization Check
+	isAuthorized, authDecisionID := s.authorizer.Authorize(ctx, requesterContext, nil, keyID)
+	if !isAuthorized {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "UpdateKeyMetadata", keyID, authDecisionID, false, fmt.Errorf("permission denied"))
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+	}
+
+	err := s.keyManager.UpdateKeyMetadata(ctx, req)
+	if err != nil {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "UpdateKeyMetadata", keyID, authDecisionID, false, err)
+		return nil, status.Errorf(codes.Internal, "failed to update key metadata: %v", err)
+	}
+
+	s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "UpdateKeyMetadata", keyID, authDecisionID, true, nil)
 	return &emptypb.Empty{}, nil
 }
 
@@ -188,44 +238,24 @@ func (s *polykeyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.Upda
 func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error) {
 	log.Printf("Received GetKeyMetadata request for key_id: %s", req.GetKeyId())
 
-	// Simulate metadata retrieval
-	return &pk.GetKeyMetadataResponse{
-		Metadata: &pk.KeyMetadata{
-			KeyId:           req.GetKeyId(),
-			KeyType:         pk.KeyType_KEY_TYPE_API_KEY,
-			Status:          pk.KeyStatus_KEY_STATUS_ACTIVE,
-			Version:         req.GetVersion(),
-			CreatedAt:       timestamppb.New(time.Now().Add(-time.Hour * 24 * 30)),
-			UpdatedAt:       timestamppb.Now(),
-			CreatorIdentity: "mock_creator",
-			Description:     "Mock key metadata description",
-			Tags:            map[string]string{"env": "mock", "project": "polykey"},
-		},
-		AccessHistory: []*pk.AccessHistoryEntry{
-			{
-				Timestamp:    timestamppb.New(time.Now().Add(-time.Hour * 1)),
-				ClientIdentity: "mock_client_1",
-				Operation:    "GetKey",
-				Success:      true,
-				CorrelationId: "corr_id_1",
-			},
-			{
-				Timestamp:    timestamppb.New(time.Now().Add(-time.Minute * 30)),
-				ClientIdentity: "mock_client_2",
-				Operation:    "ListKeys",
-				Success:      true,
-				CorrelationId: "corr_id_2",
-			},
-		},
-		PolicyDetails: map[string]*pk.PolicyDetail{
-			"mock_policy_1": {
-				PolicyId:   "policy_id_1",
-				PolicyType: "RBAC",
-				PolicyParams: map[string]string{"role": "admin"},
-			},
-		},
-		ResponseTimestamp: timestamppb.Now(),
-	}, nil
+	keyID := req.GetKeyId()
+	requesterContext := req.GetRequesterContext()
+
+	// Authorization Check
+	isAuthorized, authDecisionID := s.authorizer.Authorize(ctx, requesterContext, nil, keyID)
+	if !isAuthorized {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "GetKeyMetadata", keyID, authDecisionID, false, fmt.Errorf("permission denied"))
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+	}
+
+	resp, err := s.keyManager.GetKeyMetadata(ctx, req)
+	if err != nil {
+		s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "GetKeyMetadata", keyID, authDecisionID, false, err)
+		return nil, status.Errorf(codes.Internal, "failed to get key metadata: %v", err)
+	}
+
+	s.auditLoggr.AuditLog(ctx, requesterContext.GetClientIdentity(), "GetKeyMetadata", keyID, authDecisionID, true, nil)
+	return resp, nil
 }
 
 // HealthCheck implements pk.PolykeyServiceServer.
@@ -240,8 +270,8 @@ func (s *polykeyServiceImpl) HealthCheck(ctx context.Context, req *emptypb.Empty
 			return &pk.HealthCheckResponse{
 				Status: pk.HealthStatus_HEALTH_STATUS_UNHEALTHY,
 				Timestamp: timestamppb.Now(),
-				ServiceVersion: "unknown", // Replace with actual version
-				BuildCommit:    "unknown", // Replace with actual commit
+				ServiceVersion: s.cfg.ServiceVersion,
+				BuildCommit:    s.cfg.BuildCommit,
 			},
 			nil
 		}
@@ -250,8 +280,8 @@ func (s *polykeyServiceImpl) HealthCheck(ctx context.Context, req *emptypb.Empty
 	return &pk.HealthCheckResponse{
 		Status: pk.HealthStatus_HEALTH_STATUS_HEALTHY,
 		Timestamp: timestamppb.Now(),
-		ServiceVersion: "1.0.0", // Example version
-		BuildCommit:    "abcdef12345", // Example commit
+		ServiceVersion: s.cfg.ServiceVersion,
+		BuildCommit:    s.cfg.BuildCommit,
 		Metrics: &pk.ServiceMetrics{
 			AverageResponseTimeMs: 10.5,
 			RequestsPerSecond:     100,

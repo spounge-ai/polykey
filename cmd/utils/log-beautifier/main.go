@@ -10,75 +10,95 @@ import (
 )
 
 const (
-	ColorGreen = "\033[0;32m"
-	ColorRed   = "\033[0;31m"
-	ColorGray  = "\033[0;90m"
-	ColorCyan  = "\033[0;36m"
-	ColorBold  = "\033[1m"
-	ColorReset = "\033[0m"
+	ColorGreen   = "\033[0;32m"
+	ColorRed     = "\033[0;31m"
+	ColorGray    = "\033[0;90m"
+	ColorCyan    = "\033[0;36m"
+	ColorBold    = "\033[1m"
+	ColorReset   = "\033[0m"
+	ColorBgGreen = "\033[42;30m"
+	ColorBgRed   = "\033[41;37m"
 )
 
 type LogEntry map[string]interface{}
 
+type state struct {
+	currentSuite string
+	failures     []string
+	passes       int
+	tests        map[string]time.Time
+}
+
 func main() {
+	s := &state{
+		tests: make(map[string]time.Time),
+	}
 	scanner := bufio.NewScanner(os.Stdin)
-	var currentSuite string
-	pendingRPCs := make(map[string]time.Time)
+
+	fmt.Println()
+	fmt.Printf("%s RUNS %s\n", ColorBold+ColorCyan, "Go Test Suite"+ColorReset)
 
 	for scanner.Scan() {
 		line := scanner.Text()
-
-		jsonStart := strings.Index(line, "{")
-		if jsonStart == -1 {
-			fmt.Println(line)
+		if line == "" {
 			continue
 		}
-		jsonStr := line[jsonStart:]
-
 		var entry LogEntry
-		if err := json.Unmarshal([]byte(jsonStr), &entry); err != nil {
-			fmt.Println(line)
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			// Ignore non-JSON lines which are typically summary lines from go test
 			continue
 		}
-		processServerLogEntry(entry, &currentSuite, pendingRPCs)
+		processGoTestEntry(entry, s)
 	}
+
+	printSummary(s)
 }
 
-func processServerLogEntry(entry LogEntry, currentSuite *string, pendingRPCs map[string]time.Time) {
-	msg, _ := entry["msg"].(string)
-	method, _ := entry["method"].(string)
+func processGoTestEntry(entry LogEntry, s *state) {
+	action, _ := entry["Action"].(string)
+	testName, _ := entry["Test"].(string)
+	packageName, _ := entry["Package"].(string)
 
-	switch msg {
-	case "server starting":
-		printSuiteHeader(currentSuite, "SETUP")
-		details := fmt.Sprintf("addr=%v", entry["address"])
-		printStep("PASS", "Server Listening", details)
+	if testName == "" {
+		return
+	}
 
-	case "gRPC call received":
-		printSuiteHeader(currentSuite, "CONNECTION")
-		printStep("PASS", "gRPC Connection", method)
-		printSuiteHeader(currentSuite, "EXECUTION")
-		pendingRPCs[method] = time.Now()
-		fmt.Printf("  %s %s%s%s\n", "○", ColorGray, method, ColorReset)
+	isSubTest := strings.Contains(testName, "/")
 
-	case "gRPC call finished":
-		startTime, ok := pendingRPCs[method]
-		if !ok {
-			return
+	switch action {
+	case "run":
+		if !isSubTest {
+			printSuiteHeader(&s.currentSuite, packageName)
+			s.tests[testName] = time.Now()
+			fmt.Printf("  %s %s%s\n", "\u25CB", ColorGray, testName)
 		}
-		delete(pendingRPCs, method)
-
-		duration := time.Since(startTime).Round(time.Millisecond)
-		code, _ := entry["code"].(string)
-		status := "PASS"
-		if code != "OK" {
-			status = "FAIL"
+	case "pass":
+		if !isSubTest {
+			if _, ok := s.tests[testName]; !ok {
+				return
+			}
+			duration := time.Since(s.tests[testName]).Round(time.Millisecond)
+			details := fmt.Sprintf("%v", duration)
+			fmt.Printf("\033[1A\033[K") // Move cursor up and clear line
+			printStep("PASS", testName, details)
+			s.passes++
+			delete(s.tests, testName)
 		}
-		printStep(status, method, duration.String())
-
-	case "server shutting down", "server stopped":
-		printSuiteHeader(currentSuite, "SHUTDOWN")
-		printStep("PASS", msg, "")
+	case "fail":
+		if !isSubTest {
+			if _, ok := s.tests[testName]; !ok {
+				return
+			}
+			duration := time.Since(s.tests[testName]).Round(time.Millisecond)
+			details := fmt.Sprintf("%v", duration)
+			fmt.Printf("\033[1A\033[K") // Move cursor up and clear line
+			printStep("FAIL", testName, details)
+			s.failures = append(s.failures, testName)
+			delete(s.tests, testName)
+		}
+	case "output":
+		output, _ := entry["Output"].(string)
+		fmt.Printf("    %s%s%s", ColorGray, output, ColorReset)
 	}
 }
 
@@ -97,18 +117,19 @@ func printStep(status, message, details string) {
 	} else {
 		color, symbol = ColorRed, "✗"
 	}
-
-	if status == "PASS" || status == "FAIL" {
-		if _, err := os.Stdout.WriteString("\033[1A\033[K"); err != nil {
-			// Ignoring error: terminal may not support cursor movement
-			_ = err
-		}
-	}
-
-
 	if details != "" {
 		fmt.Printf("  %s%s%s %s %s(%s)%s\n", color, symbol, ColorReset, message, ColorGray, details, ColorReset)
 	} else {
 		fmt.Printf("  %s%s%s %s\n", color, symbol, ColorReset, message)
+	}
+}
+
+func printSummary(s *state) {
+	fmt.Println(ColorGray + "\n" + strings.Repeat("=", 40) + ColorReset)
+	totalTests := s.passes + len(s.failures)
+	if len(s.failures) > 0 {
+		fmt.Printf(" %s FAIL %s %d failed, %d passed, %d total\n", ColorBgRed, ColorReset, len(s.failures), s.passes, totalTests)
+	} else {
+		fmt.Printf(" %s PASS %s All %d tests passed\n", ColorBgGreen, ColorReset, totalTests)
 	}
 }

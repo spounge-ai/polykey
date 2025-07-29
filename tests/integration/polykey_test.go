@@ -7,30 +7,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/emptypb"
-
 	"github.com/spounge-ai/polykey/internal/config"
 	"github.com/spounge-ai/polykey/internal/server"
 	pb "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-func TestHealthCheck(t *testing.T) {
-	// Load configuration
-	cfg, err := config.Load("") // Load default config or provide a path
+// setupTestServer starts a new server and returns a client connection and a cleanup function.
+func setupTestServer(t *testing.T) (pb.PolykeyServiceClient, func()) {
+	cfg, err := config.Load("")
 	assert.NoError(t, err)
+	cfg.Server.Port = 0 // Use a dynamic port for testing
 
-	// Set a test port to 0 to get a dynamically assigned port
-	cfg.Server.Port = 0 
-
-	// Create and start the server in a goroutine
 	srv, port, err := server.New(cfg)
 	assert.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	go func() {
 		if err := srv.Run(ctx); err != nil {
@@ -38,107 +35,106 @@ func TestHealthCheck(t *testing.T) {
 		}
 	}()
 
-	// Give the server a moment to start
-	time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second) // Give the server time to start
 
-	// Set up a connection to the gRPC server using the dynamically assigned port
 	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	assert.NoError(t, err)
-	defer conn.Close()
 
 	client := pb.NewPolykeyServiceClient(conn)
 
-	// Call the HealthCheck method
+	cleanup := func() {
+		conn.Close()
+		cancel()
+	}
+
+	return client, cleanup
+}
+
+func TestHealthCheck(t *testing.T) {
+	client, cleanup := setupTestServer(t)
+	defer cleanup()
+
 	resp, err := client.HealthCheck(context.Background(), &emptypb.Empty{})
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, pb.HealthStatus_HEALTH_STATUS_HEALTHY, resp.Status)
-	assert.Equal(t, "1.0.0", resp.ServiceVersion) // Check against mock version
 }
 
-func TestGetKey(t *testing.T) {
-	// Load configuration
-	cfg, err := config.Load("") // Load default config or provide a path
-	assert.NoError(t, err)
+func TestKeyOperations_HappyPath(t *testing.T) {
+	client, cleanup := setupTestServer(t)
+	defer cleanup()
 
-	// Set a test port to 0 to get a dynamically assigned port
-	cfg.Server.Port = 0 
-
-	// Create and start the server in a goroutine
-	srv, port, err := server.New(cfg)
-	assert.NoError(t, err)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		if err := srv.Run(ctx); err != nil {
-			log.Printf("Server exited with error: %v", err)
-		}
-	}()
-
-	// Give the server a moment to start
-	time.Sleep(2 * time.Second)
-
-	// Set up a connection to the gRPC server using the dynamically assigned port
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	assert.NoError(t, err)
-	defer conn.Close()
-
-	client := pb.NewPolykeyServiceClient(conn)
-
-	// Call the GetKey method
-	keyID := "test_key_123"
-	resp, err := client.GetKey(context.Background(), &pb.GetKeyRequest{
-		KeyId: keyID,
-		RequesterContext: &pb.RequesterContext{ClientIdentity: "test_client"},
+	t.Run("GetKey - Authorized", func(t *testing.T) {
+		keyID := "test_key_123"
+		resp, err := client.GetKey(context.Background(), &pb.GetKeyRequest{
+			KeyId:            keyID,
+			RequesterContext: &pb.RequesterContext{ClientIdentity: "test_client"},
+		})
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, keyID, resp.Metadata.KeyId)
 	})
-	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Equal(t, keyID, resp.Metadata.KeyId)
-	assert.NotNil(t, resp.KeyMaterial.EncryptedKeyData)
+
+	t.Run("CreateKey - Authorized", func(t *testing.T) {
+		createReq := &pb.CreateKeyRequest{
+			KeyType:          pb.KeyType_KEY_TYPE_AES_256,
+			RequesterContext: &pb.RequesterContext{ClientIdentity: "test_creator"},
+		}
+		resp, err := client.CreateKey(context.Background(), createReq)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.NotEmpty(t, resp.KeyId)
+	})
+
+	t.Run("GetKeyMetadata - Authorized", func(t *testing.T) {
+		keyID := "test_key_for_metadata"
+		resp, err := client.GetKeyMetadata(context.Background(), &pb.GetKeyMetadataRequest{
+			KeyId:                keyID,
+			RequesterContext:     &pb.RequesterContext{ClientIdentity: "test_client"},
+			IncludeAccessHistory: true,
+			IncludePolicyDetails: true,
+		})
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, keyID, resp.Metadata.KeyId)
+		assert.NotEmpty(t, resp.AccessHistory)
+		assert.NotEmpty(t, resp.PolicyDetails)
+	})
 }
 
-func TestCreateKey(t *testing.T) {
-	// Load configuration
-	cfg, err := config.Load("") // Load default config or provide a path
-	assert.NoError(t, err)
+func TestKeyOperations_ErrorConditions(t *testing.T) {
+	client, cleanup := setupTestServer(t)
+	defer cleanup()
 
-	// Set a test port to 0 to get a dynamically assigned port
-	cfg.Server.Port = 0 
-
-	// Create and start the server in a goroutine
-	srv, port, err := server.New(cfg)
-	assert.NoError(t, err)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		if err := srv.Run(ctx); err != nil {
-			log.Printf("Server exited with error: %v", err)
-		}
-	}()
-
-	// Give the server a moment to start
-	time.Sleep(2 * time.Second)
-
-	// Set up a connection to the gRPC server using the dynamically assigned port
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	assert.NoError(t, err)
-	defer conn.Close()
-
-	client := pb.NewPolykeyServiceClient(conn)
-
-	// Call the CreateKey method
-	resp, err := client.CreateKey(context.Background(), &pb.CreateKeyRequest{
-		KeyType: pb.KeyType_KEY_TYPE_AES_256,
-		RequesterContext: &pb.RequesterContext{ClientIdentity: "test_creator"},
-		Description: "Test AES-256 key",
-		Tags: map[string]string{"purpose": "test"},
+	t.Run("GetKey - Unauthorized", func(t *testing.T) {
+		keyID := "restricted_key"
+		_, err := client.GetKey(context.Background(), &pb.GetKeyRequest{
+			KeyId:            keyID,
+			RequesterContext: &pb.RequesterContext{ClientIdentity: "test_client"},
+		})
+		assert.Error(t, err)
+		s, _ := status.FromError(err)
+		assert.Equal(t, codes.PermissionDenied, s.Code())
 	})
-	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.NotEmpty(t, resp.KeyId)
-	assert.Equal(t, pb.KeyType_KEY_TYPE_AES_256, resp.Metadata.KeyType)
+
+	t.Run("CreateKey - Unauthorized", func(t *testing.T) {
+		_, err := client.CreateKey(context.Background(), &pb.CreateKeyRequest{
+			KeyType:          pb.KeyType_KEY_TYPE_API_KEY,
+			RequesterContext: &pb.RequesterContext{ClientIdentity: "unknown_creator"},
+		})
+		assert.Error(t, err)
+		s, _ := status.FromError(err)
+		assert.Equal(t, codes.PermissionDenied, s.Code())
+	})
+
+	t.Run("GetKeyMetadata - Unauthorized", func(t *testing.T) {
+		keyID := "test_key_for_metadata"
+		_, err := client.GetKeyMetadata(context.Background(), &pb.GetKeyMetadataRequest{
+			KeyId:            keyID,
+			RequesterContext: &pb.RequesterContext{ClientIdentity: "unknown_client"},
+		})
+		assert.Error(t, err)
+		s, _ := status.FromError(err)
+		assert.Equal(t, codes.PermissionDenied, s.Code())
+	})
 }

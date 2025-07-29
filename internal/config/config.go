@@ -10,9 +10,11 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Vault    VaultConfig    `mapstructure:"vault"`
+	Server         ServerConfig   `mapstructure:"server"`
+	Database       DatabaseConfig `mapstructure:"database"`
+	Vault          VaultConfig    `mapstructure:"vault"`
+	ServiceVersion string
+	BuildCommit    string
 }
 
 // ServerConfig holds the server configuration.
@@ -60,7 +62,7 @@ func Load(path string) (*Config, error) {
 	vip.AutomaticEnv()
 	vip.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	vip.SetDefault("server.port", 50052)
+	vip.SetDefault("server.port", 50053)
 
 	if err := vip.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -77,6 +79,9 @@ func Load(path string) (*Config, error) {
 	if port := vip.GetInt("POLYKEY_GRPC_PORT"); port != 0 {
 		cfg.Server.Port = port
 	}
+
+	cfg.ServiceVersion = Getenv("POLYKEY_SERVICE_VERSION", "unknown")
+	cfg.BuildCommit = Getenv("POLYKEY_BUILD_COMMIT", "unknown")
 
 	return &cfg, nil
 }
