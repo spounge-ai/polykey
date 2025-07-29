@@ -1,0 +1,259 @@
+syntax = "proto3";
+
+package polykey.v2;
+
+import "google/protobuf/timestamp.proto";
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  HEALTH_STATUS_HEALTHY = 1;
+  HEALTH_STATUS_DEGRADED = 2;
+  HEALTH_STATUS_UNHEALTHY = 3;
+}
+
+message ServiceMetrics {
+  double average_response_time_ms = 1;
+  int64 requests_per_second = 2;
+  double error_rate_percent = 3;
+  double cpu_usage_percent = 4;
+  double memory_usage_percent = 5;
+  int64 active_keys_count = 6;
+  int64 total_requests_handled = 7;
+  google.protobuf.Timestamp uptime_since = 8;
+}
+
+message HealthCheckResponse {
+  HealthStatus status = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  ServiceMetrics metrics = 3;
+  string service_version = 4;
+  string build_commit = 5;
+}
+syntax = "proto3";
+
+package polykey.v2;
+
+import "google/protobuf/timestamp.proto";
+import "polykey/v2/key_types.proto";
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
+message RequesterContext {
+  string client_identity = 1;
+  string certificate_fingerprint = 2;
+  string application_id = 3;
+  string correlation_id = 4;
+}
+
+message AccessAttributes {
+  string environment = 1;
+  string network_zone = 2;
+  string geographic_region = 3;
+  google.protobuf.Timestamp request_time = 4;
+  string time_window = 5; // e.g., "business-hours", "after-hours".
+  repeated string roles = 6;
+  repeated string permissions = 7;
+  map<string, string> custom_attributes = 8;
+}
+
+message KeyMetadata {
+  string key_id = 1;
+  KeyType key_type = 2;
+  KeyStatus status = 3;
+  int32 version = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  google.protobuf.Timestamp expires_at = 7;
+  google.protobuf.Timestamp last_accessed_at = 8;
+  string creator_identity = 9;
+  repeated string authorized_contexts = 10;
+  map<string, string> access_policies = 11;
+  string description = 12;
+  map<string, string> tags = 13;
+  string data_classification = 14;
+  string metadata_checksum = 15;
+  int64 access_count = 16;
+}
+
+message KeyMaterial {
+  bytes encrypted_key_data = 1;
+  string encryption_algorithm = 2;    
+  string key_derivation_params = 3;
+  string key_checksum = 4;
+}
+
+message AccessHistoryEntry {
+  google.protobuf.Timestamp timestamp = 1;
+  string client_identity = 2;
+  string operation = 3;
+  bool success = 4;
+  string correlation_id = 5;
+}
+
+message PolicyDetail {
+  string policy_id = 1;
+  string policy_type = 2; // e.g., "RBAC", "ABAC", "TimeBased".
+  map<string, string> policy_params = 3;
+  google.protobuf.Timestamp effective_from = 4;
+  google.protobuf.Timestamp effective_until = 5;
+}
+syntax = "proto3";
+
+package polykey.v2;
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
+enum KeyType {
+  KEY_TYPE_UNSPECIFIED = 0;
+  KEY_TYPE_API_KEY = 1;
+  KEY_TYPE_AES_256 = 2;
+  KEY_TYPE_RSA_4096 = 3;
+  KEY_TYPE_ECDSA_P384 = 4;
+}
+
+enum KeyStatus {
+  KEY_STATUS_UNSPECIFIED = 0;
+  KEY_STATUS_ACTIVE = 1;
+  KEY_STATUS_ROTATING = 2;
+  KEY_STATUS_DEPRECATED = 3;
+  KEY_STATUS_REVOKED = 4;
+}
+
+enum RotationStrategy {
+  ROTATION_STRATEGY_UNSPECIFIED = 0;
+  ROTATION_STRATEGY_HOT = 1;
+  ROTATION_STRATEGY_STAGED = 2;
+  ROTATION_STRATEGY_SCHEDULED = 3;
+}
+syntax = "proto3";
+
+package polykey.v2;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "polykey/v2/common.proto";
+import "polykey/v2/key_types.proto";
+import "polykey/v2/metrics.proto";
+
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
+service PolykeyService {
+  rpc GetKey(GetKeyRequest) returns (GetKeyResponse);
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse);
+  rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
+  rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
+  rpc RevokeKey(RevokeKeyRequest) returns (google.protobuf.Empty);
+  rpc UpdateKeyMetadata(UpdateKeyMetadataRequest) returns (google.protobuf.Empty);
+  rpc GetKeyMetadata(GetKeyMetadataRequest) returns (GetKeyMetadataResponse);
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+}
+
+message GetKeyRequest {
+  string key_id = 1;
+  RequesterContext requester_context = 2;
+  AccessAttributes attributes = 3;
+  int32 version = 4;         
+  optional bool skip_metadata = 7;
+}
+
+message GetKeyResponse {
+  KeyMaterial key_material = 1;
+  KeyMetadata metadata = 2;
+  google.protobuf.Timestamp response_timestamp = 3;
+  string authorization_decision_id = 4;
+}
+
+message ListKeysRequest {
+  RequesterContext requester_context = 1;
+  AccessAttributes attributes = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+  repeated KeyType key_types = 5;
+  repeated KeyStatus statuses = 6;
+  map<string, string> tag_filters = 7;
+  google.protobuf.Timestamp created_after = 8;
+  google.protobuf.Timestamp created_before = 9;
+}
+
+message ListKeysResponse {
+  repeated KeyMetadata keys = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+  google.protobuf.Timestamp response_timestamp = 4;
+  int32 filtered_count = 5;
+}
+
+message CreateKeyRequest {
+  KeyType key_type = 1;
+  RequesterContext requester_context = 2;
+  string description = 3;
+  map<string, string> tags = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  repeated string initial_authorized_contexts = 6;
+  map<string, string> access_policies = 7;
+  string data_classification = 8;
+  map<string, string> generation_params = 9;
+}
+
+message CreateKeyResponse {
+  string key_id = 1;
+  KeyMetadata metadata = 2;
+  KeyMaterial key_material = 3;
+  google.protobuf.Timestamp response_timestamp = 4;
+}
+
+message RotateKeyRequest {
+  string key_id = 1;
+  RequesterContext requester_context = 2;
+  RotationStrategy strategy = 3;
+  int32 grace_period_seconds = 4;
+  map<string, string> generation_params = 5;
+  bool preserve_access_policies = 6;
+}
+
+message RotateKeyResponse {
+  string key_id = 1;
+  int32 new_version = 2;
+  int32 previous_version = 3;
+  KeyMaterial new_key_material = 4;
+  KeyMetadata metadata = 5;
+  google.protobuf.Timestamp rotation_timestamp = 6;
+  google.protobuf.Timestamp old_version_expires_at = 7;
+}
+
+message RevokeKeyRequest {
+  string key_id = 1;
+  RequesterContext requester_context = 2;
+  string revocation_reason = 3;
+  bool immediate = 4;
+  google.protobuf.Timestamp effective_at = 5;
+  bool notify_external_systems = 6;
+}
+
+message UpdateKeyMetadataRequest {
+  string key_id = 1;
+  RequesterContext requester_context = 2;
+  optional string description = 3;
+  map<string, string> tags_to_add = 4;
+  repeated string tags_to_remove = 5;
+  repeated string contexts_to_add = 6;
+  repeated string contexts_to_remove = 7;
+  map<string, string> policies_to_update = 8;
+  optional google.protobuf.Timestamp expires_at = 9;
+  optional string data_classification = 10;
+}
+
+message GetKeyMetadataRequest {
+  string key_id = 1;
+  RequesterContext requester_context = 2;
+  AccessAttributes attributes = 3;
+  bool include_access_history = 4;
+  bool include_policy_details = 5;
+  int32 version = 6;
+}
+
+message GetKeyMetadataResponse {
+  KeyMetadata metadata = 1;
+  repeated AccessHistoryEntry access_history = 2;
+  map<string, PolicyDetail> policy_details = 3;
+  google.protobuf.Timestamp response_timestamp = 4;
+}

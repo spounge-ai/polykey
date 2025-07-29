@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-func main() {
+func RunClient() error {
 	port := os.Getenv("POLYKEY_GRPC_PORT")
 	if port == "" {
 		port = "50051"
@@ -24,7 +23,7 @@ func main() {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		return fmt.Errorf("did not connect: %w", err)
 	}
 	defer conn.Close()
 
@@ -33,9 +32,12 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
+	fmt.Printf("Client attempting to call service: %s\n", pk.PolykeyService_HealthCheck_FullMethodName)
+
 	res, err := c.HealthCheck(ctx, &emptypb.Empty{})
 	if err != nil {
-		log.Fatalf("could not get health check: %v", err)
+		return fmt.Errorf("could not get health check: %w", err)
 	}
 	fmt.Printf("Health Check Response: %v\n", res)
+	return nil
 }
