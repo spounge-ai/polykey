@@ -24,7 +24,7 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -ldflags="-w -s -buildid=" -trimpath -o bin/polykey cmd/polykey/main.go
+    go build -ldflags="-w -s -buildid=" -trimpath -o bin/polykey cmd/server/main.go
 
 # Download grpc-health-probe in parallel-friendly way
 RUN --mount=type=cache,target=/tmp/downloads \

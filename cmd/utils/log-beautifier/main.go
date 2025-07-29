@@ -59,7 +59,7 @@ func processServerLogEntry(entry LogEntry, currentSuite *string, pendingRPCs map
 		printStep("PASS", "gRPC Connection", method)
 		printSuiteHeader(currentSuite, "EXECUTION")
 		pendingRPCs[method] = time.Now()
-		fmt.Printf("  %s %s%s\n", "○", ColorGray, method)
+		fmt.Printf("  %s %s%s%s\n", "○", ColorGray, method, ColorReset)
 
 	case "gRPC call finished":
 		startTime, ok := pendingRPCs[method]
