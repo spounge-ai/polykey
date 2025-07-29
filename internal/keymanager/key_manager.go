@@ -91,19 +91,19 @@ func (km *keyManagerImpl) ListKeys(ctx context.Context, req *pk.ListKeysRequest)
 // CreateKey generates and stores new cryptographic keys.
 func (km *keyManagerImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
 	keyType := req.GetKeyType()
-	log.Printf("KeyManager: CreateKey - received keyType: %v (%d)", keyType)
+	log.Printf("KeyManager: CreateKey - received keyType: %v (%d)", keyType, int(keyType))
 
 	// Simulate secure key generation
 	var mockKeyMaterial []byte
 	switch keyType {
 	case pk.KeyType_KEY_TYPE_API_KEY:
-		mockKeyMaterial = []byte(fmt.Sprintf("api_key_%d", time.Now().UnixNano()))
+		mockKeyMaterial = fmt.Appendf(nil, "api_key_%d", time.Now().UnixNano())
 	case pk.KeyType_KEY_TYPE_AES_256:
-		mockKeyMaterial = []byte(fmt.Sprintf("aes_key_%d", time.Now().UnixNano()))
+		mockKeyMaterial = fmt.Appendf(nil, "aes_key_%d", time.Now().UnixNano())
 	case pk.KeyType_KEY_TYPE_RSA_4096:
-		mockKeyMaterial = []byte(fmt.Sprintf("rsa_key_%d", time.Now().UnixNano()))
+		mockKeyMaterial = fmt.Appendf(nil, "rsa_key_%d", time.Now().UnixNano())
 	case pk.KeyType_KEY_TYPE_ECDSA_P384:
-		mockKeyMaterial = []byte(fmt.Sprintf("ecdsa_key_%d", time.Now().UnixNano()))
+		mockKeyMaterial = fmt.Appendf(nil, "ecdsa_key_%d", time.Now().UnixNano())
 	default:
 		// This case should ideally not be reached if validation is done at service layer
 		return nil, fmt.Errorf("unsupported key type: %v", keyType)

@@ -18,6 +18,7 @@ const (
 	ColorReset   = "\033[0m"
 	ColorBgGreen = "\033[42;30m"
 	ColorBgRed   = "\033[41;37m"
+	ColorYellow  = "\033[0;33m"
 )
 
 type LogEntry map[string]interface{}
@@ -27,16 +28,19 @@ type state struct {
 	failures     []string
 	passes       int
 	tests        map[string]time.Time
+	totalTests   int
+	runningTests map[string]bool
 }
 
 func main() {
 	s := &state{
-		tests: make(map[string]time.Time),
+		tests:        make(map[string]time.Time),
+		runningTests: make(map[string]bool),
 	}
 	scanner := bufio.NewScanner(os.Stdin)
 
 	fmt.Println()
-	fmt.Printf("%s RUNS %s\n", ColorBold+ColorCyan, "Go Test Suite"+ColorReset)
+	fmt.Printf("%s%s RUNS %s%s\n", ColorBold, ColorCyan, "Go Test Suite", ColorReset)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -58,78 +62,134 @@ func processGoTestEntry(entry LogEntry, s *state) {
 	action, _ := entry["Action"].(string)
 	testName, _ := entry["Test"].(string)
 	packageName, _ := entry["Package"].(string)
+	output, _ := entry["Output"].(string)
 
-	if testName == "" {
-		return
+	// Extract timestamp if available
+	timeStr, hasTime := entry["Time"].(string)
+	var timestamp time.Time
+	if hasTime {
+		timestamp, _ = time.Parse(time.RFC3339Nano, timeStr)
 	}
 
 	isSubTest := strings.Contains(testName, "/")
 
 	switch action {
 	case "run":
-		if !isSubTest {
-			printSuiteHeader(&s.currentSuite, packageName)
-			s.tests[testName] = time.Now()
-			fmt.Printf("  %s %s%s\n", "\u25CB", ColorGray, testName)
-		}
-	case "pass":
-		if !isSubTest {
-			if _, ok := s.tests[testName]; !ok {
-				return
+		printSuiteHeader(&s.currentSuite, packageName)
+		// Only track and print for new tests
+		if testName != "" && !s.runningTests[testName] {
+			s.tests[testName] = timestamp
+			s.runningTests[testName] = true
+			if !isSubTest {
+				fmt.Printf("  %s%s %s%s%s%s\n", ColorYellow, "◯", ColorReset, ColorGray, testName, ColorReset)
+			} else {
+				// Extract just the subtest part after the last "/"
+				parts := strings.Split(testName, "/")
+				subtestName := parts[len(parts)-1]
+				fmt.Printf("    %s%s %s%s%s%s\n", ColorYellow, "◯", ColorReset, ColorGray, subtestName, ColorReset)
 			}
-			duration := time.Since(s.tests[testName]).Round(time.Millisecond)
-			details := fmt.Sprintf("%v", duration)
-			fmt.Printf("\033[1A\033[K") // Move cursor up and clear line
-			printStep("PASS", testName, details)
-			s.passes++
-			delete(s.tests, testName)
-		}
-	case "fail":
-		if !isSubTest {
-			if _, ok := s.tests[testName]; !ok {
-				return
-			}
-			duration := time.Since(s.tests[testName]).Round(time.Millisecond)
-			details := fmt.Sprintf("%v", duration)
-			fmt.Printf("\033[1A\033[K") // Move cursor up and clear line
-			printStep("FAIL", testName, details)
-			s.failures = append(s.failures, testName)
-			delete(s.tests, testName)
+			s.totalTests++
 		}
 	case "output":
-		output, _ := entry["Output"].(string)
-		fmt.Printf("    %s%s%s", ColorGray, output, ColorReset)
+		// Filter out redundant output from go test -json
+		if strings.HasPrefix(output, "=== RUN") || 
+		   strings.HasPrefix(output, "--- PASS") || 
+		   strings.HasPrefix(output, "--- FAIL") || 
+		   strings.HasPrefix(output, "PASS") || 
+		   strings.HasPrefix(output, "FAIL") || 
+		   strings.HasPrefix(output, "ok  ") {
+			return
+		}
+		// Print test output with proper indentation and timestamps
+		if strings.TrimSpace(output) != "" {
+			indent := "    "
+			if isSubTest {
+				indent = "      "
+			}
+			
+			// Check if the output already contains a timestamp in the format "YYYY/MM/DD HH:MM:SS"
+			// This is to prevent duplicate timestamps from the original log output
+			originalOutputHasTimestamp := false
+			if hasTime {
+				// Check for common timestamp formats that might already be in the output
+				if strings.Contains(output, timestamp.Format("2006/01/02 15:04:05")) ||
+				   strings.Contains(output, timestamp.Format("15:04:05")) {
+					originalOutputHasTimestamp = true
+				}
+			}
+
+			if hasTime && !originalOutputHasTimestamp {
+				timeStr := timestamp.Format("15:04:05.000") // More concise timestamp with milliseconds
+				fmt.Printf("%s%s%s %s%s%s", indent, ColorGray, timeStr, output, ColorReset)
+			} else {
+				fmt.Printf("%s%s%s%s", indent, ColorGray, output, ColorReset)
+			}
+		}
+	case "pass", "fail":
+		// Only process if we're tracking this test
+		if startTime, ok := s.tests[testName]; ok && s.runningTests[testName] {
+			duration := timestamp.Sub(startTime).Round(time.Millisecond)
+			details := fmt.Sprintf("%v", duration)
+
+			// Move cursor up and clear line for the test being updated
+			fmt.Print("\033[1A\033[K")
+
+			symbol := "✓"
+			color := ColorGreen
+			if action == "fail" {
+				symbol = "✗"
+				color = ColorRed
+				s.failures = append(s.failures, testName)
+			} else {
+				s.passes++
+			}
+
+			indent := "  "
+			displayName := testName
+			if isSubTest {
+				indent = "    "
+				// Extract just the subtest part after the last "/"
+				parts := strings.Split(testName, "/")
+				displayName = parts[len(parts)-1]
+			}
+
+			fmt.Printf("%s%s%s%s %s %s(%s)%s\n", 
+				indent, color, symbol, ColorReset, 
+				displayName, ColorGray, details, ColorReset)
+
+			delete(s.tests, testName)
+			delete(s.runningTests, testName)
+		}
 	}
 }
 
 func printSuiteHeader(currentSuite *string, newSuite string) {
 	if *currentSuite != newSuite {
-		separator := strings.Repeat("─", 10)
-		fmt.Printf("\n%s%s %s %s%s\n", ColorGray, separator, ColorBold+newSuite, separator, ColorReset)
+		separator := strings.Repeat("─", 50)
+		fmt.Printf("\n%s%s %s%s%s %s%s\n", 
+			ColorGray, separator[:20], 
+			ColorBold, newSuite, ColorReset,
+			ColorGray, separator[:20], ColorReset)
 		*currentSuite = newSuite
 	}
 }
 
-func printStep(status, message, details string) {
-	var color, symbol string
-	if status == "PASS" {
-		color, symbol = ColorGreen, "✓"
-	} else {
-		color, symbol = ColorRed, "✗"
-	}
-	if details != "" {
-		fmt.Printf("  %s%s%s %s %s(%s)%s\n", color, symbol, ColorReset, message, ColorGray, details, ColorReset)
-	} else {
-		fmt.Printf("  %s%s%s %s\n", color, symbol, ColorReset, message)
-	}
-}
-
 func printSummary(s *state) {
-	fmt.Println(ColorGray + "\n" + strings.Repeat("=", 40) + ColorReset)
-	totalTests := s.passes + len(s.failures)
+	fmt.Printf("\n%s%s%s\n", ColorGray, strings.Repeat("=", 50), ColorReset)
+	
 	if len(s.failures) > 0 {
-		fmt.Printf(" %s FAIL %s %d failed, %d passed, %d total\n", ColorBgRed, ColorReset, len(s.failures), s.passes, totalTests)
+		fmt.Printf(" %s FAIL %s %d failed, %d passed, %d total\n", 
+			ColorBgRed, ColorReset, len(s.failures), s.passes, s.totalTests)
+		
+		if len(s.failures) > 0 {
+			fmt.Printf("\n%sFailed tests:%s\n", ColorRed+ColorBold, ColorReset)
+			for _, failure := range s.failures {
+				fmt.Printf("  %s✗ %s%s\n", ColorRed, failure, ColorReset)
+			}
+		}
 	} else {
-		fmt.Printf(" %s PASS %s All %d tests passed\n", ColorBgGreen, ColorReset, totalTests)
+		fmt.Printf(" %s PASS %s All %d tests passed\n", 
+			ColorBgGreen, ColorReset, s.totalTests)
 	}
+	fmt.Println()
 }
