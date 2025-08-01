@@ -1,4 +1,4 @@
-package server
+package grpc
 
 import (
 	"context"
@@ -10,15 +10,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spounge-ai/polykey/internal/app/grpc/interceptors"
+	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/internal/infra/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/spounge-ai/polykey/internal/config"
-	"github.com/spounge-ai/polykey/internal/service"
-	"github.com/spounge-ai/polykey/internal/storage"
 	pb "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
@@ -31,13 +31,12 @@ type Server struct {
 }
 
 // New creates a new gRPC server.
-func New(cfg *config.Config) (*Server, int, error) {
+func New(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.KMSService, authorizer domain.Authorizer, audit domain.AuditLogger) (*Server, int, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.Port))
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to listen: %w", err)
 	}
 
-	// Get the dynamically assigned port
 	port := lis.Addr().(*net.TCPAddr).Port
 
 	var opts []grpc.ServerOption
@@ -49,38 +48,23 @@ func New(cfg *config.Config) (*Server, int, error) {
 		opts = append(opts, grpc.Creds(creds))
 	}
 
+	opts = append(opts, grpc.ChainUnaryInterceptor(
+		interceptors.UnaryLoggingInterceptor(),
+		interceptors.UnaryAuthInterceptor(authorizer),
+	))
+
 	grpcServer := grpc.NewServer(opts...)
 
-	// Create a new Polykey service using the factory
-	storageService, err := storage.NewVaultStorage(cfg.Vault.Address, cfg.Vault.Token)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create vault storage: %w", err)
-	}
-	serviceFactory := service.NewServiceFactory()
-	polykeyService, err := serviceFactory.Create(cfg, storageService)
+	polykeyService, err := NewPolykeyService(cfg, keyRepo, kms, authorizer, audit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create polykey service: %w", err)
 	}
 
-	// Register the Polykey service
 	pb.RegisterPolykeyServiceServer(grpcServer, polykeyService)
 
-	// Debug: Print registered services
-	log.Printf("Registering services...")
-	for name := range grpcServer.GetServiceInfo() {
-		log.Printf("Registered service: %s", name)
-	}
-
-	// Register health and reflection services
 	healthSrv := health.NewServer()
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthSrv)
 	reflection.Register(grpcServer)
-
-	// Print all services again after health/reflection
-	log.Printf("All registered services:")
-	for name := range grpcServer.GetServiceInfo() {
-		log.Printf("  - %s", name)
-	}
 
 	return &Server{
 		grpcServer: grpcServer,
@@ -89,6 +73,8 @@ func New(cfg *config.Config) (*Server, int, error) {
 		lis:        lis,
 	}, port, nil
 }
+
+// ... rest of the file
 
 // Start starts the gRPC server.
 func (s *Server) Start() error {

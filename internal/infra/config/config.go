@@ -5,23 +5,24 @@ import (
 	"os"
 	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
 
 // Config holds the application configuration.
 type Config struct {
 	Server         ServerConfig   `mapstructure:"server"`
-	Database       DatabaseConfig `mapstructure:"database"`
-	Vault          VaultConfig    `mapstructure:"vault"`
+	Database       DatabaseConfig `mapstructure:"database" validate:"required"`
+	Vault          VaultConfig    `mapstructure:"vault"    validate:"required"`
 	ServiceVersion string
 	BuildCommit    string
 }
 
 // ServerConfig holds the server configuration.
 type ServerConfig struct {
-	Port int  `mapstructure:"port"`
-	TLS  TLS  `mapstructure:"tls"`
-	Mode string `mapstructure:"mode"`
+	Port int    `mapstructure:"port" validate:"required,gte=1024,lte=65535"`
+	TLS  TLS    `mapstructure:"tls"`
+	Mode string `mapstructure:"mode" validate:"required,oneof=development production"`
 }
 
 // TLS holds the TLS configuration.
@@ -33,18 +34,18 @@ type TLS struct {
 
 // DatabaseConfig holds the database configuration.
 type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	DBName   string `mapstructure:"dbname"`
-	SSLMode  string `mapstructure:"sslmode"`
+	Host     string `mapstructure:"host" validate:"required"`
+	Port     int    `mapstructure:"port" validate:"required,gte=1024,lte=65535"`
+	User     string `mapstructure:"user" validate:"required"`
+	Password string `mapstructure:"password" validate:"required"`
+	DBName   string `mapstructure:"dbname" validate:"required"`
+	SSLMode  string `mapstructure:"sslmode" validate:"required"`
 }
 
 // VaultConfig holds the Vault configuration.
 type VaultConfig struct {
-	Address string `mapstructure:"address"`
-	Token   string `mapstructure:"token"`
+	Address string `mapstructure:"address" validate:"required,url"`
+	Token   string `mapstructure:"token"   validate:"required"`
 }
 
 // Load loads the configuration from a file and environment variables.
@@ -75,9 +76,9 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	// Override with environment variables if they exist
-	if port := vip.GetInt("POLYKEY_GRPC_PORT"); port != 0 {
-		cfg.Server.Port = port
+	validate := validator.New()
+	if err := validate.Struct(&cfg); err != nil {
+		return nil, err
 	}
 
 	cfg.ServiceVersion = Getenv("POLYKEY_SERVICE_VERSION", "unknown")
