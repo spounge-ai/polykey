@@ -2,6 +2,7 @@ module github.com/spounge-ai/polykey
 
 go 1.24.5
 
+ 
 require (
 	github.com/hashicorp/vault/api v1.14.0 // Added for Vault integration
 	github.com/spf13/viper v1.20.1
