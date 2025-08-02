@@ -3,16 +3,14 @@ package grpc
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/spounge-ai/polykey/internal/domain"
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // polykeyServiceImpl implements the PolykeyService interface.
@@ -37,12 +35,6 @@ func NewPolykeyService(cfg *config.Config, keyRepo domain.KeyRepository, kms dom
 }
 
 func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
-	// Authorization Check
-	isAuthorized, _ := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "/polykey.v2.PolykeyService/GetKey")
-	if !isAuthorized {
-		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
-	}
-
 	key, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to retrieve key: %v", err)
@@ -64,12 +56,6 @@ func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) 
 }
 
 func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
-	// Authorization Check
-	isAuthorized, _ := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "/polykey.v2.PolykeyService/CreateKey")
-	if !isAuthorized {
-		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
-	}
-
 	dek := make([]byte, 32)
 	if _, err := rand.Read(dek); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to generate DEK: %v", err)
@@ -81,7 +67,7 @@ func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyReq
 	}
 
 	newKey := &domain.Key{
-		ID:           fmt.Sprintf("key-%d", time.Now().UnixNano()), // Mock ID generation
+		ID:           uuid.New().String(),
 		Metadata:     &pk.KeyMetadata{KeyType: req.GetKeyType()},
 		EncryptedDEK: encryptedDEK,
 	}
@@ -128,12 +114,6 @@ func (s *polykeyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.Upda
 
 // GetKeyMetadata implements pk.PolykeyServiceServer.
 func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error) {
-	// Authorization Check
-	isAuthorized, _ := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "/polykey.v2.PolykeyService/GetKeyMetadata")
-	if !isAuthorized {
-		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
-	}
-
 	key, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to retrieve key metadata: %v", err)
@@ -144,15 +124,11 @@ func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyM
 	}
 
 	if req.GetIncludeAccessHistory() {
-		resp.AccessHistory = []*pk.AccessHistoryEntry{
-			{Timestamp: timestamppb.Now(), ClientIdentity: "mock_client_1", Operation: "mock_op_1", Success: true},
-		}
+		// TODO: Implement audit log retrieval
 	}
 
 	if req.GetIncludePolicyDetails() {
-		resp.PolicyDetails = map[string]*pk.PolicyDetail{
-			"mock_policy_1": {PolicyId: "mock_policy_id_1"},
-		}
+		// TODO: Implement policy retrieval
 	}
 
 	return resp, nil

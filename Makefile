@@ -22,8 +22,8 @@ build: ## Build binaries
 
 server: kill build ## Run server
 	@echo "$(GREEN)Starting server on port $(PORT)...$(RESET)"
-	@POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
-	@echo $$! > .server_pid
+	@POLYKEY_CONFIG_PATH=config.test.yaml POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
+	@echo $! > .server_pid
 
 client: build ## Run client
 	@if ! nc -z localhost $(PORT) 2>/dev/null; then \
@@ -40,8 +40,9 @@ test-race: ## Run tests with race detector
 
 test-integration: build-beautifier server ## Run integration tests
 	@sleep 2
-	@POLYKEY_GRPC_PORT=$(PORT) go test -v -json ./tests/integration/... | ./bin/log-beautifier
+	@POLYKEY_CONFIG_PATH=config.test.yaml POLYKEY_GRPC_PORT=$(PORT) go test -v -json ./tests/integration/... | ./bin/log-beautifier
 	@$(MAKE) kill
+
 
 build-beautifier:
 	@go build -o $(BIN_DIR)/log-beautifier ./cmd/utils/log-beautifier

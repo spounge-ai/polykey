@@ -15,6 +15,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 
 	dev_auth "github.com/spounge-ai/polykey/dev/auth"
+	dev_kms "github.com/spounge-ai/polykey/dev/kms"
 	dev_persistence "github.com/spounge-ai/polykey/dev/persistence"
 )
 
@@ -28,10 +29,9 @@ func main() {
 	var authorizer domain.Authorizer
 	var keyRepo domain.KeyRepository
 
-	env := os.Getenv("POLYKEY_ENV")
-	if env == "dev" || env == "test" {
-		log.Println("Running in DEV/TEST environment: Using mock implementations.")
-		kmsAdapter = &mockKMSAdapter{} // Assuming a mock KMS adapter exists or will be created
+	if cfg.Server.Mode == "development" {
+		log.Println("Running in DEV environment: Using mock implementations.")
+		kmsAdapter = dev_kms.NewMockKMSAdapter()
 		authorizer = dev_auth.NewMockAuthorizer()
 		keyRepo = dev_persistence.NewMockVaultStorage()
 	} else {
@@ -56,15 +56,4 @@ func main() {
 	if err := srv.RunBlocking(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
-}
-
-// mockKMSAdapter is a placeholder for a mock KMS service.
-type mockKMSAdapter struct{}
-
-func (m *mockKMSAdapter) EncryptDEK(ctx context.Context, plaintextDEK []byte, masterKeyID string) ([]byte, error) {
-	return []byte("mock_encrypted_dek"), nil
-}
-
-func (m *mockKMSAdapter) DecryptDEK(ctx context.Context, encryptedDEK []byte, masterKeyID string) ([]byte, error) {
-	return []byte("mock_plaintext_dek"), nil
 }

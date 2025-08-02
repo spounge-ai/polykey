@@ -36,3 +36,5 @@ go.work.sum
 # .vscode/
 
 #dev_data/
+
+config.test.yaml
