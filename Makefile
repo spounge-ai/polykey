@@ -8,10 +8,10 @@ CLIENT_BINARY := $(BIN_DIR)/dev_client
 PORT := 50053
 
 # Colors
-CYAN := \033[0;36m
-YELLOW := \033[0;33m
-GREEN := \033[0;32m
-RESET := \033[0m
+CYAN := 
+YELLOW := 
+GREEN := 
+RESET := 
 
 .PHONY: build server client test clean kill help
 
@@ -22,8 +22,8 @@ build: ## Build binaries
 
 server: kill build ## Run server
 	@echo "$(GREEN)Starting server on port $(PORT)...$(RESET)"
-	@POLYKEY_CONFIG_PATH=config.test.yaml POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
-	@echo $! > .server_pid
+	@POLYKEY_CONFIG_PATH=config.test.yaml POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &\
+		echo $$! > .server_pid
 
 client: build ## Run client
 	@if ! nc -z localhost $(PORT) 2>/dev/null; then \
@@ -38,21 +38,20 @@ test: ## Run tests
 test-race: ## Run tests with race detector
 	@go test -race -v ./...
 
-test-integration: build-beautifier server ## Run integration tests
+test-integration: server ## Run integration tests
 	@sleep 2
-	@POLYKEY_CONFIG_PATH=config.test.yaml POLYKEY_GRPC_PORT=$(PORT) go test -v -json ./tests/integration/... | ./bin/log-beautifier
+	@POLYKEY_CONFIG_PATH=config.test.yaml POLYKEY_GRPC_PORT=$(PORT) go test -json ./tests/integration/... | tparse -all
 	@$(MAKE) kill
-
-
-build-beautifier:
-	@go build -o $(BIN_DIR)/log-beautifier ./cmd/utils/log-beautifier
 
 clean: kill ## Clean build artifacts
 	@rm -rf $(BIN_DIR) .server_pid server.log
 
 kill: ## Kill server processes
-	@-[ -f .server_pid ] && kill $$(cat .server_pid) 2>/dev/null && rm -f .server_pid
-	@-lsof -ti:$(PORT) 2>/dev/null | xargs kill -9 2>/dev/null || true
+	@if [ -f .server_pid ]; then \
+		kill $$(cat .server_pid) >/dev/null 2>&1 || true; \
+		rm -f .server_pid; \
+	fi
+	@-lsof -ti:$(PORT) | xargs kill -9 >/dev/null 2>&1 || true
 
 help: ## Show help
 	@echo "$(CYAN)Polykey Development$(RESET)"
