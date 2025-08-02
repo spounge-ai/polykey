@@ -19,7 +19,7 @@ func main() {
 		port = "50051" // Default port
 	}
 
-	conn, err := grpc.Dial("localhost:" + port, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("localhost:" + port, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}

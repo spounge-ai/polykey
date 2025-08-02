@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
+	"time"
 
 	"github.com/spounge-ai/polykey/internal/domain"
 	"github.com/spounge-ai/polykey/internal/infra/config"
@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // polykeyServiceImpl implements the PolykeyService interface.
@@ -36,6 +37,12 @@ func NewPolykeyService(cfg *config.Config, keyRepo domain.KeyRepository, kms dom
 }
 
 func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
+	// Authorization Check
+	isAuthorized, _ := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "/polykey.v2.PolykeyService/GetKey")
+	if !isAuthorized {
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+	}
+
 	key, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to retrieve key: %v", err)
@@ -57,6 +64,12 @@ func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) 
 }
 
 func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
+	// Authorization Check
+	isAuthorized, _ := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "/polykey.v2.PolykeyService/CreateKey")
+	if !isAuthorized {
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+	}
+
 	dek := make([]byte, 32)
 	if _, err := rand.Read(dek); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to generate DEK: %v", err)
@@ -68,8 +81,8 @@ func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyReq
 	}
 
 	newKey := &domain.Key{
-		ID:           fmt.Sprintf("key-%d", len(s.keyRepo.ListKeys(ctx))), // Mock ID generation
-		Metadata:     req.GetMetadata(),
+		ID:           fmt.Sprintf("key-%d", time.Now().UnixNano()), // Mock ID generation
+		Metadata:     &pk.KeyMetadata{KeyType: req.GetKeyType()},
 		EncryptedDEK: encryptedDEK,
 	}
 
@@ -82,4 +95,72 @@ func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyReq
 	}, nil
 }
 
-// ... other methods ...
+func (s *polykeyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
+	keys, err := s.keyRepo.ListKeys(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list keys: %v", err)
+	}
+
+	var metadataKeys []*pk.KeyMetadata
+	for _, key := range keys {
+		metadataKeys = append(metadataKeys, key.Metadata)
+	}
+
+	return &pk.ListKeysResponse{
+		Keys: metadataKeys,
+	}, nil
+}
+
+// RotateKey implements pk.PolykeyServiceServer.
+func (s *polykeyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest) (*pk.RotateKeyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RotateKey not implemented")
+}
+
+// RevokeKey implements pk.PolykeyServiceServer.
+func (s *polykeyServiceImpl) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RevokeKey not implemented")
+}
+
+// UpdateKeyMetadata implements pk.PolykeyServiceServer.
+func (s *polykeyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateKeyMetadata not implemented")
+}
+
+// GetKeyMetadata implements pk.PolykeyServiceServer.
+func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error) {
+	// Authorization Check
+	isAuthorized, _ := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "/polykey.v2.PolykeyService/GetKeyMetadata")
+	if !isAuthorized {
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+	}
+
+	key, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to retrieve key metadata: %v", err)
+	}
+
+	resp := &pk.GetKeyMetadataResponse{
+		Metadata: key.Metadata,
+	}
+
+	if req.GetIncludeAccessHistory() {
+		resp.AccessHistory = []*pk.AccessHistoryEntry{
+			{Timestamp: timestamppb.Now(), ClientIdentity: "mock_client_1", Operation: "mock_op_1", Success: true},
+		}
+	}
+
+	if req.GetIncludePolicyDetails() {
+		resp.PolicyDetails = map[string]*pk.PolicyDetail{
+			"mock_policy_1": {PolicyId: "mock_policy_id_1"},
+		}
+	}
+
+	return resp, nil
+}
+
+// HealthCheck implements pk.PolykeyServiceServer.
+func (s *polykeyServiceImpl) HealthCheck(ctx context.Context, req *emptypb.Empty) (*pk.HealthCheckResponse, error) {
+	return &pk.HealthCheckResponse{
+		Status: pk.HealthStatus_HEALTH_STATUS_HEALTHY,
+	}, nil
+}

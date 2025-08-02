@@ -98,7 +98,8 @@ func MustNew() *Server {
 		panic(fmt.Sprintf("failed to load config: %v", err))
 	}
 
-	srv, _, err := New(cfg)
+	// This is a mock implementation for now
+	srv, _, err := New(cfg, nil, nil, nil, nil)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create server: %v", err))
 	}

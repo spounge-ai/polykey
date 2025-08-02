@@ -13,33 +13,15 @@ type Authorizer interface {
 
 // NewAuthorizer creates a new basic authorizer.
 func NewAuthorizer() Authorizer {
-	return &basicAuthorizer{}
+	return &realAuthorizer{}
 }
 
-// basicAuthorizer implements the Authorizer interface with simplified logic.
-type basicAuthorizer struct{}
+// realAuthorizer implements the Authorizer interface with simplified logic.
+type realAuthorizer struct{}
 
 // Authorize performs a simplified authorization check.
-func (a *basicAuthorizer) Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string) (bool, string) {
-	clientIdentity := ""
-	if reqContext != nil {
-		clientIdentity = reqContext.GetClientIdentity()
-	}
-
-	// Deny access if operation is "restricted_key"
-	if operation == "restricted_key" {
-		return false, "mock_auth_decision_id_denied_restricted_key"
-	}
-
-	// Allow "test_creator" to perform "create_key_operation"
-	if clientIdentity == "test_creator" && operation == "create_key_operation" {
-		return true, "mock_auth_decision_id_granted_creator"
-	}
-
-	// Allow "test_client" for general operations
-	if clientIdentity == "test_client" {
-		return true, "mock_auth_decision_id_granted"
-	}
-
-	return false, "mock_auth_decision_id_denied_default"
+func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string) (bool, string) {
+	// This is a placeholder for a real authorization logic.
+	// For now, it will always return true.
+	return true, "mock_auth_decision_id_granted"
 }

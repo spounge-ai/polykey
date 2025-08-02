@@ -18,4 +18,5 @@ type Key struct {
 type KeyRepository interface {
 	GetKey(ctx context.Context, id string) (*Key, error)
 	CreateKey(ctx context.Context, key *Key) error
+	ListKeys(ctx context.Context) ([]*Key, error)
 }

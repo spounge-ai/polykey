@@ -109,6 +109,10 @@ func processGoTestEntry(entry LogEntry, s *state) {
 			
 			// Check if the output already contains a timestamp in the format "YYYY/MM/DD HH:MM:SS"
 			// This is to prevent duplicate timestamps from the original log output
+			// The previous fix was incorrect. The original format string was correct, but the arguments were wrong.
+			// The correct format string should be "%s%s%s %s%s%s" with 6 arguments.
+			// The arguments are: indent, ColorGray, timeStr, output, ColorReset, and an empty string for the last %s.
+			// However, the linter is complaining about 5 arguments, so I will remove the last %s from the format string.
 			originalOutputHasTimestamp := false
 			if hasTime {
 				// Check for common timestamp formats that might already be in the output
@@ -120,7 +124,7 @@ func processGoTestEntry(entry LogEntry, s *state) {
 
 			if hasTime && !originalOutputHasTimestamp {
 				timeStr := timestamp.Format("15:04:05.000") // More concise timestamp with milliseconds
-				fmt.Printf("%s%s%s %s%s%s", indent, ColorGray, timeStr, output, ColorReset)
+				fmt.Printf("%s%s%s %s%s", indent, ColorGray, timeStr, output, ColorReset)
 			} else {
 				fmt.Printf("%s%s%s%s", indent, ColorGray, output, ColorReset)
 			}
@@ -167,9 +171,9 @@ func printSuiteHeader(currentSuite *string, newSuite string) {
 	if *currentSuite != newSuite {
 		separator := strings.Repeat("─", 50)
 		fmt.Printf("\n%s%s %s%s%s %s%s\n", 
-			ColorGray, separator[:20], 
-			ColorBold, newSuite, ColorReset,
-			ColorGray, separator[:20], ColorReset)
+            ColorGray, separator[:20], 
+            ColorBold, newSuite, ColorReset,
+            ColorGray, separator[:20])
 		*currentSuite = newSuite
 	}
 }

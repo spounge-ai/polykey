@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spounge-ai/polykey/internal/config"
-	"github.com/spounge-ai/polykey/internal/server"
+	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
+	"github.com/spounge-ai/polykey/internal/domain"
+	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	pb "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -16,15 +17,44 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	dev_auth "github.com/spounge-ai/polykey/dev/auth"
+	dev_persistence "github.com/spounge-ai/polykey/dev/persistence"
 )
 
 // setupTestServer starts a new server and returns a client connection and a cleanup function.
 func setupTestServer(t *testing.T) (pb.PolykeyServiceClient, func()) {
-	cfg, err := config.Load("")
-	assert.NoError(t, err)
-	cfg.Server.Port = 0 // Use a dynamic port for testing
+	// Create a mock config for testing
+	cfg := &infra_config.Config{
+		Server: infra_config.ServerConfig{
+			Port: 0, // Dynamic port
+			Mode: "test",
+		},
+		Database: infra_config.DatabaseConfig{
+			Host:     "localhost",
+			Port:     5432,
+			User:     "testuser",
+			Password: "testpassword",
+			DBName:   "testdb",
+			SSLMode:  "disable",
+		},
+		Vault: infra_config.VaultConfig{
+			Address: "http://localhost:8200",
+			Token:   "testtoken",
+		},
+	}
 
-	srv, port, err := server.New(cfg)
+	var kmsAdapter domain.KMSService
+	var authorizer domain.Authorizer
+	var keyRepo domain.KeyRepository
+
+	// Always use mocks in integration tests
+	log.Println("Running in TEST environment: Using mock implementations.")
+	kmsAdapter = &mockKMSAdapter{}
+	authorizer = dev_auth.NewMockAuthorizer()
+	keyRepo = dev_persistence.NewMockVaultStorage()
+
+	srv, port, err := app_grpc.New(cfg, keyRepo, kmsAdapter, authorizer, nil) // nil for audit logger for now
 	assert.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -37,7 +67,10 @@ func setupTestServer(t *testing.T) (pb.PolykeyServiceClient, func()) {
 
 	time.Sleep(2 * time.Second) // Give the server time to start
 
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(
+		fmt.Sprintf("localhost:%d", port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	assert.NoError(t, err)
 
 	client := pb.NewPolykeyServiceClient(conn)
@@ -48,6 +81,17 @@ func setupTestServer(t *testing.T) (pb.PolykeyServiceClient, func()) {
 	}
 
 	return client, cleanup
+}
+
+// mockKMSAdapter is a placeholder for a mock KMS service.
+type mockKMSAdapter struct{}
+
+func (m *mockKMSAdapter) EncryptDEK(ctx context.Context, plaintextDEK []byte, masterKeyID string) ([]byte, error) {
+	return []byte("mock_encrypted_dek"), nil
+}
+
+func (m *mockKMSAdapter) DecryptDEK(ctx context.Context, encryptedDEK []byte, masterKeyID string) ([]byte, error) {
+	return []byte("mock_plaintext_dek"), nil
 }
 
 func TestHealthCheck(t *testing.T) {
