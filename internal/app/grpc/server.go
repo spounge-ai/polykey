@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
-	pb "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
 // Server represents the gRPC server.
@@ -60,7 +60,7 @@ func New(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.KMSService
 		return nil, 0, fmt.Errorf("failed to create polykey service: %w", err)
 	}
 
-	pb.RegisterPolykeyServiceServer(grpcServer, polykeyService)
+	pk.RegisterPolykeyServiceServer(grpcServer, polykeyService)
 
 	healthSrv := health.NewServer()
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthSrv)

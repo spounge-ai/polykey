@@ -10,7 +10,7 @@ import (
 	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
 	"github.com/spounge-ai/polykey/internal/domain"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
-	pb "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -24,7 +24,7 @@ import (
 )
 
 // setupTestServer starts a new server and returns a client connection and a cleanup function.
-func setupTestServer(t *testing.T) (pb.PolykeyServiceClient, func()) {
+func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 	// Create a mock config for testing
 	cfg := &infra_config.Config{
 		Server: infra_config.ServerConfig{
@@ -74,7 +74,7 @@ func setupTestServer(t *testing.T) (pb.PolykeyServiceClient, func()) {
 	)
 	assert.NoError(t, err)
 
-	client := pb.NewPolykeyServiceClient(conn)
+	client := pk.NewPolykeyServiceClient(conn)
 
 	cleanup := func() {
 		conn.Close()
@@ -91,7 +91,7 @@ func TestHealthCheck(t *testing.T) {
 	resp, err := client.HealthCheck(context.Background(), &emptypb.Empty{})
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, pb.HealthStatus_HEALTH_STATUS_HEALTHY, resp.Status)
+	assert.Equal(t, pk.HealthStatus_HEALTH_STATUS_HEALTHY, resp.Status)
 }
 
 func TestKeyOperations_HappyPath(t *testing.T) {
@@ -100,9 +100,9 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 
 	t.Run("GetKey - Authorized", func(t *testing.T) {
 		keyID := "test_key_123"
-		resp, err := client.GetKey(context.Background(), &pb.GetKeyRequest{
+		resp, err := client.GetKey(context.Background(), &pk.GetKeyRequest{
 			KeyId:            keyID,
-			RequesterContext: &pb.RequesterContext{ClientIdentity: "test_client"},
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
 		})
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
@@ -110,9 +110,9 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 	})
 
 	t.Run("CreateKey - Authorized", func(t *testing.T) {
-		createReq := &pb.CreateKeyRequest{
-			KeyType:          pb.KeyType_KEY_TYPE_AES_256,
-			RequesterContext: &pb.RequesterContext{ClientIdentity: "test_creator"},
+		createReq := &pk.CreateKeyRequest{
+			KeyType:          pk.KeyType_KEY_TYPE_AES_256,
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_creator"},
 		}
 		resp, err := client.CreateKey(context.Background(), createReq)
 		assert.NoError(t, err)
@@ -122,9 +122,9 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 
 	t.Run("GetKeyMetadata - Authorized", func(t *testing.T) {
 		keyID := "test_key_for_metadata"
-		resp, err := client.GetKeyMetadata(context.Background(), &pb.GetKeyMetadataRequest{
+		resp, err := client.GetKeyMetadata(context.Background(), &pk.GetKeyMetadataRequest{
 			KeyId:                keyID,
-			RequesterContext:     &pb.RequesterContext{ClientIdentity: "test_client"},
+			RequesterContext:     &pk.RequesterContext{ClientIdentity: "test_client"},
 			IncludeAccessHistory: true,
 			IncludePolicyDetails: true,
 		})
@@ -142,9 +142,9 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 
 	t.Run("GetKey - Unauthorized", func(t *testing.T) {
 		keyID := "restricted_key"
-		_, err := client.GetKey(context.Background(), &pb.GetKeyRequest{
+		_, err := client.GetKey(context.Background(), &pk.GetKeyRequest{
 			KeyId:            keyID,
-			RequesterContext: &pb.RequesterContext{ClientIdentity: "test_client"},
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
 		})
 		assert.Error(t, err)
 		s, _ := status.FromError(err)
@@ -152,9 +152,9 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 	})
 
 	t.Run("CreateKey - Unauthorized", func(t *testing.T) {
-		_, err := client.CreateKey(context.Background(), &pb.CreateKeyRequest{
-			KeyType:          pb.KeyType_KEY_TYPE_API_KEY,
-			RequesterContext: &pb.RequesterContext{ClientIdentity: "unknown_creator"},
+		_, err := client.CreateKey(context.Background(), &pk.CreateKeyRequest{
+			KeyType:          pk.KeyType_KEY_TYPE_API_KEY,
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "unknown_creator"},
 		})
 		assert.Error(t, err)
 		s, _ := status.FromError(err)
@@ -163,9 +163,9 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 
 	t.Run("GetKeyMetadata - Unauthorized", func(t *testing.T) {
 		keyID := "test_key_for_metadata"
-		_, err := client.GetKeyMetadata(context.Background(), &pb.GetKeyMetadataRequest{
+		_, err := client.GetKeyMetadata(context.Background(), &pk.GetKeyMetadataRequest{
 			KeyId:            keyID,
-			RequesterContext: &pb.RequesterContext{ClientIdentity: "unknown_client"},
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "unknown_client"},
 		})
 		assert.Error(t, err)
 		s, _ := status.FromError(err)

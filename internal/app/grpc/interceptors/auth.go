@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/spounge-ai/polykey/internal/domain"
-	pb "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,17 +13,17 @@ import (
 // UnaryAuthInterceptor is a gRPC unary interceptor that performs authorization.
 func UnaryAuthInterceptor(authorizer domain.Authorizer) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		var reqContext *pb.RequesterContext
-		var attrs *pb.AccessAttributes
+		var reqContext *pk.RequesterContext
+		var attrs *pk.AccessAttributes
 
 		// Extract common fields from the request.
 		switch r := req.(type) {
-		case *pb.GetKeyRequest:
+		case *pk.GetKeyRequest:
 			reqContext = r.GetRequesterContext()
-			attrs = &pb.AccessAttributes{Environment: r.KeyId}
-		case *pb.CreateKeyRequest:
+			attrs = &pk.AccessAttributes{Environment: r.KeyId}
+		case *pk.CreateKeyRequest:
 			reqContext = r.GetRequesterContext()
-		case *pb.GetKeyMetadataRequest:
+		case *pk.GetKeyMetadataRequest:
 			reqContext = r.GetRequesterContext()
 		}
 
