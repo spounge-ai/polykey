@@ -18,11 +18,11 @@ func UnaryAuthInterceptor(authorizer domain.Authorizer) grpc.UnaryServerIntercep
 
 		// Extract common fields from the request.
 		switch r := req.(type) {
+		case *pk.CreateKeyRequest:
+			reqContext = r.GetRequesterContext()
 		case *pk.GetKeyRequest:
 			reqContext = r.GetRequesterContext()
 			attrs = &pk.AccessAttributes{Environment: r.KeyId}
-		case *pk.CreateKeyRequest:
-			reqContext = r.GetRequesterContext()
 		case *pk.GetKeyMetadataRequest:
 			reqContext = r.GetRequesterContext()
 		}
