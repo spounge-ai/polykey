@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -57,15 +58,15 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 	log.Println("Running in TEST environment: Using mock implementations.")
 	kmsAdapter = kms.NewMockKMSAdapter()
 	authorizer = auth.NewMockAuthorizer()
-	keyRepo = persistence.NewMockVaultStorage()
+	keyRepo = persistence.NewMockS3Storage()
 
-	srv, port, err := app_grpc.New(cfg, keyRepo, kmsAdapter, authorizer, nil) // nil for audit logger for now
+	srv, port, err := app_grpc.New(cfg, keyRepo, kmsAdapter, authorizer, nil, slog.Default()) // nil for audit logger for now
 	assert.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancelFunc := context.WithCancel(context.Background())
 
 	go func() {
-		if err := srv.Run(ctx); err != nil {
+		if err := srv.Start(); err != nil {
 			log.Printf("Server exited with error: %v", err)
 		}
 	}()
@@ -84,7 +85,7 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 		if err := conn.Close(); err != nil {
 			t.Logf("failed to close connection: %v", err)
 		}
-		cancel()
+		cancelFunc()
 	}
 
 	return client, cleanup

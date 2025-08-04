@@ -21,7 +21,26 @@ type realAuthorizer struct{}
 
 // Authorize performs a simplified authorization check.
 func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string) (bool, string) {
-	// This is a placeholder for a real authorization logic.
-	// For now, it will always return true.
-	return true, "mock_auth_decision_id_granted"
+	if reqContext == nil || reqContext.ClientIdentity == "" {
+		return false, "missing_client_identity"
+	}
+
+	// Simple RBAC model
+	role := "user" // Default role
+	if reqContext.ClientIdentity == "admin" {
+		role = "admin"
+	}
+
+	switch operation {
+	case "/polykey.v2.PolykeyService/CreateKey", "/polykey.v2.PolykeyService/RotateKey", "/polykey.v2.PolykeyService/RevokeKey", "/polykey.v2.PolykeyService/UpdateKeyMetadata":
+		if role != "admin" {
+			return false, "admin_required"
+		}
+	case "/polykey.v2.PolykeyService/GetKey", "/polykey.v2.PolykeyService/GetKeyMetadata", "/polykey.v2.PolykeyService/ListKeys":
+		// All roles can perform these operations
+	default:
+		return false, "unknown_operation"
+	}
+
+	return true, "authorized"
 }

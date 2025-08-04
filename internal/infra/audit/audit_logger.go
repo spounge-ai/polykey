@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spounge-ai/polykey/internal/domain"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 )
 
 // Logger implements the domain.AuditLogger interface.
@@ -72,14 +74,22 @@ func (l *Logger) AuditLog(ctx context.Context, clientIdentity, operation, keyID,
 
 // extractUserAgent extracts user agent from context metadata.
 func extractUserAgent(ctx context.Context) string {
-	// Implementation depends on how metadata is stored in context
-	// This is a placeholder - adjust based on your gRPC metadata handling
-	return "unknown"
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "unknown"
+	}
+	ua := md.Get("user-agent")
+	if len(ua) == 0 {
+		return "unknown"
+	}
+	return ua[0]
 }
 
 // extractSourceIP extracts source IP from context metadata.
 func extractSourceIP(ctx context.Context) string {
-	// Implementation depends on how metadata is stored in context
-	// This is a placeholder - adjust based on your gRPC metadata handling
-	return "unknown"
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return "unknown"
+	}
+	return p.Addr.String()
 }

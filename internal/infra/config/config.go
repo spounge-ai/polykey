@@ -87,7 +87,9 @@ func Load(path string) (*Config, error) {
 	}
 
 	validate := validator.New()
-	customvalidator.RegisterCustomValidators(validate)
+	if err := customvalidator.RegisterCustomValidators(validate); err != nil {
+		return nil, fmt.Errorf("failed to register custom validators: %w", err)
+	}
 
 	if err := validate.Struct(&cfg); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)

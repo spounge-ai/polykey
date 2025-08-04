@@ -14,6 +14,9 @@ func isARN(fl validator.FieldLevel) bool {
 }
 
 // RegisterCustomValidators registers custom validation functions with the validator.
-func RegisterCustomValidators(validate *validator.Validate) {
-	validate.RegisterValidation("arn", isARN)
+func RegisterCustomValidators(validate *validator.Validate) error {
+	if err := validate.RegisterValidation("arn", isARN); err != nil {
+		return err
+	}
+	return nil
 }

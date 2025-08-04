@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 	"crypto/rand"
-	"log"
+	"log/slog"
 	"maps"
 	"time"
 
@@ -25,16 +25,18 @@ type polykeyServiceImpl struct {
 	kms        domain.KMSService
 	authorizer domain.Authorizer
 	audit      domain.AuditLogger
+	logger     *slog.Logger
 }
 
 // NewPolykeyService creates a new instance of PolykeyService.
-func NewPolykeyService(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.KMSService, authorizer domain.Authorizer, audit domain.AuditLogger) (pk.PolykeyServiceServer, error) {
+func NewPolykeyService(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.KMSService, authorizer domain.Authorizer, audit domain.AuditLogger, logger *slog.Logger) (pk.PolykeyServiceServer, error) {
 	return &polykeyServiceImpl{
 		cfg:        cfg,
 		keyRepo:    keyRepo,
 		kms:        kms,
 		authorizer: authorizer,
 		audit:      audit,
+		logger:     logger,
 	}, nil
 }
 
@@ -262,12 +264,12 @@ func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyM
 
 	// TODO: Add access history if requested
 	if req.GetIncludeAccessHistory() {
-		log.Println("WARN: IncludeAccessHistory is not yet implemented")
+		s.logger.Warn("IncludeAccessHistory is not yet implemented")
 	}
 
 	// TODO: Add policy details if requested
 	if req.GetIncludePolicyDetails() {
-		log.Println("WARN: IncludePolicyDetails is not yet implemented")
+		s.logger.Warn("IncludePolicyDetails is not yet implemented")
 	}
 
 	return resp, nil

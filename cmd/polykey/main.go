@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"os"
 
 	"github.com/spounge-ai/polykey/internal/app/grpc"
@@ -23,14 +24,17 @@ func main() {
 	}
 
 	authorizer := auth.NewAuthorizer()
-	auditLogger := audit.NewAuditLogger()
+	auditLogger := audit.NewAuditLogger(slog.Default(), nil) // nil for audit repo for now
 
-	srv, _, err := grpc.New(cfg, keyRepo, kmsAdapter, authorizer, auditLogger)
+	srv, port, err := grpc.New(cfg, keyRepo, kmsAdapter, authorizer, auditLogger, slog.Default())
 	if err != nil {
-		log.Fatalf("failed to create server: %v", err)
+		slog.Error("failed to create server", "error", err)
+		os.Exit(1)
 	}
 
-	if err := srv.RunBlocking(); err != nil {
-		log.Fatalf("server error: %v", err)
+	slog.Info("starting gRPC server", "port", port)
+	if err := srv.Start(); err != nil {
+		slog.Error("server error", "error", err)
+		os.Exit(1)
 	}
 }
