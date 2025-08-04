@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"maps"
 	"context"
 	"crypto/rand"
 	"time"
@@ -285,9 +286,7 @@ func (s *polykeyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.Upda
 	if metadata.Tags == nil {
 		metadata.Tags = make(map[string]string)
 	}
-	for k, v := range req.GetTagsToAdd() {
-		metadata.Tags[k] = v
-	}
+	maps.Copy(metadata.Tags, req.GetTagsToAdd())
 	for _, tag := range req.GetTagsToRemove() {
 		delete(metadata.Tags, tag)
 	}

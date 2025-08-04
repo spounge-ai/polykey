@@ -22,9 +22,12 @@ func UnaryAuthInterceptor(authorizer domain.Authorizer) grpc.UnaryServerIntercep
 			reqContext = r.GetRequesterContext()
 		case *pk.GetKeyRequest:
 			reqContext = r.GetRequesterContext()
-			attrs = &pk.AccessAttributes{Environment: r.KeyId}
+			attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
 		case *pk.GetKeyMetadataRequest:
 			reqContext = r.GetRequesterContext()
+			attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
+		default:
+			// For other request types, you might want to handle them here
 		}
 
 		isAuthorized, _ := authorizer.Authorize(ctx, reqContext, attrs, info.FullMethod)

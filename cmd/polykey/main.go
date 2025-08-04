@@ -9,14 +9,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/spounge-ai/polykey/internal/app/grpc"
 	"github.com/spounge-ai/polykey/internal/domain"
-	infra_auth "github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_aws "github.com/spounge-ai/polykey/internal/infra/aws"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 
 	dev_auth "github.com/spounge-ai/polykey/dev/auth"
-	dev_kms "github.com/spounge-ai/polykey/dev/kms"
-	dev_persistence "github.com/spounge-ai/polykey/dev/persistence"
 )
 
 func main() {
@@ -29,23 +26,20 @@ func main() {
 	var authorizer domain.Authorizer
 	var keyRepo domain.KeyRepository
 
-	if cfg.Server.Mode == "development" {
-		log.Println("Running in DEV environment: Using mock implementations.")
-		kmsAdapter = dev_kms.NewMockKMSAdapter()
-		authorizer = dev_auth.NewMockAuthorizer()
-		keyRepo = dev_persistence.NewMockVaultStorage()
-	} else {
-		log.Println("Running in PROD environment: Using real implementations.")
-		awsCfg, err := config.LoadDefaultConfig(context.Background())
-		if err != nil {
-			log.Fatalf("failed to load aws config: %v", err)
-		}
-		kmsAdapter = infra_aws.NewKMSCachedAdapter(infra_aws.NewKMSAdapter(awsCfg), 5*time.Minute)
-		authorizer = infra_auth.NewAuthorizer()
-		keyRepo, err = persistence.NewVaultStorage(cfg.Vault.Address, cfg.Vault.Token)
-		if err != nil {
-			log.Fatalf("failed to create vault storage: %v", err)
-		}
+	// For local development, we will now use the real AWS implementations.
+	// The mock implementations can be used for pure unit testing.
+	log.Println("Using AWS-backed implementations for local testing.")
+
+	awsCfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(cfg.AWS.Region))
+	if err != nil {
+		log.Fatalf("failed to load aws config: %v", err)
+	}
+
+	kmsAdapter = infra_aws.NewKMSCachedAdapter(infra_aws.NewKMSAdapter(awsCfg), 5*time.Minute)
+	authorizer = dev_auth.NewMockAuthorizer() // Using mock authorizer for now
+	keyRepo, err = persistence.NewS3Storage(awsCfg, cfg.AWS.S3Bucket)
+	if err != nil {
+		log.Fatalf("failed to create s3 storage: %v", err)
 	}
 
 	srv, _, err := grpc.New(cfg, keyRepo, kmsAdapter, authorizer, nil) // nil for audit logger for now

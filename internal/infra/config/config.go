@@ -14,8 +14,16 @@ type Config struct {
 	Server         ServerConfig   `mapstructure:"server"`
 	Database       DatabaseConfig `mapstructure:"database" validate:"required"`
 	Vault          VaultConfig    `mapstructure:"vault"    validate:"required"`
+	AWS            AWSConfig      `mapstructure:"aws"      validate:"required"`
 	ServiceVersion string
 	BuildCommit    string
+}
+
+// AWSConfig holds the AWS-specific configuration.
+type AWSConfig struct {
+	Region       string `mapstructure:"region"        validate:"required"`
+	S3Bucket     string `mapstructure:"s3_bucket"     validate:"required"`
+	KMSKeyARN    string `mapstructure:"kms_key_arn"     validate:"required,arn"`
 }
 
 // ServerConfig holds the server configuration.
