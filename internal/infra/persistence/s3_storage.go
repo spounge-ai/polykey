@@ -1,0 +1,347 @@
+package persistence
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/spounge-ai/polykey/internal/domain"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+)
+
+// S3Storage implements the KeyRepository using an S3 bucket.
+type S3Storage struct {
+	client     *s3.Client
+	bucketName string
+	logger     *slog.Logger
+}
+
+// NewS3Storage creates a new S3-backed KeyRepository.
+func NewS3Storage(cfg aws.Config, bucketName string, logger *slog.Logger) (*S3Storage, error) {
+	s3Client := s3.NewFromConfig(cfg)
+	return &S3Storage{
+		client:     s3Client,
+		bucketName: bucketName,
+		logger:     logger,
+	}, nil
+}
+
+// s3KeyObject represents the structure of the JSON object stored in S3.
+type s3KeyObject struct {
+	ID            string          `json:"id"`
+	EncryptedDEK  []byte          `json:"encrypted_dek"`
+	Metadata      *pk.KeyMetadata `json:"metadata"`
+	Version       int32           `json:"version"`
+	Status        pk.KeyStatus    `json:"status"`
+	CreatedAt     int64           `json:"created_at"`
+	UpdatedAt     int64           `json:"updated_at"`
+}
+
+func (s *S3Storage) GetKey(ctx context.Context, id string) (*domain.Key, error) {
+	keyPath := fmt.Sprintf("keys/%s/latest.json", id)
+	return s.getKeyFromPath(ctx, keyPath)
+}
+
+func (s *S3Storage) GetKeyByVersion(ctx context.Context, id string, version int32) (*domain.Key, error) {
+	keyPath := fmt.Sprintf("keys/%s/v%d.json", id, version)
+	return s.getKeyFromPath(ctx, keyPath)
+}
+
+func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key) error {
+	keyObj := s3KeyObject{
+		ID:           key.ID,
+		EncryptedDEK: key.EncryptedDEK,
+		Metadata:     key.Metadata,
+		Version:      key.Version,
+		Status:       pk.KeyStatus(pk.KeyStatus_value[string(key.Status)]),
+		CreatedAt:    key.CreatedAt.Unix(),
+		UpdatedAt:    key.UpdatedAt.Unix(),
+	}
+
+	data, err := json.Marshal(keyObj)
+	if err != nil {
+		return fmt.Errorf("failed to marshal key object: %w", err)
+	}
+
+	// Store the specific version
+	versionPath := fmt.Sprintf("keys/%s/v%d.json", key.ID, key.Version)
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: &s.bucketName,
+		Key:    &versionPath,
+		Body:   bytes.NewReader(data),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to put versioned key object to S3: %w", err)
+	}
+
+	// Store as the latest version
+	latestPath := fmt.Sprintf("keys/%s/latest.json", key.ID)
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: &s.bucketName,
+		Key:    &latestPath,
+		Body:   bytes.NewReader(data),
+	})
+	if err != nil {
+		// Attempt to roll back the versioned key if this fails
+		if _, delErr := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &s.bucketName, Key: &versionPath}); delErr != nil {
+			s.logger.Error("failed to roll back S3 object", "path", versionPath, "error", delErr)
+		}
+		return fmt.Errorf("failed to put latest key object to S3: %w", err)
+	}
+
+	return nil
+}
+
+func (s *S3Storage) getKeyFromPath(ctx context.Context, path string) (*domain.Key, error) {
+	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: &s.bucketName,
+		Key:    &path,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key object from S3: %w", err)
+	}
+	defer func() {
+		if err := output.Body.Close(); err != nil {
+			s.logger.Error("failed to close S3 object body", "error", err)
+		}
+	}()
+
+	var keyObj s3KeyObject
+	if err := json.NewDecoder(output.Body).Decode(&keyObj); err != nil {
+		return nil, fmt.Errorf("failed to decode key object from S3: %w", err)
+	}
+
+	return &domain.Key{
+		ID:           keyObj.ID,
+		EncryptedDEK: keyObj.EncryptedDEK,
+		Metadata:     keyObj.Metadata,
+		Version:      keyObj.Version,
+		Status:       domain.KeyStatus(pk.KeyStatus_name[int32(keyObj.Status)]),
+		CreatedAt:    time.Unix(keyObj.CreatedAt, 0),
+		UpdatedAt:    time.Unix(keyObj.UpdatedAt, 0),
+	}, nil
+}
+
+func (s *S3Storage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
+	prefix := "keys/"
+	input := &s3.ListObjectsV2Input{
+		Bucket:    &s.bucketName,
+		Prefix:    &prefix,
+		Delimiter: aws.String("/"),
+	}
+
+	var keys []*domain.Key
+	paginator := s3.NewListObjectsV2Paginator(s.client, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list objects from S3: %w", err)
+		}
+
+		for _, obj := range page.CommonPrefixes {
+			// Extract key ID from the prefix
+			keyID := strings.TrimSuffix(strings.TrimPrefix(*obj.Prefix, prefix), "/")
+			key, err := s.GetKey(ctx, keyID)
+			if err != nil {
+				s.logger.Error("failed to get key while listing", "keyID", keyID, "error", err)
+				// Decide whether to continue or return an error.
+				// For now, we'll log and continue.
+				continue
+			}
+			keys = append(keys, key)
+		}
+	}
+
+	return keys, nil
+}
+
+func (s *S3Storage) UpdateKeyMetadata(ctx context.Context, id string, metadata *pk.KeyMetadata) error {
+	// Get the latest version of the key
+	latestKey, err := s.GetKey(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get key for update: %w", err)
+	}
+
+	// Update metadata
+	latestKey.Metadata = metadata
+	latestKey.UpdatedAt = time.Now()
+
+	// Create a new key object with updated data
+	keyObj := s3KeyObject{
+		ID:           latestKey.ID,
+		EncryptedDEK: latestKey.EncryptedDEK,
+		Metadata:     latestKey.Metadata,
+		Version:      latestKey.Version, // Version doesn't change on metadata update
+		Status:       pk.KeyStatus(pk.KeyStatus_value[string(latestKey.Status)]),
+		CreatedAt:    latestKey.CreatedAt.Unix(),
+		UpdatedAt:    latestKey.UpdatedAt.Unix(),
+	}
+
+	data, err := json.Marshal(keyObj)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated key object: %w", err)
+	}
+
+	// Overwrite the latest version with the updated metadata
+	latestPath := fmt.Sprintf("keys/%s/latest.json", id)
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: &s.bucketName,
+		Key:    &latestPath,
+		Body:   bytes.NewReader(data),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to put updated latest key object to S3: %w", err)
+	}
+
+	// Also update the specific version file
+	versionPath := fmt.Sprintf("keys/%s/v%d.json", id, latestKey.Version)
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: &s.bucketName,
+		Key:    &versionPath,
+		Body:   bytes.NewReader(data),
+	})
+	if err != nil {
+		// If this fails, the 'latest' is updated but the versioned file is not.
+		// This is an inconsistent state. We should try to roll back.
+		s.logger.Error("failed to update versioned key object after updating latest", "path", versionPath, "error", err)
+		// Attempting to restore the previous state of 'latest.json' would be complex.
+		// For now, we log this inconsistency. A more robust solution might be needed.
+		return fmt.Errorf("failed to put updated versioned key object to S3: %w", err)
+	}
+
+	return nil
+}
+
+func (s *S3Storage) RotateKey(ctx context.Context, id string, newEncryptedDEK []byte) (*domain.Key, error) {
+	// Get the latest version of the key to carry over metadata
+	latestKey, err := s.GetKey(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key for rotation: %w", err)
+	}
+
+	// Create a new key version
+	newVersion := latestKey.Version + 1
+	now := time.Now()
+
+	rotatedKey := &domain.Key{
+		ID:           id,
+		EncryptedDEK: newEncryptedDEK,
+		Metadata:     latestKey.Metadata, // Carry over metadata
+		Version:      newVersion,
+		Status:       domain.KeyStatusActive, // New key version is active
+		CreatedAt:    now,                  // This is a new version, so it has its own creation time
+		UpdatedAt:    now,
+	}
+
+	// Create and store the new key version
+	if err := s.CreateKey(ctx, rotatedKey); err != nil {
+		return nil, fmt.Errorf("failed to create new key version during rotation: %w", err)
+	}
+
+	return rotatedKey, nil
+}
+
+func (s *S3Storage) RevokeKey(ctx context.Context, id string) error {
+	// Get the latest version of the key
+	latestKey, err := s.GetKey(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get key for revocation: %w", err)
+	}
+
+	// Update the status to revoked
+	latestKey.Status = domain.KeyStatusRevoked // Assuming this status exists
+	latestKey.UpdatedAt = time.Now()
+
+	// Create a new key object with updated data
+	keyObj := s3KeyObject{
+		ID:           latestKey.ID,
+		EncryptedDEK: latestKey.EncryptedDEK,
+		Metadata:     latestKey.Metadata,
+		Version:      latestKey.Version,
+		Status:       pk.KeyStatus(pk.KeyStatus_value[string(latestKey.Status)]),
+		CreatedAt:    latestKey.CreatedAt.Unix(),
+		UpdatedAt:    latestKey.UpdatedAt.Unix(),
+	}
+
+	data, err := json.Marshal(keyObj)
+	if err != nil {
+		return fmt.Errorf("failed to marshal revoked key object: %w", err)
+	}
+
+	// Overwrite the latest version with the updated status
+	latestPath := fmt.Sprintf("keys/%s/latest.json", id)
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: &s.bucketName,
+		Key:    &latestPath,
+		Body:   bytes.NewReader(data),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to put revoked latest key object to S3: %w", err)
+	}
+
+	// Also update the specific version file
+	versionPath := fmt.Sprintf("keys/%s/v%d.json", id, latestKey.Version)
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: &s.bucketName,
+		Key:    &versionPath,
+		Body:   bytes.NewReader(data),
+	})
+	if err != nil {
+		s.logger.Error("failed to update versioned key object after revoking latest", "path", versionPath, "error", err)
+		return fmt.Errorf("failed to put revoked versioned key object to S3: %w", err)
+	}
+
+	return nil
+}
+
+func (s *S3Storage) GetKeyVersions(ctx context.Context, id string) ([]*domain.Key, error) {
+	prefix := fmt.Sprintf("keys/%s/v", id)
+	input := &s3.ListObjectsV2Input{
+		Bucket: &s.bucketName,
+		Prefix: &prefix,
+	}
+
+	var versions []*domain.Key
+	paginator := s3.NewListObjectsV2Paginator(s.client, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list objects from S3 for versions: %w", err)
+		}
+
+		for _, obj := range page.Contents {
+			key, err := s.getKeyFromPath(ctx, *obj.Key)
+			if err != nil {
+				s.logger.Error("failed to get key version from path", "path", *obj.Key, "error", err)
+				continue
+			}
+			versions = append(versions, key)
+		}
+	}
+
+	// Sort versions in descending order (newest first)
+	sort.Slice(versions, func(i, j int) bool {
+		return versions[i].Version > versions[j].Version
+	})
+
+	return versions, nil
+}
+
+func (s *S3Storage) HealthCheck() error {
+	// A simple health check could be a HeadBucket call
+	_, err := s.client.HeadBucket(context.Background(), &s3.HeadBucketInput{
+		Bucket: &s.bucketName,
+	})
+	if err != nil {
+		s.logger.Error("S3 health check failed", "error", err)
+		return fmt.Errorf("S3 health check failed: %w", err)
+	}
+	return nil
+}
