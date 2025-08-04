@@ -22,7 +22,7 @@ build: ## Build binaries
 
 server: kill build ## Run server
 	@echo "$(GREEN)Starting server on port $(PORT)...$(RESET)"
-	@POLYKEY_CONFIG_PATH=config.test.yaml POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &\
+	@POLYKEY_CONFIG_PATH=configs/config.test.yaml POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &\
 		echo $$! > .server_pid
 
 client: build ## Run client
@@ -38,10 +38,9 @@ test: ## Run tests
 test-race: ## Run tests with race detector
 	@go test -race -v ./...
 
-test-integration: server ## Run integration tests
-	@sleep 2
-	@POLYKEY_CONFIG_PATH=config.test.yaml POLYKEY_GRPC_PORT=$(PORT) go test -json ./tests/integration/... | tparse -all
-	@$(MAKE) kill
+test-integration:
+	@echo "Running integration tests..."
+	@POLYKEY_CONFIG_PATH=./configs/config.local.yaml go test -tags=local_mocks -v ./tests/integration/...
 
 clean: kill ## Clean build artifacts
 	@rm -rf $(BIN_DIR) .server_pid server.log

@@ -5,8 +5,9 @@ import (
 	"os"
 	"strings"
 
-	validator "github.com/go-playground/validator/v10"
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
+	customvalidator "github.com/spounge-ai/polykey/pkg/validator"
 )
 
 // Config holds the application configuration.
@@ -21,9 +22,10 @@ type Config struct {
 
 // AWSConfig holds the AWS-specific configuration.
 type AWSConfig struct {
-	Region    string `mapstructure:"region"     validate:"required"`
-	S3Bucket  string `mapstructure:"s3_bucket"  validate:"required"`
-	KMSKeyARN string `mapstructure:"kms_key_arn" validate:"required,arn"`
+	Enabled   bool   `mapstructure:"enabled"`
+	Region    string `mapstructure:"region"     validate:"required_if=Enabled true"`
+	S3Bucket  string `mapstructure:"s3_bucket"  validate:"required_if=Enabled true"`
+	KMSKeyARN string `mapstructure:"kms_key_arn" validate:"required_if=Enabled true,omitempty,arn"`
 }
 
 // ServerConfig holds the server configuration.
@@ -85,6 +87,8 @@ func Load(path string) (*Config, error) {
 	}
 
 	validate := validator.New()
+	customvalidator.RegisterCustomValidators(validate)
+
 	if err := validate.Struct(&cfg); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}

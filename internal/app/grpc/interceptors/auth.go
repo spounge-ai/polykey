@@ -13,6 +13,10 @@ import (
 // UnaryAuthInterceptor is a gRPC unary interceptor that performs authorization.
 func UnaryAuthInterceptor(authorizer domain.Authorizer) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		if info.FullMethod == "/polykey.v2.PolykeyService/HealthCheck" {
+			return handler(ctx, req)
+		}
+
 		var reqContext *pk.RequesterContext
 		var attrs *pk.AccessAttributes
 

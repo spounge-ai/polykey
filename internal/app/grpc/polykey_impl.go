@@ -49,20 +49,11 @@ func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) 
 	}
 
 	if err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "GetKey", req.GetKeyId(), "", false, err)
 		return nil, status.Errorf(codes.NotFound, "key not found: %v", err)
-	}
-
-	// Authorize access
-	authorized, authDecisionID := s.authorizer.Authorize(ctx, req.RequesterContext, req.Attributes, "GetKey")
-	if !authorized {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "GetKey", req.GetKeyId(), authDecisionID, false, nil)
-		return nil, status.Errorf(codes.PermissionDenied, "access denied")
 	}
 
 	dek, err := s.kms.DecryptDEK(ctx, key.EncryptedDEK, "alias/polykey")
 	if err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "GetKey", req.GetKeyId(), authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to decrypt key: %v", err)
 	}
 
@@ -74,35 +65,24 @@ func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) 
 		},
 		Metadata:                 key.Metadata,
 		ResponseTimestamp:        timestamppb.Now(),
-		AuthorizationDecisionId:  authDecisionID,
 	}
 
 	if !req.GetSkipMetadata() {
 		resp.Metadata = key.Metadata
 	}
 
-	s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "GetKey", req.GetKeyId(), authDecisionID, true, nil)
 	return resp, nil
 }
 
 func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
-	// Authorize creation
-	authorized, authDecisionID := s.authorizer.Authorize(ctx, req.RequesterContext, nil, "CreateKey")
-	if !authorized {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "CreateKey", "", authDecisionID, false, nil)
-		return nil, status.Errorf(codes.PermissionDenied, "access denied")
-	}
-
 	// Generate DEK
 	dek := make([]byte, 32)
 	if _, err := rand.Read(dek); err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "CreateKey", "", authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to generate DEK: %v", err)
 	}
 
 	encryptedDEK, err := s.kms.EncryptDEK(ctx, dek, "alias/polykey")
 	if err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "CreateKey", "", authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to encrypt DEK: %v", err)
 	}
 
@@ -137,7 +117,6 @@ func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyReq
 	}
 
 	if err := s.keyRepo.CreateKey(ctx, newKey); err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "CreateKey", keyID, authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to create key: %v", err)
 	}
 
@@ -145,28 +124,19 @@ func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyReq
 		KeyId: keyID,
 		Metadata: metadata,
 		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    dek,
+			EncryptedKeyData:    encryptedDEK,
 			EncryptionAlgorithm: "AES-256-GCM",
 			KeyChecksum:         "sha256",
 		},
 		ResponseTimestamp: timestamppb.Now(),
 	}
 
-	s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "CreateKey", keyID, authDecisionID, true, nil)
 	return resp, nil
 }
 
 func (s *polykeyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
-	// Authorize listing
-	authorized, authDecisionID := s.authorizer.Authorize(ctx, req.RequesterContext, req.Attributes, "ListKeys")
-	if !authorized {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "ListKeys", "", authDecisionID, false, nil)
-		return nil, status.Errorf(codes.PermissionDenied, "access denied")
-	}
-
 	keys, err := s.keyRepo.ListKeys(ctx)
 	if err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "ListKeys", "", authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to list keys: %v", err)
 	}
 
@@ -182,42 +152,30 @@ func (s *polykeyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysReque
 		ResponseTimestamp: timestamppb.Now(),
 	}
 
-	s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "ListKeys", "", authDecisionID, true, nil)
 	return resp, nil
 }
 
 func (s *polykeyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest) (*pk.RotateKeyResponse, error) {
-	// Authorize rotation
-	authorized, authDecisionID := s.authorizer.Authorize(ctx, req.RequesterContext, nil, "RotateKey")
-	if !authorized {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "RotateKey", req.GetKeyId(), authDecisionID, false, nil)
-		return nil, status.Errorf(codes.PermissionDenied, "access denied")
-	}
-
 	// Get current key
 	currentKey, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
 	if err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "RotateKey", req.GetKeyId(), authDecisionID, false, err)
 		return nil, status.Errorf(codes.NotFound, "key not found: %v", err)
 	}
 
 	// Generate new DEK
 	newDEK := make([]byte, 32)
 	if _, err := rand.Read(newDEK); err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "RotateKey", req.GetKeyId(), authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to generate new DEK: %v", err)
 	}
 
 	encryptedNewDEK, err := s.kms.EncryptDEK(ctx, newDEK, "alias/polykey")
 	if err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "RotateKey", req.GetKeyId(), authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to encrypt new DEK: %v", err)
 	}
 
 	// Rotate key in repository
 	rotatedKey, err := s.keyRepo.RotateKey(ctx, req.GetKeyId(), encryptedNewDEK)
 	if err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "RotateKey", req.GetKeyId(), authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to rotate key: %v", err)
 	}
 
@@ -235,39 +193,21 @@ func (s *polykeyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyReq
 		OldVersionExpiresAt: timestamppb.New(time.Now().Add(time.Duration(req.GetGracePeriodSeconds()) * time.Second)),
 	}
 
-	s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "RotateKey", req.GetKeyId(), authDecisionID, true, nil)
 	return resp, nil
 }
 
 func (s *polykeyServiceImpl) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) (*emptypb.Empty, error) {
-	// Authorize revocation
-	authorized, authDecisionID := s.authorizer.Authorize(ctx, req.RequesterContext, nil, "RevokeKey")
-	if !authorized {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "RevokeKey", req.GetKeyId(), authDecisionID, false, nil)
-		return nil, status.Errorf(codes.PermissionDenied, "access denied")
-	}
-
 	if err := s.keyRepo.RevokeKey(ctx, req.GetKeyId()); err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "RevokeKey", req.GetKeyId(), authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to revoke key: %v", err)
 	}
 
-	s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "RevokeKey", req.GetKeyId(), authDecisionID, true, nil)
 	return &emptypb.Empty{}, nil
 }
 
 func (s *polykeyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) (*emptypb.Empty, error) {
-	// Authorize update
-	authorized, authDecisionID := s.authorizer.Authorize(ctx, req.RequesterContext, nil, "UpdateKeyMetadata")
-	if !authorized {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "UpdateKeyMetadata", req.GetKeyId(), authDecisionID, false, nil)
-		return nil, status.Errorf(codes.PermissionDenied, "access denied")
-	}
-
 	// Get current metadata
 	key, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
 	if err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "UpdateKeyMetadata", req.GetKeyId(), authDecisionID, false, err)
 		return nil, status.Errorf(codes.NotFound, "key not found: %v", err)
 	}
 
@@ -295,22 +235,13 @@ func (s *polykeyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.Upda
 	metadata.UpdatedAt = timestamppb.Now()
 
 	if err := s.keyRepo.UpdateKeyMetadata(ctx, req.GetKeyId(), metadata); err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "UpdateKeyMetadata", req.GetKeyId(), authDecisionID, false, err)
 		return nil, status.Errorf(codes.Internal, "failed to update key metadata: %v", err)
 	}
 
-	s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "UpdateKeyMetadata", req.GetKeyId(), authDecisionID, true, nil)
 	return &emptypb.Empty{}, nil
 }
 
 func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error) {
-	// Authorize access
-	authorized, authDecisionID := s.authorizer.Authorize(ctx, req.RequesterContext, req.Attributes, "GetKeyMetadata")
-	if !authorized {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "GetKeyMetadata", req.GetKeyId(), authDecisionID, false, nil)
-		return nil, status.Errorf(codes.PermissionDenied, "access denied")
-	}
-
 	var key *domain.Key
 	var err error
 
@@ -321,7 +252,6 @@ func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyM
 	}
 
 	if err != nil {
-		s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "GetKeyMetadata", req.GetKeyId(), authDecisionID, false, err)
 		return nil, status.Errorf(codes.NotFound, "key not found: %v", err)
 	}
 
@@ -340,7 +270,6 @@ func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyM
 		log.Println("WARN: IncludePolicyDetails is not yet implemented")
 	}
 
-	s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "GetKeyMetadata", req.GetKeyId(), authDecisionID, true, nil)
 	return resp, nil
 }
 

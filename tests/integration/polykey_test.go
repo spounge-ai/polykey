@@ -10,6 +10,9 @@ import (
 	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
 	"github.com/spounge-ai/polykey/internal/domain"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
+	"github.com/spounge-ai/polykey/tests/mocks/auth"
+	"github.com/spounge-ai/polykey/tests/mocks/kms"
+	"github.com/spounge-ai/polykey/tests/mocks/persistence"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -17,10 +20,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-
-	dev_auth "github.com/spounge-ai/polykey/dev/auth"
-	dev_kms "github.com/spounge-ai/polykey/dev/kms"
-	dev_persistence "github.com/spounge-ai/polykey/dev/persistence"
 )
 
 // setupTestServer starts a new server and returns a client connection and a cleanup function.
@@ -43,6 +42,11 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 			Address: "http://localhost:8200",
 			Token:   "testtoken",
 		},
+		AWS: infra_config.AWSConfig{
+			Region:    "us-east-1",
+			S3Bucket:  "test-bucket",
+			KMSKeyARN: "arn:aws:kms:us-east-1:123456789012:key/mrk-12345678901234567890123456789012",
+		},
 	}
 
 	var kmsAdapter domain.KMSService
@@ -51,9 +55,9 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 
 	// Always use mocks in integration tests
 	log.Println("Running in TEST environment: Using mock implementations.")
-	kmsAdapter = dev_kms.NewMockKMSAdapter()
-	authorizer = dev_auth.NewMockAuthorizer()
-	keyRepo = dev_persistence.NewMockVaultStorage()
+	kmsAdapter = kms.NewMockKMSAdapter()
+	authorizer = auth.NewMockAuthorizer()
+	keyRepo = persistence.NewMockVaultStorage()
 
 	srv, port, err := app_grpc.New(cfg, keyRepo, kmsAdapter, authorizer, nil) // nil for audit logger for now
 	assert.NoError(t, err)
