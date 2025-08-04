@@ -77,7 +77,9 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 	client := pk.NewPolykeyServiceClient(conn)
 
 	cleanup := func() {
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			t.Logf("failed to close connection: %v", err)
+		}
 		cancel()
 	}
 

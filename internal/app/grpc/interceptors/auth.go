@@ -12,27 +12,38 @@ import (
 
 // UnaryAuthInterceptor is a gRPC unary interceptor that performs authorization.
 func UnaryAuthInterceptor(authorizer domain.Authorizer) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		var reqContext *pk.RequesterContext
 		var attrs *pk.AccessAttributes
 
-		// Extract common fields from the request.
 		switch r := req.(type) {
 		case *pk.CreateKeyRequest:
-			reqContext = r.GetRequesterContext()
+			{
+				reqContext = r.GetRequesterContext()
+			}
 		case *pk.GetKeyRequest:
-			reqContext = r.GetRequesterContext()
-			attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
+			{
+				reqContext = r.GetRequesterContext()
+				attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
+			}
 		case *pk.GetKeyMetadataRequest:
-			reqContext = r.GetRequesterContext()
-			attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
+			{
+				reqContext = r.GetRequesterContext()
+				attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
+			}
 		default:
-			// For other request types, you might want to handle them here
+			{
+				return nil, status.Errorf(codes.Unimplemented, "unsupported request type: %T", req)
+			}
 		}
 
-		isAuthorized, _ := authorizer.Authorize(ctx, reqContext, attrs, info.FullMethod)
+		if reqContext == nil {
+			return nil, status.Errorf(codes.Unauthenticated, "missing requester context")
+		}
+
+		isAuthorized, reason := authorizer.Authorize(ctx, reqContext, attrs, info.FullMethod)
 		if !isAuthorized {
-			return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+			return nil, status.Errorf(codes.PermissionDenied, "permission denied: %s", reason)
 		}
 
 		return handler(ctx, req)

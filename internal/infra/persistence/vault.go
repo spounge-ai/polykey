@@ -85,7 +85,10 @@ func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key) error {
 	})
 	if err != nil {
 		// Attempt to roll back the versioned key if this fails
-		s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &s.bucketName, Key: &versionPath})
+		if _, delErr := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &s.bucketName, Key: &versionPath}); delErr != nil {
+			// Log the deletion error, but return the original error
+			fmt.Printf("failed to roll back S3 object %s: %v", versionPath, delErr)
+		}
 		return fmt.Errorf("failed to put latest key object to S3: %w", err)
 	}
 
@@ -100,7 +103,11 @@ func (s *S3Storage) getKeyFromPath(ctx context.Context, path string) (*domain.Ke
 	if err != nil {
 		return nil, fmt.Errorf("failed to get key object from S3: %w", err)
 	}
-	defer output.Body.Close()
+	defer func() {
+		if err := output.Body.Close(); err != nil {
+			fmt.Printf("failed to close S3 object body: %v", err)
+		}
+	}()
 
 	var keyObj s3KeyObject
 	if err := json.NewDecoder(output.Body).Decode(&keyObj); err != nil {

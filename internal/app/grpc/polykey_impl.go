@@ -1,9 +1,10 @@
 package grpc
 
 import (
-	"maps"
 	"context"
 	"crypto/rand"
+	"log"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -331,12 +332,12 @@ func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyM
 
 	// TODO: Add access history if requested
 	if req.GetIncludeAccessHistory() {
-		// Implement audit history retrieval
+		log.Println("WARN: IncludeAccessHistory is not yet implemented")
 	}
 
 	// TODO: Add policy details if requested
 	if req.GetIncludePolicyDetails() {
-		// Implement policy details retrieval
+		log.Println("WARN: IncludePolicyDetails is not yet implemented")
 	}
 
 	s.audit.AuditLog(ctx, req.RequesterContext.GetClientIdentity(), "GetKeyMetadata", req.GetKeyId(), authDecisionID, true, nil)
