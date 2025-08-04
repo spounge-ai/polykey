@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-playground/validator/v10"
+	validator "github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
 
@@ -21,9 +21,9 @@ type Config struct {
 
 // AWSConfig holds the AWS-specific configuration.
 type AWSConfig struct {
-	Region       string `mapstructure:"region"        validate:"required"`
-	S3Bucket     string `mapstructure:"s3_bucket"     validate:"required"`
-	KMSKeyARN    string `mapstructure:"kms_key_arn"     validate:"required,arn"`
+	Region    string `mapstructure:"region"     validate:"required"`
+	S3Bucket  string `mapstructure:"s3_bucket"  validate:"required"`
+	KMSKeyARN string `mapstructure:"kms_key_arn" validate:"required,arn"`
 }
 
 // ServerConfig holds the server configuration.
@@ -42,12 +42,12 @@ type TLS struct {
 
 // DatabaseConfig holds the database configuration.
 type DatabaseConfig struct {
-	Host     string `mapstructure:"host" validate:"required"`
-	Port     int    `mapstructure:"port" validate:"required,gte=1024,lte=65535"`
-	User     string `mapstructure:"user" validate:"required"`
+	Host     string `mapstructure:"host"     validate:"required"`
+	Port     int    `mapstructure:"port"     validate:"required,gte=1024,lte=65535"`
+	User     string `mapstructure:"user"     validate:"required"`
 	Password string `mapstructure:"password" validate:"required"`
-	DBName   string `mapstructure:"dbname" validate:"required"`
-	SSLMode  string `mapstructure:"sslmode" validate:"required"`
+	DBName   string `mapstructure:"dbname"   validate:"required"`
+	SSLMode  string `mapstructure:"sslmode"  validate:"required"`
 }
 
 // VaultConfig holds the Vault configuration.
@@ -86,17 +86,17 @@ func Load(path string) (*Config, error) {
 
 	validate := validator.New()
 	if err := validate.Struct(&cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
-	cfg.ServiceVersion = Getenv("POLYKEY_SERVICE_VERSION", "unknown")
-	cfg.BuildCommit = Getenv("POLYKEY_BUILD_COMMIT", "unknown")
+	cfg.ServiceVersion = getenv("POLYKEY_SERVICE_VERSION", "unknown")
+	cfg.BuildCommit = getenv("POLYKEY_BUILD_COMMIT", "unknown")
 
 	return &cfg, nil
 }
 
-// Getenv returns an environment variable or a default value.
-func Getenv(key, defaultValue string) string {
+// getenv returns an environment variable or a default value.
+func getenv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
 	}
