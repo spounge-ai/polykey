@@ -7,25 +7,50 @@ SERVER_BINARY := $(BIN_DIR)/polykey
 CLIENT_BINARY := $(BIN_DIR)/dev_client
 PORT := 50053
 
+# Configs
+CONFIG_DIR := configs
+CONFIG_TEST := $(CONFIG_DIR)/config.test.yaml
+CONFIG_PROD := $(CONFIG_DIR)/config.production.yaml
+CONFIG_MINIMAL := $(CONFIG_DIR)/config.minimal.yaml
+
 # Colors
 CYAN := 
 YELLOW := 
 GREEN := 
 RESET := 
 
-.PHONY: build server client test clean kill help
+.PHONY: build build-test server server-test server-prod server-minimal client test clean kill help
 
-build: ## Build binaries
+build: ## Build production binaries
 	@mkdir -p $(BIN_DIR)
 	@go build -ldflags="-s -w" -o $(SERVER_BINARY) ./cmd/polykey
 	@go build -ldflags="-s -w" -o $(CLIENT_BINARY) ./cmd/dev_client
 
-server: kill build ## Run server
-	@echo "$(GREEN)Starting server on port $(PORT)...$(RESET)"
-	@POLYKEY_CONFIG_PATH=configs/config.test.yaml POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &\
-		echo $$! > .server_pid
+build-test: ## Build binaries with mock dependencies for testing
+	@mkdir -p $(BIN_DIR)
+	@go build -ldflags="-s -w" -tags=local_mocks -o $(SERVER_BINARY) ./cmd/polykey
+	@go build -ldflags="-s -w" -o $(CLIENT_BINARY) ./cmd/dev_client
+
+server: server-test ## Run server (defaults to test config)
+
+server-test: kill build-test ## Run server with test config
+	@echo "$(GREEN)Starting server with test config on port $(PORT)...$(RESET)"
+	@POLYKEY_CONFIG_PATH=$(CONFIG_TEST) POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
+		echo $! > .server_pid
+
+server-prod: kill build ## Run server with production config
+	@echo "$(GREEN)Starting server with production config on port $(PORT)...$(RESET)"
+	@POLYKEY_CONFIG_PATH=$(CONFIG_PROD) POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
+		echo $! > .server_pid
+
+server-minimal: kill build ## Run server with minimal config
+	@echo "$(GREEN)Starting server with minimal config on port $(PORT)...$(RESET)"
+	@POLYKEY_CONFIG_PATH=$(CONFIG_MINIMAL) POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
+		echo $! > .server_pid
+
 
 client: build ## Run client
+
 	@if ! nc -z localhost $(PORT) 2>/dev/null; then \
 		echo "$(YELLOW)Server not running, starting...$(RESET)"; \
 		$(MAKE) server; sleep 2; \

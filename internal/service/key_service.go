@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/internal/infra/config"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -29,11 +30,13 @@ type keyServiceImpl struct {
 	keyRepo domain.KeyRepository
 	kms     domain.KMSService
 	logger  *slog.Logger
+	cfg     *config.Config
 }
 
 // NewKeyService creates a new instance of KeyService.
-func NewKeyService(keyRepo domain.KeyRepository, kms domain.KMSService, logger *slog.Logger) KeyService {
+func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.KMSService, logger *slog.Logger) KeyService {
 	return &keyServiceImpl{
+		cfg:     cfg,
 		keyRepo: keyRepo,
 		kms:     kms,
 		logger:  logger,
@@ -54,7 +57,7 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 		return nil, err
 	}
 
-	dek, err := s.kms.DecryptDEK(ctx, key.EncryptedDEK, "alias/polykey")
+	dek, err := s.kms.DecryptDEK(ctx, key.EncryptedDEK, s.cfg.AWS.KMSKeyARN)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +86,7 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, err
 	}
 
-	encryptedDEK, err := s.kms.EncryptDEK(ctx, dek, "alias/polykey")
+	encryptedDEK, err := s.kms.EncryptDEK(ctx, dek, s.cfg.AWS.KMSKeyARN)
 	if err != nil {
 		return nil, err
 	}

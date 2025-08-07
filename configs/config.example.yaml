@@ -1,0 +1,21 @@
+server:
+  port: "<your-server-port>"
+  mode: "<your-environment>"
+
+aws:
+  enabled: true
+  region: "<your-aws-region>"  
+  s3_bucket: "<your-unique-bucket-name>"
+  kms_key_arn: "<your-kms-key-arn>"
+
+vault:
+  address: "<your-vault-address>"
+  token: "<your-vault-token>"
+
+database:
+  host: "<your-database-host>"
+  port: "<your-database-port>"
+  user: "<your-database-user>"
+  password: "<your-database-password>"
+  dbname: "polykey"
+  sslmode: "require" 

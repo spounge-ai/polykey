@@ -41,27 +41,29 @@ func main() {
 	}
 	log.Printf("HealthCheck Response: Status=%s, Version=%s", r.GetStatus().String(), r.GetServiceVersion())
 
-	// Call GetKey (example)
-	getKeyReq := &pb.GetKeyRequest{
-		KeyId: "test_key_123",
-		RequesterContext: &pb.RequesterContext{ClientIdentity: "dev_client"},
-	}
-	getKeyResp, err := c.GetKey(ctx, getKeyReq)
-	if err != nil {
-		log.Fatalf("could not get key: %v", err)
-	}
-	log.Printf("GetKey Response: KeyId=%s, KeyType=%s", getKeyResp.GetMetadata().GetKeyId(), getKeyResp.GetMetadata().GetKeyType().String())
-
-	// Call CreateKey (example)
+	// Call CreateKey to generate a new key first
 	createKeyReq := &pb.CreateKeyRequest{
-		KeyType: pb.KeyType_KEY_TYPE_AES_256,
-		RequesterContext: &pb.RequesterContext{ClientIdentity: "dev_client"},
-		Description: "My new test key",
-		Tags: map[string]string{"environment": "development"},
+		KeyType:          pb.KeyType_KEY_TYPE_AES_256,
+		RequesterContext: &pb.RequesterContext{ClientIdentity: "admin"}, // Run as admin to pass authorization
+		Description:      "A key created by the dev client",
+		Tags:             map[string]string{"source": "dev_client"},
 	}
 	createKeyResp, err := c.CreateKey(ctx, createKeyReq)
 	if err != nil {
 		log.Fatalf("could not create key: %v", err)
 	}
 	log.Printf("CreateKey Response: KeyId=%s, KeyType=%s", createKeyResp.GetMetadata().GetKeyId(), createKeyResp.GetMetadata().GetKeyType().String())
+
+	// Now, call GetKey using the ID from the key we just created
+	newKeyId := createKeyResp.GetMetadata().GetKeyId()
+	log.Printf("Attempting to get the key we just created: %s", newKeyId)
+	getKeyReq := &pb.GetKeyRequest{
+		KeyId:            newKeyId,
+		RequesterContext: &pb.RequesterContext{ClientIdentity: "dev_client"},
+	}
+	getKeyResp, err := c.GetKey(ctx, getKeyReq)
+	if err != nil {
+		log.Fatalf("could not get key: %v", err)
+	}
+	log.Printf("GetKey Response: Successfully retrieved key %s", getKeyResp.GetMetadata().GetKeyId())
 }

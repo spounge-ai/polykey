@@ -37,5 +37,8 @@ go.work.sum
 
 #dev_data/
 
-config.test.yaml
+
 *.pdf
+
+configs/*
+!configs/config.example.yaml

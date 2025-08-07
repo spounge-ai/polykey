@@ -24,7 +24,7 @@ func main() {
 		log.Fatalf("failed to provide dependencies: %v", err)
 	}
 
-	keyService := service.NewKeyService(keyRepo, kmsAdapter, slog.Default())
+	keyService := service.NewKeyService(cfg, keyRepo, kmsAdapter, slog.Default())
 	authorizer := auth.NewAuthorizer()
 	auditLogger := audit.NewAuditLogger(slog.Default(), nil) // nil for audit repo for now
 

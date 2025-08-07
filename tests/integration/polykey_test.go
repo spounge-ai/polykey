@@ -55,7 +55,7 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 	kmsAdapter := kms.NewMockKMSAdapter()
 	authorizer := auth.NewMockAuthorizer()
 	keyRepo := persistence.NewMockS3Storage()
-	keyService := service.NewKeyService(keyRepo, kmsAdapter, slog.Default())
+	keyService := service.NewKeyService(cfg, keyRepo, kmsAdapter, slog.Default())
 
 	srv, port, err := app_grpc.New(cfg, keyService, authorizer, nil, slog.Default()) // nil for audit logger for now
 	assert.NoError(t, err)
