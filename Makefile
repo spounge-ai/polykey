@@ -33,14 +33,14 @@ client: build ## Run client
 	@POLYKEY_GRPC_PORT=$(PORT) $(CLIENT_BINARY)
 
 test: ## Run tests
-	@go test -v ./...
+	@go test -v -json ./... | tparse
 
 test-race: ## Run tests with race detector
-	@go test -race -v ./...
+	@go test -race -v -json ./... | tparse
 
 test-integration:
 	@echo "Running integration tests..."
-	@POLYKEY_CONFIG_PATH=./configs/config.local.yaml go test -tags=local_mocks -v ./tests/integration/...
+	@POLYKEY_CONFIG_PATH=./configs/config.local.yaml go test -tags=local_mocks -v -json ./tests/integration/... | tparse
 
 clean: kill ## Clean build artifacts
 	@rm -rf $(BIN_DIR) .server_pid server.log

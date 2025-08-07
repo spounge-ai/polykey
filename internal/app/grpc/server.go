@@ -9,6 +9,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/app/grpc/interceptors"
 	"github.com/spounge-ai/polykey/internal/domain"
 	"github.com/spounge-ai/polykey/internal/infra/config"
+	"github.com/spounge-ai/polykey/internal/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
@@ -28,7 +29,7 @@ type Server struct {
 }
 
 // New creates a new gRPC server.
-func New(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.KMSService, authorizer domain.Authorizer, audit domain.AuditLogger, logger *slog.Logger) (*Server, int, error) {
+func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Authorizer, audit domain.AuditLogger, logger *slog.Logger) (*Server, int, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.Port))
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to listen: %w", err)
@@ -52,7 +53,7 @@ func New(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.KMSService
 
 	grpcServer := grpc.NewServer(opts...)
 
-	polykeyService, err := NewPolykeyService(cfg, keyRepo, kms, authorizer, audit, logger)
+	polykeyService, err := NewPolykeyService(cfg, keyService, authorizer, audit, logger)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create polykey service: %w", err)
 	}

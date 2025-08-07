@@ -55,6 +55,40 @@ func (s *S3Storage) GetKeyByVersion(ctx context.Context, id string, version int3
 }
 
 func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key) error {
+	return s.putKey(ctx, key)
+}
+
+func (s *S3Storage) getKeyFromPath(ctx context.Context, path string) (*domain.Key, error) {
+	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: &s.bucketName,
+		Key:    &path,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key object from S3: %w", err)
+	}
+	defer func() {
+		if err := output.Body.Close(); err != nil {
+			s.logger.Error("failed to close S3 object body", "error", err)
+		}
+	}()
+
+	var keyObj s3KeyObject
+	if err := json.NewDecoder(output.Body).Decode(&keyObj); err != nil {
+		return nil, fmt.Errorf("failed to decode key object from S3: %w", err)
+	}
+
+	return &domain.Key{
+		ID:           keyObj.ID,
+		EncryptedDEK: keyObj.EncryptedDEK,
+		Metadata:     keyObj.Metadata,
+		Version:      keyObj.Version,
+		Status:       domain.KeyStatus(pk.KeyStatus_name[int32(keyObj.Status)]),
+		CreatedAt:    time.Unix(keyObj.CreatedAt, 0),
+		UpdatedAt:    time.Unix(keyObj.UpdatedAt, 0),
+	}, nil
+}
+
+func (s *S3Storage) putKey(ctx context.Context, key *domain.Key) error {
 	keyObj := s3KeyObject{
 		ID:           key.ID,
 		EncryptedDEK: key.EncryptedDEK,
@@ -97,36 +131,6 @@ func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key) error {
 	}
 
 	return nil
-}
-
-func (s *S3Storage) getKeyFromPath(ctx context.Context, path string) (*domain.Key, error) {
-	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: &s.bucketName,
-		Key:    &path,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get key object from S3: %w", err)
-	}
-	defer func() {
-		if err := output.Body.Close(); err != nil {
-			s.logger.Error("failed to close S3 object body", "error", err)
-		}
-	}()
-
-	var keyObj s3KeyObject
-	if err := json.NewDecoder(output.Body).Decode(&keyObj); err != nil {
-		return nil, fmt.Errorf("failed to decode key object from S3: %w", err)
-	}
-
-	return &domain.Key{
-		ID:           keyObj.ID,
-		EncryptedDEK: keyObj.EncryptedDEK,
-		Metadata:     keyObj.Metadata,
-		Version:      keyObj.Version,
-		Status:       domain.KeyStatus(pk.KeyStatus_name[int32(keyObj.Status)]),
-		CreatedAt:    time.Unix(keyObj.CreatedAt, 0),
-		UpdatedAt:    time.Unix(keyObj.UpdatedAt, 0),
-	}, nil
 }
 
 func (s *S3Storage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
@@ -173,50 +177,7 @@ func (s *S3Storage) UpdateKeyMetadata(ctx context.Context, id string, metadata *
 	latestKey.Metadata = metadata
 	latestKey.UpdatedAt = time.Now()
 
-	// Create a new key object with updated data
-	keyObj := s3KeyObject{
-		ID:           latestKey.ID,
-		EncryptedDEK: latestKey.EncryptedDEK,
-		Metadata:     latestKey.Metadata,
-		Version:      latestKey.Version, // Version doesn't change on metadata update
-		Status:       pk.KeyStatus(pk.KeyStatus_value[string(latestKey.Status)]),
-		CreatedAt:    latestKey.CreatedAt.Unix(),
-		UpdatedAt:    latestKey.UpdatedAt.Unix(),
-	}
-
-	data, err := json.Marshal(keyObj)
-	if err != nil {
-		return fmt.Errorf("failed to marshal updated key object: %w", err)
-	}
-
-	// Overwrite the latest version with the updated metadata
-	latestPath := fmt.Sprintf("keys/%s/latest.json", id)
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: &s.bucketName,
-		Key:    &latestPath,
-		Body:   bytes.NewReader(data),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to put updated latest key object to S3: %w", err)
-	}
-
-	// Also update the specific version file
-	versionPath := fmt.Sprintf("keys/%s/v%d.json", id, latestKey.Version)
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: &s.bucketName,
-		Key:    &versionPath,
-		Body:   bytes.NewReader(data),
-	})
-	if err != nil {
-		// If this fails, the 'latest' is updated but the versioned file is not.
-		// This is an inconsistent state. We should try to roll back.
-		s.logger.Error("failed to update versioned key object after updating latest", "path", versionPath, "error", err)
-		// Attempting to restore the previous state of 'latest.json' would be complex.
-		// For now, we log this inconsistency. A more robust solution might be needed.
-		return fmt.Errorf("failed to put updated versioned key object to S3: %w", err)
-	}
-
-	return nil
+	return s.putKey(ctx, latestKey)
 }
 
 func (s *S3Storage) RotateKey(ctx context.Context, id string, newEncryptedDEK []byte) (*domain.Key, error) {
@@ -241,7 +202,7 @@ func (s *S3Storage) RotateKey(ctx context.Context, id string, newEncryptedDEK []
 	}
 
 	// Create and store the new key version
-	if err := s.CreateKey(ctx, rotatedKey); err != nil {
+	if err := s.putKey(ctx, rotatedKey); err != nil {
 		return nil, fmt.Errorf("failed to create new key version during rotation: %w", err)
 	}
 
@@ -259,46 +220,7 @@ func (s *S3Storage) RevokeKey(ctx context.Context, id string) error {
 	latestKey.Status = domain.KeyStatusRevoked // Assuming this status exists
 	latestKey.UpdatedAt = time.Now()
 
-	// Create a new key object with updated data
-	keyObj := s3KeyObject{
-		ID:           latestKey.ID,
-		EncryptedDEK: latestKey.EncryptedDEK,
-		Metadata:     latestKey.Metadata,
-		Version:      latestKey.Version,
-		Status:       pk.KeyStatus(pk.KeyStatus_value[string(latestKey.Status)]),
-		CreatedAt:    latestKey.CreatedAt.Unix(),
-		UpdatedAt:    latestKey.UpdatedAt.Unix(),
-	}
-
-	data, err := json.Marshal(keyObj)
-	if err != nil {
-		return fmt.Errorf("failed to marshal revoked key object: %w", err)
-	}
-
-	// Overwrite the latest version with the updated status
-	latestPath := fmt.Sprintf("keys/%s/latest.json", id)
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: &s.bucketName,
-		Key:    &latestPath,
-		Body:   bytes.NewReader(data),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to put revoked latest key object to S3: %w", err)
-	}
-
-	// Also update the specific version file
-	versionPath := fmt.Sprintf("keys/%s/v%d.json", id, latestKey.Version)
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: &s.bucketName,
-		Key:    &versionPath,
-		Body:   bytes.NewReader(data),
-	})
-	if err != nil {
-		s.logger.Error("failed to update versioned key object after revoking latest", "path", versionPath, "error", err)
-		return fmt.Errorf("failed to put revoked versioned key object to S3: %w", err)
-	}
-
-	return nil
+	return s.putKey(ctx, latestKey)
 }
 
 func (s *S3Storage) GetKeyVersions(ctx context.Context, id string) ([]*domain.Key, error) {
