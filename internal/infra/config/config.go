@@ -26,6 +26,7 @@ type AWSConfig struct {
 	Region    string `mapstructure:"region"     validate:"required_if=Enabled true"`
 	S3Bucket  string `mapstructure:"s3_bucket"  validate:"required_if=Enabled true"`
 	KMSKeyARN string `mapstructure:"kms_key_arn" validate:"required_if=Enabled true,omitempty,arn"`
+	CacheTTL  string `mapstructure:"cache_ttl"`
 }
 
 // ServerConfig holds the server configuration.
@@ -74,6 +75,7 @@ func Load(path string) (*Config, error) {
 	vip.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	vip.SetDefault("server.port", 50053)
+	vip.SetDefault("aws.cache_ttl", "5m")
 
 	if err := vip.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

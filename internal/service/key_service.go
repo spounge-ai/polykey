@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"log/slog"
 	"maps"
 	"time"
@@ -80,8 +81,13 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 }
 
 func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
+	dekSize, algorithm, err := getCryptoDetails(req.GetKeyType())
+	if err != nil {
+		return nil, err
+	}
+
 	// Generate DEK
-	dek := make([]byte, 32)
+	dek := make([]byte, dekSize)
 	if _, err := rand.Read(dek); err != nil {
 		return nil, err
 	}
@@ -130,13 +136,22 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		Metadata: metadata,
 		KeyMaterial: &pk.KeyMaterial{
 			EncryptedKeyData:    encryptedDEK,
-			EncryptionAlgorithm: "AES-256-GCM",
-			KeyChecksum:         "sha256",
+			EncryptionAlgorithm: algorithm,
+			KeyChecksum:         "sha256", // Checksum can also be made dynamic if needed
 		},
 		ResponseTimestamp: timestamppb.Now(),
 	}
 
 	return resp, nil
+}
+
+func getCryptoDetails(keyType pk.KeyType) (int, string, error) {
+	switch keyType {
+	case pk.KeyType_KEY_TYPE_AES_256:
+		return 32, "AES-256-GCM", nil
+	default:
+		return 0, "", fmt.Errorf("unsupported key type: %s", keyType)
+	}
 }
 
 func (s *keyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
