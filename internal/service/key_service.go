@@ -78,7 +78,7 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 		return nil, fmt.Errorf("failed to get key: %w", err)
 	}
 
-	dek, err := s.kms.DecryptDEK(ctx, key.EncryptedDEK, s.cfg.AWS.KMSKeyARN)
+	dek, err := s.kms.DecryptDEK(ctx, key.EncryptedDEK, key.IsPremium())
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to decrypt DEK", "keyId", req.GetKeyId(), "error", err)
 		return nil, fmt.Errorf("failed to decrypt DEK: %w", err)
@@ -86,7 +86,7 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 
 	resp := &pk.GetKeyResponse{
 		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    append([]byte(nil), dek...), 
+			EncryptedKeyData:    append([]byte(nil), dek...),
 			EncryptionAlgorithm: "AES-256-GCM",
 			KeyChecksum:         "sha256",
 		},
@@ -119,7 +119,8 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
 
-	encryptedDEK, err := s.kms.EncryptDEK(ctx, dek, s.cfg.AWS.KMSKeyARN)
+	isPremium := req.Tags["tier"] == "pro"
+	encryptedDEK, err := s.kms.EncryptDEK(ctx, dek, isPremium)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to encrypt DEK", "error", err)
 		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
@@ -220,7 +221,7 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
 
-	encryptedNewDEK, err := s.kms.EncryptDEK(ctx, newDEK, s.cfg.AWS.KMSKeyARN)
+	encryptedNewDEK, err := s.kms.EncryptDEK(ctx, newDEK, currentKey.IsPremium())
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to encrypt new DEK", "error", err)
 		return nil, fmt.Errorf("failed to encrypt new DEK: %w", err)

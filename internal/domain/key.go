@@ -18,6 +18,13 @@ type Key struct {
 	RevokedAt    *time.Time
 }
 
+func (k *Key) IsPremium() bool {
+	if k.Metadata == nil || k.Metadata.Tags == nil {
+		return false
+	}
+	return k.Metadata.Tags["tier"] == "pro"
+}
+
 type KeyStatus string
 
 const (

@@ -17,6 +17,8 @@ type Config struct {
 	NeonDB         NeonDBConfig         `mapstructure:"neondb"   validate:"required"`
 	Vault          VaultConfig          `mapstructure:"vault"    validate:"required"`
 	AWS            AWSConfig            `mapstructure:"aws"      validate:"required"`
+	StorageBackend string               `mapstructure:"storage_backend"`
+	LocalMasterKey string               `mapstructure:"local_master_key"`
 	ServiceVersion string
 	BuildCommit    string
 }
@@ -79,6 +81,7 @@ func Load(path string) (*Config, error) {
 
 	vip.SetDefault("server.port", 50053)
 	vip.SetDefault("aws.cache_ttl", "5m")
+	vip.SetDefault("storage_backend", "neondb")
 
 	if err := vip.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -95,6 +98,9 @@ func Load(path string) (*Config, error) {
 	if err := customvalidator.RegisterCustomValidators(validate); err != nil {
 		return nil, fmt.Errorf("failed to register custom validators: %w", err)
 	}
+
+	cfg.StorageBackend = vip.GetString("STORAGE_BACKEND")
+	cfg.LocalMasterKey = vip.GetString("LOCAL_MASTER_KEY")
 
 	if err := validate.Struct(&cfg); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)

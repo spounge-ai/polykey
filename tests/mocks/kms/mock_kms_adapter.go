@@ -15,11 +15,11 @@ func NewMockKMSAdapter() domain.KMSService {
 }
 
 // EncryptDEK is a mock implementation of the EncryptDEK method.
-func (m *MockKMSAdapter) EncryptDEK(ctx context.Context, plaintextDEK []byte, masterKeyID string) ([]byte, error) {
+func (m *MockKMSAdapter) EncryptDEK(ctx context.Context, plaintextDEK []byte, isPremium bool) ([]byte, error) {
 	return []byte("mock_encrypted_dek"), nil
 }
 
 // DecryptDEK is a mock implementation of the DecryptDEK method.
-func (m *MockKMSAdapter) DecryptDEK(ctx context.Context, encryptedDEK []byte, masterKeyID string) ([]byte, error) {
+func (m *MockKMSAdapter) DecryptDEK(ctx context.Context, encryptedDEK []byte, isPremium bool) ([]byte, error) {
 	return []byte("mock_plaintext_dek"), nil
 }

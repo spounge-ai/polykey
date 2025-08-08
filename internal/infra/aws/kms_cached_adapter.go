@@ -47,12 +47,12 @@ func (a *KMSCachedAdapter) cleanupLoop(interval time.Duration) {
 }
 
 // EncryptDEK encrypts a Data Encryption Key (DEK) using the specified master key in AWS KMS.
-func (a *KMSCachedAdapter) EncryptDEK(ctx context.Context, plaintextDEK []byte, masterKeyID string) ([]byte, error) {
-	return a.next.EncryptDEK(ctx, plaintextDEK, masterKeyID)
+func (a *KMSCachedAdapter) EncryptDEK(ctx context.Context, plaintextDEK []byte, isPremium bool) ([]byte, error) {
+	return a.next.EncryptDEK(ctx, plaintextDEK, isPremium)
 }
 
 // DecryptDEK decrypts a Data Encryption Key (DEK) using AWS KMS, with caching.
-func (a *KMSCachedAdapter) DecryptDEK(ctx context.Context, encryptedDEK []byte, masterKeyID string) ([]byte, error) {
+func (a *KMSCachedAdapter) DecryptDEK(ctx context.Context, encryptedDEK []byte, isPremium bool) ([]byte, error) {
 	cacheKey := base64.StdEncoding.EncodeToString(encryptedDEK)
 
 	a.mu.RLock()
@@ -63,7 +63,7 @@ func (a *KMSCachedAdapter) DecryptDEK(ctx context.Context, encryptedDEK []byte, 
 		return item.value, nil
 	}
 
-	plaintextDEK, err := a.next.DecryptDEK(ctx, encryptedDEK, masterKeyID)
+	plaintextDEK, err := a.next.DecryptDEK(ctx, encryptedDEK, isPremium)
 	if err != nil {
 		return nil, err
 	}
