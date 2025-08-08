@@ -12,12 +12,27 @@ import (
 )
 
 func ProvideDependencies(cfg *infra_config.Config) (domain.KMSService, domain.KeyRepository, error) {
-	if cfg.AWS.Enabled {
-		return nil, nil, fmt.Errorf("AWS is enabled in the configuration, but the mock build tag is provided")
+	kmsService, err := provideKMSService(cfg)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	kmsAdapter := kms.NewMockKMSAdapter()
-	keyRepo := persistence.NewMockS3Storage()
+	keyRepo, err := provideKeyRepository(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	return kmsAdapter, keyRepo, nil
+	return kmsService, keyRepo, nil
+}
+
+func provideKMSService(cfg *infra_config.Config) (domain.KMSService, error) {
+	if cfg.AWS.Enabled {
+		return nil, fmt.Errorf("AWS is enabled in the configuration, but the mock build tag is provided")
+	}
+
+	return kms.NewMockKMSAdapter(), nil
+}
+
+func provideKeyRepository(cfg *infra_config.Config) (domain.KeyRepository, error) {
+	return persistence.NewMockS3Storage(), nil
 }

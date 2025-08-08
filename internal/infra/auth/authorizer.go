@@ -3,14 +3,11 @@ package auth
 import (
 	"context"
 
+	"github.com/spounge-ai/polykey/internal/domain"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
-type Authorizer interface {
-	Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string) (bool, string)
-}
-
-func NewAuthorizer() Authorizer {
+func NewAuthorizer() domain.Authorizer {
 	return &realAuthorizer{}
 }
 

@@ -19,12 +19,12 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	kmsAdapter, keyRepo, err := wiring.ProvideDependencies(cfg)
+	kmsProviders, keyRepo, err := wiring.ProvideDependencies(cfg)
 	if err != nil {
 		log.Fatalf("failed to provide dependencies: %v", err)
 	}
 
-	keyService := service.NewKeyService(cfg, keyRepo, kmsAdapter, slog.Default())
+	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
 	authorizer := auth.NewAuthorizer()
 	auditLogger := audit.NewAuditLogger(slog.Default(), nil) // nil for audit repo for now
 

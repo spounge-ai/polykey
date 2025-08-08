@@ -46,7 +46,7 @@ func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Au
 
 	opts = append(opts, grpc.ChainUnaryInterceptor(
 		interceptors.UnaryLoggingInterceptor(),
-		interceptors.UnaryAuthInterceptor(authorizer),
+		interceptors.NewUnaryAuthInterceptor(authorizer, map[string]bool{"/polykey.v2.PolykeyService/HealthCheck": true}),
 	))
 
 	grpcServer := grpc.NewServer(opts...)

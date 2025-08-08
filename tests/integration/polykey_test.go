@@ -10,9 +10,10 @@ import (
 
 	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
+	"github.com/spounge-ai/polykey/internal/kms"
 	"github.com/spounge-ai/polykey/internal/service"
 	"github.com/spounge-ai/polykey/tests/mocks/auth"
-	"github.com/spounge-ai/polykey/tests/mocks/kms"
+	kms_mocks "github.com/spounge-ai/polykey/tests/mocks/kms"
 	"github.com/spounge-ai/polykey/tests/mocks/persistence"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"github.com/stretchr/testify/assert"
@@ -52,10 +53,11 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 
 	// Always use mocks in integration tests
 	log.Println("Running in TEST environment: Using mock implementations.")
-	kmsAdapter := kms.NewMockKMSAdapter()
+	kmsProviders := make(map[string]kms.KMSProvider)
+	kmsProviders["local"] = kms_mocks.NewMockKMSAdapter()
 	authorizer := auth.NewMockAuthorizer()
 	keyRepo := persistence.NewMockS3Storage()
-	keyService := service.NewKeyService(cfg, keyRepo, kmsAdapter, slog.Default())
+	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
 
 	srv, port, err := app_grpc.New(cfg, keyService, authorizer, nil, slog.Default()) // nil for audit logger for now
 	assert.NoError(t, err)

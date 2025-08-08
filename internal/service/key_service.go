@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spounge-ai/polykey/internal/domain"
 	"github.com/spounge-ai/polykey/internal/infra/config"
+	"github.com/spounge-ai/polykey/internal/kms"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -33,21 +34,35 @@ type KeyService interface {
 }
 
 type keyServiceImpl struct {
-	keyRepo domain.KeyRepository
-	kms     domain.KMSService
-	logger  *slog.Logger
-	cfg     *config.Config
+	keyRepo      domain.KeyRepository
+	kmsProviders map[string]kms.KMSProvider
+	logger       *slog.Logger
+	cfg          *config.Config
 }
 
-func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.KMSService, logger *slog.Logger) KeyService {
+func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProviders map[string]kms.KMSProvider, logger *slog.Logger) KeyService {
 	return &keyServiceImpl{
-		cfg:     cfg,
-		keyRepo: keyRepo,
-		kms:     kms,
-		logger:  logger,
+		cfg:          cfg,
+		keyRepo:      keyRepo,
+		kmsProviders: kmsProviders,
+		logger:       logger,
 	}
 }
- 
+
+func (s *keyServiceImpl) getKMSProvider(key *domain.Key) (kms.KMSProvider, error) {
+	if key.IsPremium() {
+		provider, ok := s.kmsProviders["aws"]
+		if !ok {
+			return nil, fmt.Errorf("aws kms provider not found")
+		}
+		return provider, nil
+	}
+	provider, ok := s.kmsProviders["local"]
+	if !ok {
+		return nil, fmt.Errorf("local kms provider not found")
+	}
+	return provider, nil
+}
 
 func getCryptoDetails(keyType pk.KeyType) (int, string, error) {
 	switch keyType {
@@ -78,7 +93,12 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 		return nil, fmt.Errorf("failed to get key: %w", err)
 	}
 
-	dek, err := s.kms.DecryptDEK(ctx, key.EncryptedDEK, key.IsPremium())
+	kmsProvider, err := s.getKMSProvider(key)
+	if err != nil {
+		return nil, err
+	}
+
+	dek, err := kmsProvider.DecryptDEK(ctx, key)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to decrypt DEK", "keyId", req.GetKeyId(), "error", err)
 		return nil, fmt.Errorf("failed to decrypt DEK: %w", err)
@@ -119,13 +139,6 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
 
-	isPremium := req.Tags["tier"] == "pro"
-	encryptedDEK, err := s.kms.EncryptDEK(ctx, dek, isPremium)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to encrypt DEK", "error", err)
-		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
-	}
-
 	keyID := uuid.New().String()
 	now := time.Now()
 
@@ -150,11 +163,23 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		ID:           keyID,
 		Version:      1,
 		Metadata:     metadata,
-		EncryptedDEK: encryptedDEK,
+		EncryptedDEK: dek,
 		Status:       domain.KeyStatusActive,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
+
+	kmsProvider, err := s.getKMSProvider(newKey)
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedDEK, err := kmsProvider.EncryptDEK(ctx, newKey)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to encrypt DEK", "error", err)
+		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
+	}
+	newKey.EncryptedDEK = encryptedDEK
 
 	if err := s.keyRepo.CreateKey(ctx, newKey); err != nil {
 		s.logger.ErrorContext(ctx, "failed to create key", "keyId", keyID, "error", err)
@@ -221,11 +246,27 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
 
-	encryptedNewDEK, err := s.kms.EncryptDEK(ctx, newDEK, currentKey.IsPremium())
+	newKey := &domain.Key{
+		ID:           currentKey.ID,
+		Version:      currentKey.Version + 1,
+		Metadata:     currentKey.Metadata,
+		EncryptedDEK: newDEK,
+		Status:       domain.KeyStatusActive,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	kmsProvider, err := s.getKMSProvider(newKey)
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedNewDEK, err := kmsProvider.EncryptDEK(ctx, newKey)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to encrypt new DEK", "error", err)
 		return nil, fmt.Errorf("failed to encrypt new DEK: %w", err)
 	}
+	newKey.EncryptedDEK = encryptedNewDEK
 
 	rotatedKey, err := s.keyRepo.RotateKey(ctx, req.GetKeyId(), encryptedNewDEK)
 	if err != nil {
