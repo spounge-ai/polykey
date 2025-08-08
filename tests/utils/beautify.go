@@ -1,10 +1,8 @@
-package main
+package utils
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 )
@@ -23,27 +21,17 @@ const (
 type LogEntry map[string]interface{}
 
 type state struct {
-	currentSuite string
-	failures     []string
-	passes       int
-	tests        map[string]time.Time
+	currentSuite  string
+	failures      []string
+	passes        int
+	tests         map[string]time.Time
+	createdKeyHex string
+	retrievedKeyHex string
 }
 
-func main() {
-	var logLines []string
-	scanner := bufio.NewScanner(os.Stdin)
-	
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line != "" {
-			logLines = append(logLines, line)
-		}
-	}
-	
-	PrintJestReport(logLines)
-}
 
-func PrintJestReport(logLines []string) {
+
+func PrintJestReport(logData string) {
 	s := &state{
 		tests: make(map[string]time.Time),
 	}
@@ -52,6 +40,7 @@ func PrintJestReport(logLines []string) {
 
 	fmt.Println()
 
+	logLines := strings.Split(strings.TrimSpace(logData), "\n")
 	for i, line := range logLines {
 		var entry LogEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
@@ -75,19 +64,16 @@ func PrintJestReport(logLines []string) {
 			processAppLogEntry(entry, s)
 		}
 	}
+
+	if isAppOutput {
+		verifyKeys(s)
+	}
+
 	printSummary(s)
 }
 
 func processAppLogEntry(entry LogEntry, s *state) {
 	msg, _ := entry["msg"].(string)
-	level, _ := entry["level"].(string)
-
-	if level == "DEBUG" {
-		printSuiteHeader(&s.currentSuite, "CONNECTION")
-		details := fmt.Sprintf("state=%v", entry["state"])
-		fmt.Printf("    %s%s %s%s%s\n", ColorGray, msg, "...", details, ColorReset)
-		return
-	}
 
 	switch msg {
 	case "Configuration loaded":
@@ -95,32 +81,47 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		details := fmt.Sprintf("server=%v", entry["server"])
 		printStep("PASS", "Configuration", details)
 		s.passes++
-	case "Network connectivity test passed":
-		printSuiteHeader(&s.currentSuite, "CONNECTION")
-		printStep("PASS", "Network Connectivity", "")
-		s.passes++
 	case "gRPC connection established successfully":
 		printSuiteHeader(&s.currentSuite, "CONNECTION")
 		printStep("PASS", "gRPC Connection", "")
 		s.passes++
-	case "Executing tool":
-		printSuiteHeader(&s.currentSuite, "EXECUTION")
-		details := fmt.Sprintf("tool=%v", entry["tool_name"])
-		printStep("PASS", "Tool Execution", details)
+	case "HealthCheck successful":
+		printSuiteHeader(&s.currentSuite, "HEALTH CHECK")
+		details := fmt.Sprintf("status=%v, version=%v", entry["status"], entry["version"])
+		printStep("PASS", "Health Check", details)
 		s.passes++
-	case "Tool execution completed":
+	case "CreateKey successful":
 		printSuiteHeader(&s.currentSuite, "EXECUTION")
-		details := fmt.Sprintf("'%s'", entry["status_message"])
-		fmt.Printf("    %s└─ Status: %s%s%s\n", ColorGray, ColorCyan, details, ColorReset)
-	case "Received struct output":
+		details := fmt.Sprintf("keyId=%v", entry["keyId"])
+		printStep("PASS", "CreateKey", details)
+		s.passes++
+		s.createdKeyHex, _ = entry["plaintextKey"].(string)
+		fmt.Printf("      %s└─ Plaintext Key: %s%s%s\n", ColorGray, ColorCyan, s.createdKeyHex, ColorReset)
+	case "GetKey successful":
 		printSuiteHeader(&s.currentSuite, "EXECUTION")
-		details := fmt.Sprintf("fields=%v", entry["field_count"])
-		fmt.Printf("    %s└─ Received Output %s(%s)%s\n", ColorGray, ColorGray, details, ColorReset)
-	case "Application failed":
+		details := fmt.Sprintf("keyId=%v", entry["keyId"])
+		printStep("PASS", "GetKey", details)
+		s.passes++
+		s.retrievedKeyHex, _ = entry["plaintextKey"].(string)
+		fmt.Printf("      %s└─ Plaintext Key: %s%s%s\n", ColorGray, ColorCyan, s.retrievedKeyHex, ColorReset)
+
+	case "CreateKey failed", "GetKey failed", "HealthCheck failed", "gRPC connection failed":
 		printSuiteHeader(&s.currentSuite, "ERROR")
 		details := fmt.Sprintf("%v", entry["error"])
-		printStep("FAIL", "Application Run", details)
-		s.failures = append(s.failures, fmt.Sprintf("Application failed: %s", details))
+		printStep("FAIL", msg, details)
+		s.failures = append(s.failures, fmt.Sprintf("%s: %s", msg, details))
+	}
+}
+
+func verifyKeys(s *state) {
+	printSuiteHeader(&s.currentSuite, "VERIFICATION")
+	if s.createdKeyHex != "" && s.createdKeyHex == s.retrievedKeyHex {
+		printStep("PASS", "Key Consistency Check", "Created and retrieved keys match")
+		s.passes++
+	} else {
+		details := fmt.Sprintf("Created: %s, Retrieved: %s", s.createdKeyHex, s.retrievedKeyHex)
+		printStep("FAIL", "Key Consistency Check", details)
+		s.failures = append(s.failures, "Key consistency check failed")
 	}
 }
 
@@ -174,7 +175,7 @@ func printStep(status, message, details string) {
 }
 
 func printSummary(s *state) {
-	fmt.Printf("%s\n%s%s\n", ColorGray, strings.Repeat("=", 40), ColorReset)
+	fmt.Printf("\n%s\n%s%s\n", ColorGray, strings.Repeat("=", 40), ColorReset)
 	if len(s.failures) > 0 {
 		fmt.Printf(" %s FAIL %s %d failed, %d passed\n", ColorBgRed, ColorReset, len(s.failures), s.passes)
 	} else {

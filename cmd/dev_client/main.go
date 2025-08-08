@@ -1,70 +1,90 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
+	"github.com/spounge-ai/polykey/tests/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	pb "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
 func main() {
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
 	port := os.Getenv("POLYKEY_GRPC_PORT")
 	if port == "" {
-		port = "50053" // Default port
+		port = "50053"
 	}
+	logger.Info("Configuration loaded", "server", "localhost:"+port)
 
-	conn, err := grpc.NewClient("localhost:" + port, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("localhost:"+port, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		logger.Error("gRPC connection failed", "error", err)
+		fmt.Println(logBuf.String())
+		os.Exit(1)
 	}
+	logger.Info("gRPC connection established successfully")
 	defer func() {
 		if err := conn.Close(); err != nil {
-			log.Printf("failed to close connection: %v", err)
+			logger.Error("failed to close connection", "error", err)
 		}
 	}()
 
-	c := pb.NewPolykeyServiceClient(conn)
+	c := pk.NewPolykeyServiceClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// Call HealthCheck
 	r, err := c.HealthCheck(ctx, &emptypb.Empty{})
 	if err != nil {
-		log.Fatalf("could not health check: %v", err)
+		logger.Error("HealthCheck failed", "error", err)
+		utils.PrintJestReport(logBuf.String())
+		os.Exit(1)
 	}
-	log.Printf("HealthCheck Response: Status=%s, Version=%s", r.GetStatus().String(), r.GetServiceVersion())
+	logger.Info("HealthCheck successful", "status", r.GetStatus().String(), "version", r.GetServiceVersion())
 
-	// Call CreateKey to generate a new key first
-	createKeyReq := &pb.CreateKeyRequest{
-		KeyType:          pb.KeyType_KEY_TYPE_AES_256,
-		RequesterContext: &pb.RequesterContext{ClientIdentity: "admin"}, // Run as admin to pass authorization
+	createKeyReq := &pk.CreateKeyRequest{
+		KeyType:          pk.KeyType_KEY_TYPE_AES_256,
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
 		Description:      "A key created by the dev client",
 		Tags:             map[string]string{"source": "dev_client"},
 	}
 	createKeyResp, err := c.CreateKey(ctx, createKeyReq)
 	if err != nil {
-		log.Fatalf("could not create key: %v", err)
+		logger.Error("CreateKey failed", "error", err)
+		utils.PrintJestReport(logBuf.String())
+		os.Exit(1)
 	}
-	log.Printf("CreateKey Response: KeyId=%s, KeyType=%s", createKeyResp.GetMetadata().GetKeyId(), createKeyResp.GetMetadata().GetKeyType().String())
-	log.Printf("    [PLAINTEXT KEY ON CREATE]: %x", createKeyResp.GetKeyMaterial().GetEncryptedKeyData())
+	logger.Info("CreateKey successful",
+		"keyId", createKeyResp.GetMetadata().GetKeyId(),
+		"keyType", createKeyResp.GetMetadata().GetKeyType().String(),
+		"plaintextKey", fmt.Sprintf("%x", createKeyResp.GetKeyMaterial().GetEncryptedKeyData()),
+	)
 
- 	newKeyId := createKeyResp.GetMetadata().GetKeyId()
-	log.Printf("Attempting to get the key we just created: %s", newKeyId)
-	getKeyReq := &pb.GetKeyRequest{
+	newKeyId := createKeyResp.GetMetadata().GetKeyId()
+	getKeyReq := &pk.GetKeyRequest{
 		KeyId:            newKeyId,
-		RequesterContext: &pb.RequesterContext{ClientIdentity: "admin"},
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
 	}
 	getKeyResp, err := c.GetKey(ctx, getKeyReq)
 	if err != nil {
-		log.Fatalf("could not get key: %v", err)
+		logger.Error("GetKey failed", "error", err)
+		utils.PrintJestReport(logBuf.String())
+		os.Exit(1)
 	}
-	log.Printf("GetKey Response: Successfully retrieved key %s", getKeyResp.GetMetadata().GetKeyId())
-	log.Printf("    [PLAINTEXT KEY ON GET]:    %x", getKeyResp.GetKeyMaterial().GetEncryptedKeyData())
+	logger.Info("GetKey successful",
+		"keyId", getKeyResp.GetMetadata().GetKeyId(),
+		"plaintextKey", fmt.Sprintf("%x", getKeyResp.GetKeyMaterial().GetEncryptedKeyData()),
+	)
+
+	utils.PrintJestReport(logBuf.String())
 }

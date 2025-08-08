@@ -36,17 +36,14 @@ server: server-test ## Run server (defaults to test config)
 server-test: kill build-test ## Run server with test config
 	@echo "$(GREEN)Starting server with test config on port $(PORT)...$(RESET)"
 	@POLYKEY_CONFIG_PATH=$(CONFIG_TEST) POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
-		echo $! > .server_pid
 
 server-prod: kill build ## Run server with production config
 	@echo "$(GREEN)Starting server with production config on port $(PORT)...$(RESET)"
 	@POLYKEY_CONFIG_PATH=$(CONFIG_PROD) POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
-		echo $! > .server_pid
 
 server-minimal: kill build ## Run server with minimal config
 	@echo "$(GREEN)Starting server with minimal config on port $(PORT)...$(RESET)"
 	@POLYKEY_CONFIG_PATH=$(CONFIG_MINIMAL) POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
-		echo $! > .server_pid
 
 
 client: build ## Run client
@@ -58,14 +55,14 @@ client: build ## Run client
 	@POLYKEY_GRPC_PORT=$(PORT) $(CLIENT_BINARY)
 
 test: ## Run tests
-	@go test -v -json ./... | tparse
+	@go test -v -json ./... | tparse -all
 
 test-race: ## Run tests with race detector
-	@go test -race -v -json ./... | tparse
+	@go test -race -v -json ./... | tparse -all
 
 test-integration:
 	@echo "Running integration tests..."
-	@POLYKEY_CONFIG_PATH=./configs/config.local.yaml go test -tags=local_mocks -v -json ./tests/integration/... | tparse
+	@POLYKEY_CONFIG_PATH=./configs/config.local.yaml go test -tags=local_mocks -v -json ./tests/integration/... | tparse -all
 
 clean: kill ## Clean build artifacts
 	@rm -rf $(BIN_DIR) .server_pid server.log

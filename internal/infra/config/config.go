@@ -96,7 +96,6 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// getenv returns an environment variable or a default value.
 func getenv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
