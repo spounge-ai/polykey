@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/internal/kms"
 )
 
 // MockKMSAdapter is a placeholder for a mock KMS service.
 type MockKMSAdapter struct{}
 
 // NewMockKMSAdapter creates a new mock KMS adapter.
-func NewMockKMSAdapter() domain.KMSService {
+func NewMockKMSAdapter() kms.KMSProvider {
 	return &MockKMSAdapter{}
 }
 
