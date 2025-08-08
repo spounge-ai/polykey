@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/domain"
@@ -70,21 +71,90 @@ func (s *NeonDBStorage) CreateKey(ctx context.Context, key *domain.Key) error {
 }
 
 func (s *NeonDBStorage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
-	return nil, nil // not implemented
+	query := `SELECT id, version, metadata, encrypted_dek, status, created_at, updated_at, revoked_at FROM keys`
+	rows, err := s.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []*domain.Key
+	for rows.Next() {
+		var key domain.Key
+		var metadataRaw []byte
+		err := rows.Scan(&key.ID, &key.Version, &metadataRaw, &key.EncryptedDEK, &key.Status, &key.CreatedAt, &key.UpdatedAt, &key.RevokedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(metadataRaw, &key.Metadata); err != nil {
+			return nil, err
+		}
+
+		keys = append(keys, &key)
+	}
+
+	return keys, nil
 }
 
 func (s *NeonDBStorage) UpdateKeyMetadata(ctx context.Context, id string, metadata *pk.KeyMetadata) error {
-	return nil // not implemented
+	metadataRaw, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+
+	query := `UPDATE keys SET metadata = $1, updated_at = $2 WHERE id = $3`
+	_, err = s.db.Exec(ctx, query, metadataRaw, time.Now(), id)
+	return err
 }
 
 func (s *NeonDBStorage) RotateKey(ctx context.Context, id string, newEncryptedDEK []byte) (*domain.Key, error) {
-	return nil, nil // not implemented
+	// This is a simplified implementation. A real implementation would use a transaction.
+	key, err := s.GetKey(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	key.Version++
+	key.EncryptedDEK = newEncryptedDEK
+	key.UpdatedAt = time.Now()
+
+	if err := s.CreateKey(ctx, key); err != nil {
+		return nil, err
+	}
+
+	return key, nil
 }
 
 func (s *NeonDBStorage) RevokeKey(ctx context.Context, id string) error {
-	return nil // not implemented
+	query := `UPDATE keys SET status = $1, revoked_at = $2 WHERE id = $3`
+	_, err := s.db.Exec(ctx, query, domain.KeyStatusRevoked, time.Now(), id)
+	return err
 }
 
 func (s *NeonDBStorage) GetKeyVersions(ctx context.Context, id string) ([]*domain.Key, error) {
-	return nil, nil // not implemented
+	query := `SELECT id, version, metadata, encrypted_dek, status, created_at, updated_at, revoked_at FROM keys WHERE id = $1 ORDER BY version DESC`
+	rows, err := s.db.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []*domain.Key
+	for rows.Next() {
+		var key domain.Key
+		var metadataRaw []byte
+		err := rows.Scan(&key.ID, &key.Version, &metadataRaw, &key.EncryptedDEK, &key.Status, &key.CreatedAt, &key.UpdatedAt, &key.RevokedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(metadataRaw, &key.Metadata); err != nil {
+			return nil, err
+		}
+
+		keys = append(keys, &key)
+	}
+
+	return keys, nil
 }
