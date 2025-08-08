@@ -53,16 +53,18 @@ func main() {
 		log.Fatalf("could not create key: %v", err)
 	}
 	log.Printf("CreateKey Response: KeyId=%s, KeyType=%s", createKeyResp.GetMetadata().GetKeyId(), createKeyResp.GetMetadata().GetKeyType().String())
+	log.Printf("    [PLAINTEXT KEY ON CREATE]: %x", createKeyResp.GetKeyMaterial().GetEncryptedKeyData())
 
  	newKeyId := createKeyResp.GetMetadata().GetKeyId()
 	log.Printf("Attempting to get the key we just created: %s", newKeyId)
 	getKeyReq := &pb.GetKeyRequest{
 		KeyId:            newKeyId,
-		RequesterContext: &pb.RequesterContext{ClientIdentity: "dev_client"},
+		RequesterContext: &pb.RequesterContext{ClientIdentity: "admin"},
 	}
 	getKeyResp, err := c.GetKey(ctx, getKeyReq)
 	if err != nil {
 		log.Fatalf("could not get key: %v", err)
 	}
 	log.Printf("GetKey Response: Successfully retrieved key %s", getKeyResp.GetMetadata().GetKeyId())
+	log.Printf("    [PLAINTEXT KEY ON GET]:    %x", getKeyResp.GetKeyMaterial().GetEncryptedKeyData())
 }

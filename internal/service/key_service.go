@@ -132,7 +132,7 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		KeyId: keyID,
 		Metadata: metadata,
 		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    encryptedDEK,
+			EncryptedKeyData:    dek,
 			EncryptionAlgorithm: algorithm,
 			KeyChecksum:         "sha256", // Checksum can also be made dynamic if needed
 		},
@@ -185,7 +185,7 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		return nil, err
 	}
 
-	encryptedNewDEK, err := s.kms.EncryptDEK(ctx, newDEK, "alias/polykey")
+	encryptedNewDEK, err := s.kms.EncryptDEK(ctx, newDEK, s.cfg.AWS.KMSKeyARN)
 	if err != nil {
 		return nil, err
 	}
