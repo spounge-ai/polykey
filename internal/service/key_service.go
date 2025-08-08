@@ -50,6 +50,9 @@ func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProvider
 }
 
 func (s *keyServiceImpl) getKMSProvider(key *domain.Key) (kms.KMSProvider, error) {
+	if key == nil {
+		return nil, fmt.Errorf("key is nil")
+	}
 	if key.IsPremium() {
 		provider, ok := s.kmsProviders["aws"]
 		if !ok {
@@ -91,6 +94,11 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get key", "keyId", req.GetKeyId(), "error", err)
 		return nil, fmt.Errorf("failed to get key: %w", err)
+	}
+
+	if key.Metadata == nil {
+		// This should not happen, but as a safeguard...
+		return nil, fmt.Errorf("key metadata is missing")
 	}
 
 	kmsProvider, err := s.getKMSProvider(key)

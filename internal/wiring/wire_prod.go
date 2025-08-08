@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/domain"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/kms"
@@ -71,5 +72,9 @@ func provideS3Storage(cfg *infra_config.Config) (domain.KeyRepository, error) {
 }
 
 func provideNeonDBStorage(cfg *infra_config.Config) (domain.KeyRepository, error) {
-	return persistence.NewNeonDBStorage()
+	dbpool, err := pgxpool.New(context.Background(), cfg.NeonDB.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)
+	}
+	return persistence.NewNeonDBStorage(dbpool)
 }

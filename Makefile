@@ -1,39 +1,57 @@
+# Command line interface for the application.
 .DEFAULT_GOAL := help
 MAKEFLAGS += --no-print-directory
 
-# ============================================================================
+# ============================================================================ 
 # Variables
-# ============================================================================
+# ============================================================================ 
 BIN_DIR := bin
 SERVER_BINARY := $(BIN_DIR)/polykey
 CLIENT_BINARY := $(BIN_DIR)/dev_client
 PORT := 50053
 
-# ============================================================================
+# ============================================================================ 
 # Configuration Files
-# ============================================================================
+# ============================================================================ 
 CONFIG_DIR := configs
 CONFIG_TEST := $(CONFIG_DIR)/config.test.yaml
 CONFIG_PROD := $(CONFIG_DIR)/config.production.yaml
 CONFIG_MINIMAL := $(CONFIG_DIR)/config.minimal.yaml
 
-# ============================================================================
+# ============================================================================ 
 # Colors
-# ============================================================================
+# ============================================================================ 
 CYAN := \033[36m
 YELLOW := \033[33m
 GREEN := \033[32m
 RESET := \033[0m
 
-# ============================================================================
+# ============================================================================ 
 # Phony Targets
-# ============================================================================
-.PHONY: build build-test server server-test server-prod server-minimal client \
-        test test-race test-integration clean kill help
+# ============================================================================ 
+.PHONY: all build build-test clean test test-race test-integration coverage lint server server-test server-prod server-minimal client client-debug migrate kill help
 
-# ============================================================================
+all: build
+
+lint:
+	@echo "Running linter..."
+	@golangci-lint run
+
+client-debug:
+	@echo "Starting client with debugging..."
+	@POLYKEY_DEBUG=true go run cmd/dev_client/main.go
+
+migrate:
+	@echo "Running database migrations..."
+	@POLYKEY_CONFIG_PATH=$(CONFIG_MINIMAL) go run cmd/utils/migrate.go
+
+coverage:
+	@echo "Displaying test coverage..."
+	@go tool cover -html=coverage.out
+
+# ============================================================================ 
 # Build Targets
-# ============================================================================
+# ============================================================================ 
 
 build: ## Build production binaries
 	@mkdir -p $(BIN_DIR)
@@ -49,9 +67,9 @@ build-test: ## Build binaries with mock dependencies for testing
 	@go build -ldflags="-s -w" -o $(CLIENT_BINARY) ./cmd/dev_client
 	@echo "$(GREEN)Test build complete!$(RESET)"
 
-# ============================================================================
+# ============================================================================ 
 # Server Targets
-# ============================================================================
+# ============================================================================ 
 
 server: server-test ## Run server (defaults to test config)
 
@@ -67,9 +85,9 @@ server-minimal: kill build ## Run server with minimal config
 	@echo "$(GREEN)Starting server with minimal config on port $(PORT)...$(RESET)"
 	@POLYKEY_CONFIG_PATH=$(CONFIG_MINIMAL) POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
 
-# ============================================================================
+# ============================================================================ 
 # Client Target
-# ============================================================================
+# ============================================================================ 
 
 client: build ## Run client
 	@if ! nc -z localhost $(PORT) 2>/dev/null; then \
@@ -80,9 +98,9 @@ client: build ## Run client
 	@echo "$(CYAN)Starting client...$(RESET)"
 	@POLYKEY_GRPC_PORT=$(PORT) $(CLIENT_BINARY)
 
-# ============================================================================
+# ============================================================================ 
 # Test Targets
-# ============================================================================
+# ============================================================================ 
 
 test: ## Run tests
 	@echo "$(CYAN)Running tests...$(RESET)"
@@ -96,9 +114,9 @@ test-integration: ## Run integration tests
 	@echo "$(CYAN)Running integration tests...$(RESET)"
 	@POLYKEY_CONFIG_PATH=./configs/config.local.yaml go test -tags=local_mocks -v -json ./tests/integration/... | tparse -all
 
-# ============================================================================
+# ============================================================================ 
 # Cleanup Targets
-# ============================================================================
+# ============================================================================ 
 
 clean: kill ## Clean build artifacts
 	@echo "$(YELLOW)Cleaning build artifacts...$(RESET)"
@@ -112,9 +130,9 @@ kill: ## Kill running server processes
 	fi
 	@-lsof -ti:$(PORT) | xargs kill -9 >/dev/null 2>&1 || true
 
-# ============================================================================
+# ============================================================================ 
 # Help Target
-# ============================================================================
+# ============================================================================ 
 
 help: ## Show help
 	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(RESET)"
