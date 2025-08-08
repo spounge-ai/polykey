@@ -29,7 +29,7 @@ func main() {
 	conn, err := grpc.NewClient("localhost:"+port, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		logger.Error("gRPC connection failed", "error", err)
-		fmt.Println(logBuf.String())
+		utils.PrintJestReport(logBuf.String())
 		os.Exit(1)
 	}
 	logger.Info("gRPC connection established successfully")
@@ -41,14 +41,12 @@ func main() {
 
 	c := pk.NewPolykeyServiceClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	r, err := c.HealthCheck(ctx, &emptypb.Empty{})
 	if err != nil {
 		logger.Error("HealthCheck failed", "error", err)
-		utils.PrintJestReport(logBuf.String())
-		os.Exit(1)
 	}
 	logger.Info("HealthCheck successful", "status", r.GetStatus().String(), "version", r.GetServiceVersion())
 
@@ -61,14 +59,13 @@ func main() {
 	createKeyResp, err := c.CreateKey(ctx, createKeyReq)
 	if err != nil {
 		logger.Error("CreateKey failed", "error", err)
-		utils.PrintJestReport(logBuf.String())
-		os.Exit(1)
+	} else {
+		logger.Info("CreateKey successful",
+			"keyId", createKeyResp.GetMetadata().GetKeyId(),
+			"keyType", createKeyResp.GetMetadata().GetKeyType().String(),
+			"plaintextKey", fmt.Sprintf("%x", createKeyResp.GetKeyMaterial().GetEncryptedKeyData()),
+		)
 	}
-	logger.Info("CreateKey successful",
-		"keyId", createKeyResp.GetMetadata().GetKeyId(),
-		"keyType", createKeyResp.GetMetadata().GetKeyType().String(),
-		"plaintextKey", fmt.Sprintf("%x", createKeyResp.GetKeyMaterial().GetEncryptedKeyData()),
-	)
 
 	newKeyId := createKeyResp.GetMetadata().GetKeyId()
 	getKeyReq := &pk.GetKeyRequest{
@@ -78,13 +75,36 @@ func main() {
 	getKeyResp, err := c.GetKey(ctx, getKeyReq)
 	if err != nil {
 		logger.Error("GetKey failed", "error", err)
-		utils.PrintJestReport(logBuf.String())
+	} else {
+		logger.Info("GetKey successful",
+			"keyId", getKeyResp.GetMetadata().GetKeyId(),
+			"plaintextKey", fmt.Sprintf("%x", getKeyResp.GetKeyMaterial().GetEncryptedKeyData()),
+		)
+	}
+
+	rotateKeyReq := &pk.RotateKeyRequest{
+		KeyId:            newKeyId,
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
+	}
+	rotateKeyResp, err := c.RotateKey(ctx, rotateKeyReq)
+	if err != nil {
+		logger.Error("RotateKey failed", "error", err)
+	} else {
+		logger.Info("RotateKey successful",
+			"keyId", rotateKeyResp.GetKeyId(),
+			"newVersion", rotateKeyResp.GetNewVersion(),
+			"plaintextKey", fmt.Sprintf("%x", rotateKeyResp.GetNewKeyMaterial().GetEncryptedKeyData()),
+		)
+	}
+
+	listKeysResp, err := c.ListKeys(ctx, &pk.ListKeysRequest{RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"}})
+	if err != nil {
+		logger.Error("ListKeys failed", "error", err)
+	} else {
+		logger.Info("ListKeys successful", "count", len(listKeysResp.GetKeys()))
+	}
+
+	if utils.PrintJestReport(logBuf.String()) {
 		os.Exit(1)
 	}
-	logger.Info("GetKey successful",
-		"keyId", getKeyResp.GetMetadata().GetKeyId(),
-		"plaintextKey", fmt.Sprintf("%x", getKeyResp.GetKeyMaterial().GetEncryptedKeyData()),
-	)
-
-	utils.PrintJestReport(logBuf.String())
 }

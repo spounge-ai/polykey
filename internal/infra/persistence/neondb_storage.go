@@ -3,11 +3,13 @@ package persistence
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/domain"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type NeonDBStorage struct {
@@ -109,21 +111,59 @@ func (s *NeonDBStorage) UpdateKeyMetadata(ctx context.Context, id string, metada
 }
 
 func (s *NeonDBStorage) RotateKey(ctx context.Context, id string, newEncryptedDEK []byte) (*domain.Key, error) {
-	// This is a simplified implementation. A real implementation would use a transaction.
-	key, err := s.GetKey(ctx, id)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil {
+			log.Printf("failed to rollback transaction: %v", err)
+		}
+	}()
+
+	var currentVersion int32
+	var metadataRaw []byte
+	var isPremium bool
+	query := `SELECT version, metadata, is_premium FROM keys WHERE id = $1 ORDER BY version DESC LIMIT 1`
+	err = tx.QueryRow(ctx, query, id).Scan(&currentVersion, &metadataRaw, &isPremium)
 	if err != nil {
 		return nil, err
 	}
 
-	key.Version++
-	key.EncryptedDEK = newEncryptedDEK
-	key.UpdatedAt = time.Now()
-
-	if err := s.CreateKey(ctx, key); err != nil {
+	var metadata pk.KeyMetadata
+	if err := json.Unmarshal(metadataRaw, &metadata); err != nil {
 		return nil, err
 	}
 
-	return key, nil
+	newVersion := currentVersion + 1
+	now := time.Now()
+	metadata.Version = newVersion
+	metadata.UpdatedAt = timestamppb.New(now)
+
+	newMetadataRaw, err := json.Marshal(&metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	insertQuery := `INSERT INTO keys (id, version, metadata, encrypted_dek, status, is_premium, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	_, err = tx.Exec(ctx, insertQuery, id, newVersion, newMetadataRaw, newEncryptedDEK, domain.KeyStatusActive, isPremium, now, now)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return &domain.Key{
+		ID:           id,
+		Version:      newVersion,
+		Metadata:     &metadata,
+		EncryptedDEK: newEncryptedDEK,
+		Status:       domain.KeyStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}, nil
 }
 
 func (s *NeonDBStorage) RevokeKey(ctx context.Context, id string) error {

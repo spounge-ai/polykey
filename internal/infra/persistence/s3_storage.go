@@ -31,7 +31,6 @@ func NewS3Storage(cfg aws.Config, bucketName string, logger *slog.Logger) (*S3St
 	}, nil
 }
 
-// s3KeyObject represents the structure of the JSON object stored in S3.
 type s3KeyObject struct {
 	ID            string          `json:"id"`
 	EncryptedDEK  []byte          `json:"encrypted_dek"`
@@ -102,7 +101,6 @@ func (s *S3Storage) putKey(ctx context.Context, key *domain.Key) error {
 		return fmt.Errorf("failed to marshal key object: %w", err)
 	}
 
-	// Store the specific version
 	versionPath := fmt.Sprintf("keys/%s/v%d.json", key.ID, key.Version)
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &s.bucketName,
@@ -113,7 +111,6 @@ func (s *S3Storage) putKey(ctx context.Context, key *domain.Key) error {
 		return fmt.Errorf("failed to put versioned key object to S3: %w", err)
 	}
 
-	// Store as the latest version
 	latestPath := fmt.Sprintf("keys/%s/latest.json", key.ID)
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &s.bucketName,
@@ -121,7 +118,6 @@ func (s *S3Storage) putKey(ctx context.Context, key *domain.Key) error {
 		Body:   bytes.NewReader(data),
 	})
 	if err != nil {
-		// Attempt to roll back the versioned key if this fails
 		if _, delErr := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &s.bucketName, Key: &versionPath}); delErr != nil {
 			s.logger.Error("failed to roll back S3 object", "path", versionPath, "error", delErr)
 		}
@@ -148,13 +144,10 @@ func (s *S3Storage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
 		}
 
 		for _, obj := range page.CommonPrefixes {
-			// Extract key ID from the prefix
 			keyID := strings.TrimSuffix(strings.TrimPrefix(*obj.Prefix, prefix), "/")
 			key, err := s.GetKey(ctx, keyID)
 			if err != nil {
 				s.logger.Error("failed to get key while listing", "keyID", keyID, "error", err)
-				// Decide whether to continue or return an error.
-				// For now, we'll log and continue.
 				continue
 			}
 			keys = append(keys, key)
@@ -165,13 +158,11 @@ func (s *S3Storage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
 }
 
 func (s *S3Storage) UpdateKeyMetadata(ctx context.Context, id string, metadata *pk.KeyMetadata) error {
-	// Get the latest version of the key
 	latestKey, err := s.GetKey(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to get key for update: %w", err)
 	}
 
-	// Update metadata
 	latestKey.Metadata = metadata
 	latestKey.UpdatedAt = time.Now()
 
@@ -179,27 +170,24 @@ func (s *S3Storage) UpdateKeyMetadata(ctx context.Context, id string, metadata *
 }
 
 func (s *S3Storage) RotateKey(ctx context.Context, id string, newEncryptedDEK []byte) (*domain.Key, error) {
-	// Get the latest version of the key to carry over metadata
 	latestKey, err := s.GetKey(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get key for rotation: %w", err)
 	}
 
-	// Create a new key version
 	newVersion := latestKey.Version + 1
 	now := time.Now()
 
 	rotatedKey := &domain.Key{
 		ID:           id,
 		EncryptedDEK: newEncryptedDEK,
-		Metadata:     latestKey.Metadata, // Carry over metadata
+		Metadata:     latestKey.Metadata,
 		Version:      newVersion,
-		Status:       domain.KeyStatusActive, // New key version is active
-		CreatedAt:    now,                  // This is a new version, so it has its own creation time
+		Status:       domain.KeyStatusActive,
+		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
 
-	// Create and store the new key version
 	if err := s.putKey(ctx, rotatedKey); err != nil {
 		return nil, fmt.Errorf("failed to create new key version during rotation: %w", err)
 	}
@@ -208,14 +196,12 @@ func (s *S3Storage) RotateKey(ctx context.Context, id string, newEncryptedDEK []
 }
 
 func (s *S3Storage) RevokeKey(ctx context.Context, id string) error {
-	// Get the latest version of the key
 	latestKey, err := s.GetKey(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to get key for revocation: %w", err)
 	}
 
-	// Update the status to revoked
-	latestKey.Status = domain.KeyStatusRevoked // Assuming this status exists
+	latestKey.Status = domain.KeyStatusRevoked
 	latestKey.UpdatedAt = time.Now()
 
 	return s.putKey(ctx, latestKey)
@@ -246,7 +232,6 @@ func (s *S3Storage) GetKeyVersions(ctx context.Context, id string) ([]*domain.Ke
 		}
 	}
 
-	// Sort versions in descending order (newest first)
 	sort.Slice(versions, func(i, j int) bool {
 		return versions[i].Version > versions[j].Version
 	})
@@ -255,7 +240,6 @@ func (s *S3Storage) GetKeyVersions(ctx context.Context, id string) ([]*domain.Ke
 }
 
 func (s *S3Storage) HealthCheck() error {
-	// A simple health check could be a HeadBucket call
 	_, err := s.client.HeadBucket(context.Background(), &s3.HeadBucketInput{
 		Bucket: &s.bucketName,
 	})

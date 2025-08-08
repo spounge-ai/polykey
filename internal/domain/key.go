@@ -18,11 +18,38 @@ type Key struct {
 	RevokedAt    *time.Time
 }
 
-func (k *Key) IsPremium() bool {
+type KeyTier string
+
+const (
+	TierFree       KeyTier = "free"
+	TierPro        KeyTier = "pro"
+	TierEnterprise KeyTier = "enterprise"
+	TierUnknown    KeyTier = "unknown"
+)
+
+func (k *Key) GetTier() KeyTier {
 	if k.Metadata == nil || k.Metadata.Tags == nil {
-		return false
+		return TierFree // Default to free tier
 	}
-	return k.Metadata.Tags["tier"] == "pro"
+	tier, ok := k.Metadata.Tags["tier"]
+	if !ok {
+		return TierFree // Default to free tier
+	}
+	switch tier {
+	case "pro":
+		return TierPro
+	case "enterprise":
+		return TierEnterprise
+	case "free":
+		return TierFree
+	default:
+		return TierUnknown
+	}
+}
+
+func (k *Key) IsPremium() bool {
+	tier := k.GetTier()
+	return tier == TierPro || tier == TierEnterprise
 }
 
 type KeyStatus string

@@ -112,7 +112,11 @@ test-race: ## Run tests with race detector
 
 test-integration: ## Run integration tests
 	@echo "$(CYAN)Running integration tests...$(RESET)"
-	@POLYKEY_CONFIG_PATH=./configs/config.local.yaml go test -tags=local_mocks -v -json ./tests/integration/... | tparse -all
+	@POLYKEY_CONFIG_PATH=../../configs/config.minimal.yaml go test -v ./tests/integration/...
+
+test-persistence: ## Run persistence tests
+	@echo "$(CYAN)Running persistence tests...$(RESET)"
+	@POLYKEY_CONFIG_PATH=../../configs/config.minimal.yaml go test -v ./internal/infra/persistence/...
 
 # ============================================================================ 
 # Cleanup Targets

@@ -38,14 +38,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect to database for verification: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("failed to close database connection: %v", err)
+		}
+	}()
 
 
 rows, err := db.Query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`)
 	if err != nil {
 		log.Fatalf("failed to query tables: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("failed to close rows: %v", err)
+		}
+	}()
 
 	var tables []string
 	for rows.Next() {

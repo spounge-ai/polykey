@@ -21,23 +21,19 @@ func NewUnaryAuthInterceptor(authorizer domain.Authorizer, exemptMethods map[str
 
 		switch r := req.(type) {
 		case *pk.CreateKeyRequest:
-			{
-				reqContext = r.GetRequesterContext()
-			}
+			reqContext = r.GetRequesterContext()
 		case *pk.GetKeyRequest:
-			{
-				reqContext = r.GetRequesterContext()
-				attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
-			}
+			reqContext = r.GetRequesterContext()
+			attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
 		case *pk.GetKeyMetadataRequest:
-			{
-				reqContext = r.GetRequesterContext()
-				attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
-			}
+			reqContext = r.GetRequesterContext()
+			attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
+		case *pk.ListKeysRequest:
+			reqContext = r.GetRequesterContext()
+		case *pk.RotateKeyRequest:
+			reqContext = r.GetRequesterContext()
 		default:
-			{
-				return nil, status.Errorf(codes.Unimplemented, "unsupported request type: %T", req)
-			}
+			return nil, status.Errorf(codes.Unimplemented, "unsupported request type: %T", req)
 		}
 
 		if reqContext == nil {

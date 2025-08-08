@@ -29,9 +29,7 @@ type state struct {
 	retrievedKeyHex string
 }
 
-
-
-func PrintJestReport(logData string) {
+func PrintJestReport(logData string) bool {
 	s := &state{
 		tests: make(map[string]time.Time),
 	}
@@ -70,6 +68,7 @@ func PrintJestReport(logData string) {
 	}
 
 	printSummary(s)
+	return len(s.failures) > 0
 }
 
 func processAppLogEntry(entry LogEntry, s *state) {
@@ -104,8 +103,18 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		s.passes++
 		s.retrievedKeyHex, _ = entry["plaintextKey"].(string)
 		fmt.Printf("      %s└─ Plaintext Key: %s%s%s\n", ColorGray, ColorCyan, s.retrievedKeyHex, ColorReset)
+	case "RotateKey successful":
+		printSuiteHeader(&s.currentSuite, "EXECUTION")
+		details := fmt.Sprintf("keyId=%v, newVersion=%v", entry["keyId"], entry["newVersion"])
+		printStep("PASS", "RotateKey", details)
+		s.passes++
+	case "ListKeys successful":
+		printSuiteHeader(&s.currentSuite, "EXECUTION")
+		details := fmt.Sprintf("count=%v", entry["count"])
+		printStep("PASS", "ListKeys", details)
+		s.passes++
 
-	case "CreateKey failed", "GetKey failed", "HealthCheck failed", "gRPC connection failed":
+	case "CreateKey failed", "GetKey failed", "HealthCheck failed", "gRPC connection failed", "RotateKey failed", "ListKeys failed":
 		printSuiteHeader(&s.currentSuite, "ERROR")
 		details := fmt.Sprintf("%v", entry["error"])
 		printStep("FAIL", msg, details)
@@ -156,7 +165,6 @@ func printSuiteHeader(currentSuite *string, newSuite string) {
 	if *currentSuite != newSuite {
 		separator := strings.Repeat("─", 10)
 		fmt.Printf("\n%s%s %s%s%s %s%s\n", ColorGray, separator, ColorBold, newSuite, ColorReset, separator, ColorReset)
-		*currentSuite = newSuite
 	}
 }
 

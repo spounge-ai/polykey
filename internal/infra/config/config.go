@@ -15,12 +15,17 @@ type Config struct {
 	Persistence    PersistenceConfig    `mapstructure:"persistence"`
 	Database       DatabaseConfig       `mapstructure:"database" validate:"required"`
 	NeonDB         NeonDBConfig         `mapstructure:"neondb"   validate:"required"`
+	CockroachDB    CockroachDBConfig    `mapstructure:"cockroachdb" validate:"required"`
 	Vault          VaultConfig          `mapstructure:"vault"    validate:"required"`
 	AWS            AWSConfig            `mapstructure:"aws"      validate:"required"`
 	StorageBackend string               `mapstructure:"storage_backend"`
 	LocalMasterKey string               `mapstructure:"local_master_key"`
 	ServiceVersion string
 	BuildCommit    string
+}
+
+type CockroachDBConfig struct {
+	URL string `mapstructure:"url" validate:"required,url"`
 }
 
 type PersistenceConfig struct {
