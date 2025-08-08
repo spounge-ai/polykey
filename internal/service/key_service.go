@@ -15,7 +15,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// KeyService defines the interface for key management operations.
 type KeyService interface {
 	CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error)
 	GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error)
@@ -26,7 +25,6 @@ type KeyService interface {
 	GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error)
 }
 
-// keyServiceImpl is the concrete implementation of the KeyService interface.
 type keyServiceImpl struct {
 	keyRepo domain.KeyRepository
 	kms     domain.KMSService
@@ -34,7 +32,6 @@ type keyServiceImpl struct {
 	cfg     *config.Config
 }
 
-// NewKeyService creates a new instance of KeyService.
 func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.KMSService, logger *slog.Logger) KeyService {
 	return &keyServiceImpl{
 		cfg:     cfg,

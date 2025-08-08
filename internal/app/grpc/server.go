@@ -19,7 +19,6 @@ import (
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
-// Server represents the gRPC server.
 type Server struct {
 	grpcServer *grpc.Server
 	healthSrv  *health.Server
@@ -28,7 +27,6 @@ type Server struct {
 	logger     *slog.Logger
 }
 
-// New creates a new gRPC server.
 func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Authorizer, audit domain.AuditLogger, logger *slog.Logger) (*Server, int, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.Port))
 	if err != nil {
@@ -82,11 +80,13 @@ func (s *Server) Start() error {
 	return s.grpcServer.Serve(s.lis)
 }
 
-// Stop gracefully stops the gRPC server.
 func (s *Server) Stop() {
 	s.logger.Info("Stopping gRPC server...")
 	s.healthSrv.SetServingStatus("polykey.v2.PolykeyService", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 	s.grpcServer.GracefulStop()
+	if err := s.lis.Close(); err != nil {
+		s.logger.Error("failed to close listener", "error", err)
+	}
 	s.logger.Info("gRPC server stopped.")
 }
 

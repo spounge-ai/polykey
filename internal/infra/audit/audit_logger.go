@@ -11,13 +11,11 @@ import (
 	"google.golang.org/grpc/peer"
 )
 
-// Logger implements the domain.AuditLogger interface.
 type Logger struct {
 	logger   *slog.Logger
 	auditRepo domain.AuditRepository
 }
 
-// NewAuditLogger creates a new audit logger.
 func NewAuditLogger(logger *slog.Logger, auditRepo domain.AuditRepository) domain.AuditLogger {
 	return &Logger{
 		logger:    logger,

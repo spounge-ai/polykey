@@ -16,14 +16,12 @@ import (
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
-// S3Storage implements the KeyRepository using an S3 bucket.
 type S3Storage struct {
 	client     *s3.Client
 	bucketName string
 	logger     *slog.Logger
 }
 
-// NewS3Storage creates a new S3-backed KeyRepository.
 func NewS3Storage(cfg aws.Config, bucketName string, logger *slog.Logger) (*S3Storage, error) {
 	s3Client := s3.NewFromConfig(cfg)
 	return &S3Storage{

@@ -16,7 +16,7 @@ import (
 func main() {
 	port := os.Getenv("POLYKEY_GRPC_PORT")
 	if port == "" {
-		port = "50051" // Default port
+		port = "50053" // Default port
 	}
 
 	conn, err := grpc.NewClient("localhost:" + port, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -54,8 +54,7 @@ func main() {
 	}
 	log.Printf("CreateKey Response: KeyId=%s, KeyType=%s", createKeyResp.GetMetadata().GetKeyId(), createKeyResp.GetMetadata().GetKeyType().String())
 
-	// Now, call GetKey using the ID from the key we just created
-	newKeyId := createKeyResp.GetMetadata().GetKeyId()
+ 	newKeyId := createKeyResp.GetMetadata().GetKeyId()
 	log.Printf("Attempting to get the key we just created: %s", newKeyId)
 	getKeyReq := &pb.GetKeyRequest{
 		KeyId:            newKeyId,

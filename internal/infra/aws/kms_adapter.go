@@ -8,12 +8,10 @@ import (
 	
 )
 
-// KMSAdapter implements the domain.KMSService interface using the AWS SDK.
 type KMSAdapter struct {
 	client *kms.Client
 }
 
-// NewKMSAdapter creates a new KMSAdapter.
 func NewKMSAdapter(cfg aws.Config) *KMSAdapter {
 	return &KMSAdapter{
 		client: kms.NewFromConfig(cfg),

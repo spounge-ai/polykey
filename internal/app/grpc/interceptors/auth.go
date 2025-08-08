@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// UnaryAuthInterceptor is a gRPC unary interceptor that performs authorization.
 func UnaryAuthInterceptor(authorizer domain.Authorizer) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		if info.FullMethod == "/polykey.v2.PolykeyService/HealthCheck" {

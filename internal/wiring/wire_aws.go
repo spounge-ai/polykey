@@ -15,7 +15,6 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 )
 
-// ProvideDependencies builds and returns the real, production-ready services.
 func ProvideDependencies(cfg *infra_config.Config) (domain.KMSService, domain.KeyRepository, error) {
 	if !cfg.AWS.Enabled {
 		return nil, nil, fmt.Errorf("AWS is not enabled in the configuration, but no mock build tag was provided")

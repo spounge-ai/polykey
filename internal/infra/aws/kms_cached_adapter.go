@@ -9,13 +9,11 @@ import (
 	"github.com/spounge-ai/polykey/internal/domain"
 )
 
-// cacheItem holds the cached data and its expiration time.
 type cacheItem struct {
 	value      []byte
 	expiration int64
 }
 
-// KMSCachedAdapter adds a caching layer around the real KMS adapter.
 type KMSCachedAdapter struct {
 	next     domain.KMSService
 	dekCache map[string]cacheItem
@@ -23,7 +21,6 @@ type KMSCachedAdapter struct {
 	ttl      time.Duration
 }
 
-// NewKMSCachedAdapter creates a new KMSCachedAdapter.
 func NewKMSCachedAdapter(next domain.KMSService, ttl time.Duration) *KMSCachedAdapter {
 	adapter := &KMSCachedAdapter{
 		next:     next,

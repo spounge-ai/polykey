@@ -15,7 +15,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// polykeyServiceImpl implements the PolykeyService interface.
 type polykeyServiceImpl struct {
 	pk.UnimplementedPolykeyServiceServer
 	cfg        *config.Config
@@ -25,7 +24,6 @@ type polykeyServiceImpl struct {
 	logger     *slog.Logger
 }
 
-// NewPolykeyService creates a new instance of PolykeyService.
 func NewPolykeyService(cfg *config.Config, service service.KeyService, authorizer domain.Authorizer, audit domain.AuditLogger, logger *slog.Logger) (pk.PolykeyServiceServer, error) {
 	return &polykeyServiceImpl{
 		cfg:        cfg,

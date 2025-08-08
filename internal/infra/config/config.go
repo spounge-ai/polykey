@@ -10,7 +10,6 @@ import (
 	customvalidator "github.com/spounge-ai/polykey/pkg/validator"
 )
 
-// Config holds the application configuration.
 type Config struct {
 	Server         ServerConfig   `mapstructure:"server"`
 	Database       DatabaseConfig `mapstructure:"database" validate:"required"`
@@ -20,7 +19,6 @@ type Config struct {
 	BuildCommit    string
 }
 
-// AWSConfig holds the AWS-specific configuration.
 type AWSConfig struct {
 	Enabled   bool   `mapstructure:"enabled"`
 	Region    string `mapstructure:"region"     validate:"required_if=Enabled true"`
@@ -29,21 +27,18 @@ type AWSConfig struct {
 	CacheTTL  string `mapstructure:"cache_ttl"`
 }
 
-// ServerConfig holds the server configuration.
 type ServerConfig struct {
 	Port int    `mapstructure:"port" validate:"required,gte=1024,lte=65535"`
 	TLS  TLS    `mapstructure:"tls"`
 	Mode string `mapstructure:"mode" validate:"required,oneof=development production"`
 }
 
-// TLS holds the TLS configuration.
 type TLS struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	CertFile string `mapstructure:"cert_file"`
 	KeyFile  string `mapstructure:"key_file"`
 }
 
-// DatabaseConfig holds the database configuration.
 type DatabaseConfig struct {
 	Host     string `mapstructure:"host"     validate:"required"`
 	Port     int    `mapstructure:"port"     validate:"required,gte=1024,lte=65535"`
@@ -53,13 +48,11 @@ type DatabaseConfig struct {
 	SSLMode  string `mapstructure:"sslmode"  validate:"required"`
 }
 
-// VaultConfig holds the Vault configuration.
 type VaultConfig struct {
 	Address string `mapstructure:"address" validate:"required,url"`
 	Token   string `mapstructure:"token"   validate:"required"`
 }
 
-// Load loads the configuration from a file and environment variables.
 func Load(path string) (*Config, error) {
 	vip := viper.New()
 	if path != "" {
