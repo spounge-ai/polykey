@@ -11,12 +11,22 @@ import (
 )
 
 type Config struct {
-	Server         ServerConfig   `mapstructure:"server"`
-	Database       DatabaseConfig `mapstructure:"database" validate:"required"`
-	Vault          VaultConfig    `mapstructure:"vault"    validate:"required"`
-	AWS            AWSConfig      `mapstructure:"aws"      validate:"required"`
+	Server         ServerConfig         `mapstructure:"server"`
+	Persistence    PersistenceConfig    `mapstructure:"persistence"`
+	Database       DatabaseConfig       `mapstructure:"database" validate:"required"`
+	NeonDB         NeonDBConfig         `mapstructure:"neondb"   validate:"required"`
+	Vault          VaultConfig          `mapstructure:"vault"    validate:"required"`
+	AWS            AWSConfig            `mapstructure:"aws"      validate:"required"`
 	ServiceVersion string
 	BuildCommit    string
+}
+
+type PersistenceConfig struct {
+	Type string `mapstructure:"type" validate:"required,oneof=s3 neondb"`
+}
+
+type NeonDBConfig struct {
+	URL string `mapstructure:"url" validate:"required,url"`
 }
 
 type AWSConfig struct {

@@ -2,6 +2,9 @@ server:
   port: "<your-server-port>"
   mode: "<your-environment>"
 
+persistence:
+  type: "neondb" # can be "neondb" or "s3"
+
 aws:
   enabled: true
   region: "<your-aws-region>"  
@@ -19,3 +22,6 @@ database:
   password: "<your-database-password>"
   dbname: "polykey"
   sslmode: "require" 
+
+neondb:
+  url: "postgresql://<user>:<password>@<host>:<port>/<dbname>?sslmode=require" 

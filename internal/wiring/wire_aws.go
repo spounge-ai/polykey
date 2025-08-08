@@ -31,9 +31,21 @@ func ProvideDependencies(cfg *infra_config.Config) (domain.KMSService, domain.Ke
 	}
 
 	kmsAdapter := infra_aws.NewKMSCachedAdapter(infra_aws.NewKMSAdapter(awsCfg), cacheTTL)
-	keyRepo, err := persistence.NewS3Storage(awsCfg, cfg.AWS.S3Bucket, slog.Default())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create s3 storage: %w", err)
+
+	var keyRepo domain.KeyRepository
+	switch cfg.Persistence.Type {
+	case "s3":
+		keyRepo, err = persistence.NewS3Storage(awsCfg, cfg.AWS.S3Bucket, slog.Default())
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create s3 storage: %w", err)
+		}
+	case "neondb":
+		keyRepo, err = persistence.NewNeonDBStorage()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create neondb storage: %w", err)
+		}
+	default:
+		return nil, nil, fmt.Errorf("invalid persistence type: %s", cfg.Persistence.Type)
 	}
 
 	return kmsAdapter, keyRepo, nil
