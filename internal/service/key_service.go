@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -13,6 +14,12 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+var (
+	ErrInvalidRequest    = errors.New("invalid request")
+	ErrInvalidKeyType    = errors.New("invalid key type")
+	ErrKeyGenerationFail = errors.New("failed to generate cryptographic key")
 )
 
 type KeyService interface {
@@ -40,8 +47,23 @@ func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kms domain.
 		logger:  logger,
 	}
 }
+ 
+
+func getCryptoDetails(keyType pk.KeyType) (int, string, error) {
+	switch keyType {
+	case pk.KeyType_KEY_TYPE_AES_256:
+		return 32, "AES-256-GCM", nil
+	default:
+		return 0, "", fmt.Errorf("%w: %s", ErrInvalidKeyType, keyType.String())
+	}
+}
 
 func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
+	if req == nil || req.GetKeyId() == "" {
+		s.logger.WarnContext(ctx, "invalid get key request")
+		return nil, fmt.Errorf("%w: key ID required", ErrInvalidRequest)
+	}
+
 	var key *domain.Key
 	var err error
 
@@ -52,46 +74,55 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 	}
 
 	if err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to get key", "keyId", req.GetKeyId(), "error", err)
+		return nil, fmt.Errorf("failed to get key: %w", err)
 	}
 
 	dek, err := s.kms.DecryptDEK(ctx, key.EncryptedDEK, s.cfg.AWS.KMSKeyARN)
 	if err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to decrypt DEK", "keyId", req.GetKeyId(), "error", err)
+		return nil, fmt.Errorf("failed to decrypt DEK: %w", err)
 	}
 
 	resp := &pk.GetKeyResponse{
 		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:     dek,
-			EncryptionAlgorithm:  "AES-256-GCM",
-			KeyChecksum:          "sha256",
+			EncryptedKeyData:    append([]byte(nil), dek...), 
+			EncryptionAlgorithm: "AES-256-GCM",
+			KeyChecksum:         "sha256",
 		},
-		Metadata:                 key.Metadata,
-		ResponseTimestamp:        timestamppb.Now(),
+		ResponseTimestamp: timestamppb.Now(),
 	}
 
 	if !req.GetSkipMetadata() {
 		resp.Metadata = key.Metadata
 	}
 
+	s.logger.InfoContext(ctx, "key retrieved", "keyId", req.GetKeyId(), "version", key.Version)
 	return resp, nil
 }
 
 func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
+	if req == nil || req.RequesterContext == nil || req.RequesterContext.GetClientIdentity() == "" {
+		s.logger.WarnContext(ctx, "invalid create key request")
+		return nil, fmt.Errorf("%w: requester context required", ErrInvalidRequest)
+	}
+
 	dekSize, algorithm, err := getCryptoDetails(req.GetKeyType())
 	if err != nil {
+		s.logger.ErrorContext(ctx, "unsupported key type", "keyType", req.GetKeyType())
 		return nil, err
 	}
 
-	// Generate DEK
 	dek := make([]byte, dekSize)
 	if _, err := rand.Read(dek); err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to generate DEK", "error", err)
+		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
 
 	encryptedDEK, err := s.kms.EncryptDEK(ctx, dek, s.cfg.AWS.KMSKeyARN)
 	if err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to encrypt DEK", "error", err)
+		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
 	}
 
 	keyID := uuid.New().String()
@@ -125,41 +156,39 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	}
 
 	if err := s.keyRepo.CreateKey(ctx, newKey); err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to create key", "keyId", keyID, "error", err)
+		return nil, fmt.Errorf("failed to create key: %w", err)
 	}
 
 	resp := &pk.CreateKeyResponse{
-		KeyId: keyID,
+		KeyId:    keyID,
 		Metadata: metadata,
 		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    dek,
+			EncryptedKeyData:    append([]byte(nil), dek...),
 			EncryptionAlgorithm: algorithm,
-			KeyChecksum:         "sha256", // Checksum can also be made dynamic if needed
+			KeyChecksum:         "sha256",
 		},
 		ResponseTimestamp: timestamppb.Now(),
 	}
 
+	s.logger.InfoContext(ctx, "key created", "keyId", keyID, "keyType", req.GetKeyType().String(), "creator", req.RequesterContext.GetClientIdentity())
 	return resp, nil
 }
 
-func getCryptoDetails(keyType pk.KeyType) (int, string, error) {
-	switch keyType {
-	case pk.KeyType_KEY_TYPE_AES_256:
-		return 32, "AES-256-GCM", nil
-	default:
-		return 0, "", fmt.Errorf("unsupported key type: %s", keyType)
-	}
-}
-
 func (s *keyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("%w: request is nil", ErrInvalidRequest)
+	}
+
 	keys, err := s.keyRepo.ListKeys(ctx)
 	if err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to list keys", "error", err)
+		return nil, fmt.Errorf("failed to list keys: %w", err)
 	}
 
-	var metadataKeys []*pk.KeyMetadata
-	for _, key := range keys {
-		metadataKeys = append(metadataKeys, key.Metadata)
+	metadataKeys := make([]*pk.KeyMetadata, len(keys))
+	for i, key := range keys {
+		metadataKeys[i] = key.Metadata
 	}
 
 	resp := &pk.ListKeysResponse{
@@ -169,31 +198,38 @@ func (s *keyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysRequest) 
 		ResponseTimestamp: timestamppb.Now(),
 	}
 
+	s.logger.InfoContext(ctx, "keys listed", "count", len(metadataKeys))
 	return resp, nil
 }
 
 func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest) (*pk.RotateKeyResponse, error) {
-	// Get current key
-	currentKey, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
-	if err != nil {
-		return nil, err
+	if req == nil || req.GetKeyId() == "" {
+		s.logger.WarnContext(ctx, "invalid rotate key request")
+		return nil, fmt.Errorf("%w: key ID required", ErrInvalidRequest)
 	}
 
-	// Generate new DEK
+	currentKey, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get current key", "keyId", req.GetKeyId(), "error", err)
+		return nil, fmt.Errorf("failed to get current key: %w", err)
+	}
+
 	newDEK := make([]byte, 32)
 	if _, err := rand.Read(newDEK); err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to generate new DEK", "error", err)
+		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
 
 	encryptedNewDEK, err := s.kms.EncryptDEK(ctx, newDEK, s.cfg.AWS.KMSKeyARN)
 	if err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to encrypt new DEK", "error", err)
+		return nil, fmt.Errorf("failed to encrypt new DEK: %w", err)
 	}
 
-	// Rotate key in repository
 	rotatedKey, err := s.keyRepo.RotateKey(ctx, req.GetKeyId(), encryptedNewDEK)
 	if err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to rotate key", "keyId", req.GetKeyId(), "error", err)
+		return nil, fmt.Errorf("failed to rotate key: %w", err)
 	}
 
 	resp := &pk.RotateKeyResponse{
@@ -201,7 +237,7 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		NewVersion:      rotatedKey.Version,
 		PreviousVersion: currentKey.Version,
 		NewKeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    newDEK,
+			EncryptedKeyData:    append([]byte(nil), newDEK...),
 			EncryptionAlgorithm: "AES-256-GCM",
 			KeyChecksum:         "sha256",
 		},
@@ -210,47 +246,80 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		OldVersionExpiresAt: timestamppb.New(time.Now().Add(time.Duration(req.GetGracePeriodSeconds()) * time.Second)),
 	}
 
+	s.logger.InfoContext(ctx, "key rotated", "keyId", req.GetKeyId(), "previousVersion", currentKey.Version, "newVersion", rotatedKey.Version)
 	return resp, nil
 }
 
 func (s *keyServiceImpl) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) error {
-	return s.keyRepo.RevokeKey(ctx, req.GetKeyId())
+	if req == nil || req.GetKeyId() == "" {
+		return fmt.Errorf("%w: key ID required", ErrInvalidRequest)
+	}
+
+	if err := s.keyRepo.RevokeKey(ctx, req.GetKeyId()); err != nil {
+		s.logger.ErrorContext(ctx, "failed to revoke key", "keyId", req.GetKeyId(), "error", err)
+		return fmt.Errorf("failed to revoke key: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "key revoked", "keyId", req.GetKeyId())
+	return nil
 }
 
 func (s *keyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) error {
-	// Get current metadata
-	key, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
-	if err != nil {
-		return err
+	if req == nil || req.GetKeyId() == "" {
+		return fmt.Errorf("%w: key ID required", ErrInvalidRequest)
 	}
 
-	// Update metadata fields
+	key, err := s.keyRepo.GetKey(ctx, req.GetKeyId())
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get key for metadata update", "keyId", req.GetKeyId(), "error", err)
+		return fmt.Errorf("failed to get key: %w", err)
+	}
+
 	metadata := key.Metadata
+	var updatedFields []string
+
 	if req.Description != nil {
 		metadata.Description = *req.Description
+		updatedFields = append(updatedFields, "description")
 	}
 	if req.ExpiresAt != nil {
 		metadata.ExpiresAt = req.ExpiresAt
+		updatedFields = append(updatedFields, "expiresAt")
 	}
 	if req.DataClassification != nil {
 		metadata.DataClassification = *req.DataClassification
+		updatedFields = append(updatedFields, "dataClassification")
 	}
 
-	// Update tags
-	if metadata.Tags == nil {
-		metadata.Tags = make(map[string]string)
-	}
-	maps.Copy(metadata.Tags, req.GetTagsToAdd())
-	for _, tag := range req.GetTagsToRemove() {
-		delete(metadata.Tags, tag)
+	if len(req.GetTagsToAdd()) > 0 || len(req.GetTagsToRemove()) > 0 {
+		if metadata.Tags == nil {
+			metadata.Tags = make(map[string]string)
+		}
+		if len(req.GetTagsToAdd()) > 0 {
+			maps.Copy(metadata.Tags, req.GetTagsToAdd())
+			updatedFields = append(updatedFields, "tags")
+		}
+		for _, tag := range req.GetTagsToRemove() {
+			delete(metadata.Tags, tag)
+		}
 	}
 
 	metadata.UpdatedAt = timestamppb.Now()
 
-	return s.keyRepo.UpdateKeyMetadata(ctx, req.GetKeyId(), metadata)
+	if err := s.keyRepo.UpdateKeyMetadata(ctx, req.GetKeyId(), metadata); err != nil {
+		s.logger.ErrorContext(ctx, "failed to update key metadata", "keyId", req.GetKeyId(), "error", err)
+		return fmt.Errorf("failed to update metadata: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "key metadata updated", "keyId", req.GetKeyId(), "fields", updatedFields)
+	return nil
 }
 
 func (s *keyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error) {
+	if req == nil || req.GetKeyId() == "" {
+		return nil, fmt.Errorf("%w: key ID required", ErrInvalidRequest)
+	}
+
 	var key *domain.Key
 	var err error
 
@@ -261,7 +330,8 @@ func (s *keyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetad
 	}
 
 	if err != nil {
-		return nil, err
+		s.logger.ErrorContext(ctx, "failed to get key metadata", "keyId", req.GetKeyId(), "error", err)
+		return nil, fmt.Errorf("failed to get key metadata: %w", err)
 	}
 
 	resp := &pk.GetKeyMetadataResponse{
@@ -269,15 +339,13 @@ func (s *keyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetad
 		ResponseTimestamp: timestamppb.Now(),
 	}
 
-	// TODO: Add access history if requested
 	if req.GetIncludeAccessHistory() {
-		s.logger.Warn("IncludeAccessHistory is not yet implemented")
+		s.logger.WarnContext(ctx, "IncludeAccessHistory not implemented", "keyId", req.GetKeyId())
 	}
-
-	// TODO: Add policy details if requested
 	if req.GetIncludePolicyDetails() {
-		s.logger.Warn("IncludePolicyDetails is not yet implemented")
+		s.logger.WarnContext(ctx, "IncludePolicyDetails not implemented", "keyId", req.GetKeyId())
 	}
 
+	s.logger.InfoContext(ctx, "key metadata retrieved", "keyId", req.GetKeyId(), "version", key.Version)
 	return resp, nil
 }
