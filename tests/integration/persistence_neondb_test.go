@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB(t *testing.T) *persistence.NeonDBStorage {
+func setupTestDB(t *testing.T) (*persistence.NeonDBStorage, func()) {
 	cfgPath := os.Getenv("POLYKEY_CONFIG_PATH")
 	if cfgPath == "" {
 		t.Fatal("POLYKEY_CONFIG_PATH environment variable not set. No configuration file found.")
@@ -28,15 +28,24 @@ func setupTestDB(t *testing.T) *persistence.NeonDBStorage {
 	storage, err := persistence.NewNeonDBStorage(dbpool)
 	require.NoError(t, err)
 
-	return storage
+	cleanup := func() {
+		_, err := dbpool.Exec(context.Background(), "DELETE FROM keys")
+		require.NoError(t, err)
+	}
+
+	return storage, cleanup
 }
 
 func TestNeonDBStorage(t *testing.T) {
-	storage := setupTestDB(t)
+	storage, cleanup := setupTestDB(t)
 
 	t.Run("Create and Get Key", func(t *testing.T) {
+		cleanup()
+		keyID, err := domain.KeyIDFromString("f47ac10b-58cc-4372-a567-0e02b2c3d479")
+		require.NoError(t, err)
+
 		key := &domain.Key{
-			ID:      "test-key-1",
+			ID:      keyID,
 			Version: 1,
 			Metadata: &pk.KeyMetadata{
 				Description: "Test Key",
@@ -45,10 +54,10 @@ func TestNeonDBStorage(t *testing.T) {
 			Status:       domain.KeyStatusActive,
 		}
 
-		err := storage.CreateKey(context.Background(), key, false)
+		err = storage.CreateKey(context.Background(), key, false)
 		require.NoError(t, err)
 
-		retrievedKey, err := storage.GetKey(context.Background(), "test-key-1")
+		retrievedKey, err := storage.GetKey(context.Background(), keyID)
 		require.NoError(t, err)
 		require.NotNil(t, retrievedKey)
 		require.Equal(t, key.ID, retrievedKey.ID)
@@ -56,13 +65,29 @@ func TestNeonDBStorage(t *testing.T) {
 	})
 
 	t.Run("Rotate Key", func(t *testing.T) {
+		cleanup()
+		keyID, err := domain.KeyIDFromString("b47ac10b-58cc-4372-a567-0e02b2c3d479")
+		require.NoError(t, err)
+
+		key := &domain.Key{
+			ID:      keyID,
+			Version: 1,
+			Metadata: &pk.KeyMetadata{
+				Description: "Test Key to be rotated",
+			},
+			EncryptedDEK: []byte("initial-dek"),
+			Status:       domain.KeyStatusActive,
+		}
+		err = storage.CreateKey(context.Background(), key, false)
+		require.NoError(t, err)
+
 		newDEK := []byte("new-test-dek")
-		rotatedKey, err := storage.RotateKey(context.Background(), "test-key-1", newDEK)
+		rotatedKey, err := storage.RotateKey(context.Background(), keyID, newDEK)
 		require.NoError(t, err)
 		require.NotNil(t, rotatedKey)
 		require.Equal(t, int32(2), rotatedKey.Version)
 
-		retrievedKey, err := storage.GetKey(context.Background(), "test-key-1")
+		retrievedKey, err := storage.GetKey(context.Background(), keyID)
 		require.NoError(t, err)
 		require.NotNil(t, retrievedKey)
 		require.Equal(t, int32(2), retrievedKey.Version)

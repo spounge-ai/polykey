@@ -16,19 +16,20 @@ func NewMockAuthorizer() domain.Authorizer {
 type basicAuthorizer struct{}
 
 // Authorize performs a simplified authorization check.
-func (a *basicAuthorizer) Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string) (bool, string) {
+func (a *basicAuthorizer) Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string, keyID domain.KeyID) (bool, string) {
 	clientIdentity := ""
 	if reqContext != nil {
 		clientIdentity = reqContext.GetClientIdentity()
 	}
 
 	// Explicitly deny unauthorized operations based on test cases
-	if operation == "/polykey.v2.PolykeyService/GetKey" && attrs != nil && attrs.GetEnvironment() == "restricted_key" {
+	if operation == "/polykey.v2.PolykeyService/GetKey" && keyID.String() == "c47ac10b-58cc-4372-a567-0e02b2c3d479" {
 		return false, "mock_auth_decision_id_denied_restricted_key"
 	}
 
 	if (operation == "/polykey.v2.PolykeyService/CreateKey" && clientIdentity == "unknown_creator") ||
-		(operation == "/polykey.v2.PolykeyService/GetKeyMetadata" && clientIdentity == "unknown_client") {
+		(operation == "/polykey.v2.PolykeyService/GetKeyMetadata" && clientIdentity == "unknown_client") ||
+		(operation == "/polykey.v2.PolykeyService/GetKeyMetadata" && keyID.String() == "d47ac10b-58cc-4372-a567-0e02b2c3d479") {
 		return false, "mock_auth_decision_id_denied_unauthorized"
 	}
 

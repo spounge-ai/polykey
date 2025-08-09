@@ -8,7 +8,7 @@ import (
 )
 
 type Key struct {
-    ID           string
+    ID           KeyID
     Version      int32
     Metadata     *pk.KeyMetadata
     EncryptedDEK []byte
@@ -62,14 +62,14 @@ const (
 )
 
 type KeyRepository interface {
-	GetKey(ctx context.Context, id string) (*Key, error)
-	GetKeyByVersion(ctx context.Context, id string, version int32) (*Key, error)
+	GetKey(ctx context.Context, id KeyID) (*Key, error)
+	GetKeyByVersion(ctx context.Context, id KeyID, version int32) (*Key, error)
 	CreateKey(ctx context.Context, key *Key, isPremium bool) error
 	ListKeys(ctx context.Context) ([]*Key, error)
-	UpdateKeyMetadata(ctx context.Context, id string, metadata *pk.KeyMetadata) error
-	RotateKey(ctx context.Context, id string, newEncryptedDEK []byte) (*Key, error)
-	RevokeKey(ctx context.Context, id string) error
-	GetKeyVersions(ctx context.Context, id string) ([]*Key, error)
+	UpdateKeyMetadata(ctx context.Context, id KeyID, metadata *pk.KeyMetadata) error
+	RotateKey(ctx context.Context, id KeyID, newEncryptedDEK []byte) (*Key, error)
+	RevokeKey(ctx context.Context, id KeyID) error
+	GetKeyVersions(ctx context.Context, id KeyID) ([]*Key, error)
 }
 
 type AuditEvent struct {

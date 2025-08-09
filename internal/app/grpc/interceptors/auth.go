@@ -10,41 +10,82 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func NewUnaryAuthInterceptor(authorizer domain.Authorizer, exemptMethods map[string]bool) grpc.UnaryServerInterceptor {
+type requestData struct {
+	requesterContext *pk.RequesterContext
+	accessAttributes *pk.AccessAttributes
+	keyID            domain.KeyID
+}
+
+type requesterContextGetter interface {
+	GetRequesterContext() *pk.RequesterContext
+}
+
+type keyIDGetter interface {
+	GetKeyId() string
+}
+
+func NewUnaryAuthInterceptor(
+	authorizer domain.Authorizer,
+	exemptMethods map[string]bool,
+) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		if exemptMethods[info.FullMethod] {
 			return handler(ctx, req)
 		}
 
-		var reqContext *pk.RequesterContext
-		var attrs *pk.AccessAttributes
-
-		switch r := req.(type) {
-		case *pk.CreateKeyRequest:
-			reqContext = r.GetRequesterContext()
-		case *pk.GetKeyRequest:
-			reqContext = r.GetRequesterContext()
-			attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
-		case *pk.GetKeyMetadataRequest:
-			reqContext = r.GetRequesterContext()
-			attrs = &pk.AccessAttributes{Environment: r.GetKeyId()}
-		case *pk.ListKeysRequest:
-			reqContext = r.GetRequesterContext()
-		case *pk.RotateKeyRequest:
-			reqContext = r.GetRequesterContext()
-		default:
-			return nil, status.Errorf(codes.Unimplemented, "unsupported request type: %T", req)
+		reqData, err := extractRequestData(req)
+		if err != nil {
+			return nil, err
 		}
 
-		if reqContext == nil {
-			return nil, status.Errorf(codes.Unauthenticated, "missing requester context")
+		if reqData.requesterContext == nil {
+			return nil, status.Error(codes.Unauthenticated, "missing requester context")
 		}
 
-		isAuthorized, reason := authorizer.Authorize(ctx, reqContext, attrs, info.FullMethod)
-		if !isAuthorized {
+		if isAuthorized, reason := authorizer.Authorize(
+			ctx,
+			reqData.requesterContext,
+			reqData.accessAttributes,
+			info.FullMethod,
+			reqData.keyID,
+		); !isAuthorized {
 			return nil, status.Errorf(codes.PermissionDenied, "permission denied: %s", reason)
 		}
 
 		return handler(ctx, req)
 	}
+}
+
+func extractRequestData(req any) (*requestData, error) {
+	data := &requestData{}
+
+	rcReq, ok := req.(requesterContextGetter)
+	if !ok {
+		return nil, status.Errorf(codes.Unimplemented, "unsupported request type: %T", req)
+	}
+	data.requesterContext = rcReq.GetRequesterContext()
+
+	if keyReq, ok := req.(keyIDGetter); ok {
+		if err := setKeyFields(data, keyReq); err != nil {
+			return nil, err
+		}
+	}
+
+	return data, nil
+}
+
+func setKeyFields(data *requestData, keyReq keyIDGetter) error {
+	keyIDStr := keyReq.GetKeyId()
+	if keyIDStr == "" {
+		return nil
+	}
+
+	parsedID, err := domain.KeyIDFromString(keyIDStr)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+	}
+
+	data.keyID = parsedID
+	data.accessAttributes = &pk.AccessAttributes{Environment: keyIDStr}
+	return nil
 }

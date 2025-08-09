@@ -7,5 +7,5 @@ import (
 )
 
 type Authorizer interface {
-	Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string) (bool, string)
+	Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string, keyID KeyID) (bool, string)
 }

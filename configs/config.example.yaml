@@ -1,6 +1,10 @@
 server:
   port: "<your-server-port>"
   mode: "<your-environment>"
+  tls:
+    enabled: <true-or-false>
+    cert_file: "<path-to-your-cert-file>"
+    key_file: "<path-to-your-key-file>"
 
 persistence:
   type: "neondb" # can be "neondb", "s3", or "cockroachdb"

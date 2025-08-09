@@ -25,7 +25,7 @@ func main() {
 	}
 
 	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
-	authorizer := auth.NewAuthorizer(cfg.Authorization)
+	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo)
 	auditLogger := audit.NewAuditLogger(slog.Default(), auditRepo)
 
 	srv, port, err := grpc.New(cfg, keyService, authorizer, auditLogger, slog.Default())

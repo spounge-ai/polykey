@@ -51,6 +51,7 @@ CMD ["make", "test"]
 FROM gcr.io/distroless/static-debian12:nonroot AS production
 COPY --from=builder /app/bin/polykey /polykey
 COPY --from=builder /bin/grpc_health_probe /bin/grpc_health_probe
+COPY certs /etc/polykey/certs
 EXPOSE 50051
 ENTRYPOINT ["/polykey"]
 
@@ -61,6 +62,7 @@ RUN apk --no-cache add ca-certificates && \
 WORKDIR /app
 COPY --from=builder /bin/grpc_health_probe /bin/
 COPY --from=builder /app/bin/polykey .
+COPY certs /etc/polykey/certs
 EXPOSE 50051
 USER appuser:appgroup
 ENTRYPOINT ["./polykey"]

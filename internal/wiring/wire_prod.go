@@ -63,8 +63,7 @@ func provideKeyRepository(cfg *infra_config.Config) (domain.KeyRepository, error
 		return provideS3Storage(cfg)
 	case "neondb":
 		return provideNeonDBStorage(cfg)
-	case "cockroachdb":
-		return provideCockroachDBStorage(cfg)
+	
 	default:
 		return nil, fmt.Errorf("invalid persistence type: %s", cfg.Persistence.Type)
 	}
@@ -86,13 +85,7 @@ func provideNeonDBStorage(cfg *infra_config.Config) (domain.KeyRepository, error
 	return persistence.NewNeonDBStorage(dbpool)
 }
 
-func provideCockroachDBStorage(cfg *infra_config.Config) (domain.KeyRepository, error) {
-	dbpool, err := pgxpool.New(context.Background(), cfg.CockroachDB.URL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)
-	}
-	return persistence.NewCockroachDBStorage(dbpool)
-}
+
 
 func provideAuditRepository(cfg *infra_config.Config) (domain.AuditRepository, error) {
 	dbpool, err := pgxpool.New(context.Background(), cfg.NeonDB.URL)

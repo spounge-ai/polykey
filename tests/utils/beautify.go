@@ -25,8 +25,6 @@ type state struct {
 	failures      []string
 	passes        int
 	tests         map[string]time.Time
-	createdKeyHex string
-	retrievedKeyHex string
 }
 
 func PrintJestReport(logData string) bool {
@@ -63,9 +61,7 @@ func PrintJestReport(logData string) bool {
 		}
 	}
 
-	if isAppOutput {
-		verifyKeys(s)
-	}
+	
 
 	printSummary(s)
 	return len(s.failures) > 0
@@ -94,15 +90,13 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		details := fmt.Sprintf("keyId=%v", entry["keyId"])
 		printStep("PASS", "CreateKey", details)
 		s.passes++
-		s.createdKeyHex, _ = entry["plaintextKey"].(string)
-		fmt.Printf("      %s└─ Plaintext Key: %s%s%s\n", ColorGray, ColorCyan, s.createdKeyHex, ColorReset)
+		
 	case "GetKey successful":
 		printSuiteHeader(&s.currentSuite, "EXECUTION")
 		details := fmt.Sprintf("keyId=%v", entry["keyId"])
 		printStep("PASS", "GetKey", details)
 		s.passes++
-		s.retrievedKeyHex, _ = entry["plaintextKey"].(string)
-		fmt.Printf("      %s└─ Plaintext Key: %s%s%s\n", ColorGray, ColorCyan, s.retrievedKeyHex, ColorReset)
+		
 	case "RotateKey successful":
 		printSuiteHeader(&s.currentSuite, "EXECUTION")
 		details := fmt.Sprintf("keyId=%v, newVersion=%v", entry["keyId"], entry["newVersion"])
@@ -114,7 +108,7 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		printStep("PASS", "ListKeys", details)
 		s.passes++
 
-	case "CreateKey failed", "GetKey failed", "HealthCheck failed", "gRPC connection failed", "RotateKey failed", "ListKeys failed":
+	case "CreateKey failed", "GetKey failed", "HealthCheck failed", "gRPC connection failed", "RotateKey failed", "ListKeys failed", "failed to load TLS credentials":
 		printSuiteHeader(&s.currentSuite, "ERROR")
 		details := fmt.Sprintf("%v", entry["error"])
 		printStep("FAIL", msg, details)
@@ -122,17 +116,7 @@ func processAppLogEntry(entry LogEntry, s *state) {
 	}
 }
 
-func verifyKeys(s *state) {
-	printSuiteHeader(&s.currentSuite, "VERIFICATION")
-	if s.createdKeyHex != "" && s.createdKeyHex == s.retrievedKeyHex {
-		printStep("PASS", "Key Consistency Check", "Created and retrieved keys match")
-		s.passes++
-	} else {
-		details := fmt.Sprintf("Created: %s, Retrieved: %s", s.createdKeyHex, s.retrievedKeyHex)
-		printStep("FAIL", "Key Consistency Check", details)
-		s.failures = append(s.failures, "Key consistency check failed")
-	}
-}
+
 
 func processGoTestEntry(entry LogEntry, s *state) {
 	action, _ := entry["Action"].(string)

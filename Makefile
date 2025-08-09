@@ -43,7 +43,7 @@ client-debug:
 
 migrate:
 	@echo "Running database migrations..."
-	@POLYKEY_CONFIG_PATH=$(CONFIG_MINIMAL) go run cmd/utils/migrate.go -force
+	@POLYKEY_CONFIG_PATH=$(CONFIG_MINIMAL) go run cmd/utils/migrate.go
 
 coverage:
 	@echo "Displaying test coverage..."

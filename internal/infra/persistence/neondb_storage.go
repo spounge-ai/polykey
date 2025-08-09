@@ -20,9 +20,9 @@ func NewNeonDBStorage(db *pgxpool.Pool) (*NeonDBStorage, error) {
 	return &NeonDBStorage{db: db}, nil
 }
 
-func (s *NeonDBStorage) GetKey(ctx context.Context, id string) (*domain.Key, error) {
+func (s *NeonDBStorage) GetKey(ctx context.Context, id domain.KeyID) (*domain.Key, error) {
 	query := `SELECT version, metadata, encrypted_dek, status, created_at, updated_at, revoked_at FROM keys WHERE id = $1 ORDER BY version DESC LIMIT 1`
-	row := s.db.QueryRow(ctx, query, id)
+	row := s.db.QueryRow(ctx, query, id.String())
 
 	var key domain.Key
 	var metadataRaw []byte
@@ -40,9 +40,9 @@ func (s *NeonDBStorage) GetKey(ctx context.Context, id string) (*domain.Key, err
 	return &key, nil
 }
 
-func (s *NeonDBStorage) GetKeyByVersion(ctx context.Context, id string, version int32) (*domain.Key, error) {
+func (s *NeonDBStorage) GetKeyByVersion(ctx context.Context, id domain.KeyID, version int32) (*domain.Key, error) {
 	query := `SELECT metadata, encrypted_dek, status, created_at, updated_at, revoked_at FROM keys WHERE id = $1 AND version = $2`
-	row := s.db.QueryRow(ctx, query, id, version)
+	row := s.db.QueryRow(ctx, query, id.String(), version)
 
 	var key domain.Key
 	var metadataRaw []byte
@@ -67,8 +67,8 @@ func (s *NeonDBStorage) CreateKey(ctx context.Context, key *domain.Key, isPremiu
 		return err
 	}
 
-	query := `INSERT INTO keys (id, version, metadata, encrypted_dek, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`
-	_, err = s.db.Exec(ctx, query, key.ID, key.Version, metadataRaw, key.EncryptedDEK, key.Status, key.CreatedAt, key.UpdatedAt)
+	query := `INSERT INTO keys (id, version, metadata, encrypted_dek, status, created_at, updated_at, is_premium) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	_, err = s.db.Exec(ctx, query, key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK, key.Status, key.CreatedAt, key.UpdatedAt, isPremium)
 	return err
 }
 
@@ -84,7 +84,13 @@ func (s *NeonDBStorage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
 	for rows.Next() {
 		var key domain.Key
 		var metadataRaw []byte
-		err := rows.Scan(&key.ID, &key.Version, &metadataRaw, &key.EncryptedDEK, &key.Status, &key.CreatedAt, &key.UpdatedAt, &key.RevokedAt)
+		var idStr string
+		err := rows.Scan(&idStr, &key.Version, &metadataRaw, &key.EncryptedDEK, &key.Status, &key.CreatedAt, &key.UpdatedAt, &key.RevokedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		key.ID, err = domain.KeyIDFromString(idStr)
 		if err != nil {
 			return nil, err
 		}
@@ -99,18 +105,18 @@ func (s *NeonDBStorage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
 	return keys, nil
 }
 
-func (s *NeonDBStorage) UpdateKeyMetadata(ctx context.Context, id string, metadata *pk.KeyMetadata) error {
+func (s *NeonDBStorage) UpdateKeyMetadata(ctx context.Context, id domain.KeyID, metadata *pk.KeyMetadata) error {
 	metadataRaw, err := json.Marshal(metadata)
 	if err != nil {
 		return err
 	}
 
 	query := `UPDATE keys SET metadata = $1, updated_at = $2 WHERE id = $3`
-	_, err = s.db.Exec(ctx, query, metadataRaw, time.Now(), id)
+	_, err = s.db.Exec(ctx, query, metadataRaw, time.Now(), id.String())
 	return err
 }
 
-func (s *NeonDBStorage) RotateKey(ctx context.Context, id string, newEncryptedDEK []byte) (*domain.Key, error) {
+func (s *NeonDBStorage) RotateKey(ctx context.Context, id domain.KeyID, newEncryptedDEK []byte) (*domain.Key, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -125,7 +131,7 @@ func (s *NeonDBStorage) RotateKey(ctx context.Context, id string, newEncryptedDE
 	var metadataRaw []byte
 	var isPremium bool
 	query := `SELECT version, metadata, is_premium FROM keys WHERE id = $1 ORDER BY version DESC LIMIT 1`
-	err = tx.QueryRow(ctx, query, id).Scan(&currentVersion, &metadataRaw, &isPremium)
+	err = tx.QueryRow(ctx, query, id.String()).Scan(&currentVersion, &metadataRaw, &isPremium)
 	if err != nil {
 		return nil, err
 	}
@@ -145,8 +151,8 @@ func (s *NeonDBStorage) RotateKey(ctx context.Context, id string, newEncryptedDE
 		return nil, err
 	}
 
-	insertQuery := `INSERT INTO keys (id, version, metadata, encrypted_dek, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`
-	_, err = tx.Exec(ctx, insertQuery, id, newVersion, newMetadataRaw, newEncryptedDEK, domain.KeyStatusActive, now, now)
+	insertQuery := `INSERT INTO keys (id, version, metadata, encrypted_dek, status, created_at, updated_at, is_premium) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	_, err = tx.Exec(ctx, insertQuery, id.String(), newVersion, newMetadataRaw, newEncryptedDEK, domain.KeyStatusActive, now, now, isPremium)
 	if err != nil {
 		return nil, err
 	}
@@ -166,15 +172,15 @@ func (s *NeonDBStorage) RotateKey(ctx context.Context, id string, newEncryptedDE
 	}, nil
 }
 
-func (s *NeonDBStorage) RevokeKey(ctx context.Context, id string) error {
+func (s *NeonDBStorage) RevokeKey(ctx context.Context, id domain.KeyID) error {
 	query := `UPDATE keys SET status = $1, revoked_at = $2 WHERE id = $3`
-	_, err := s.db.Exec(ctx, query, domain.KeyStatusRevoked, time.Now(), id)
+	_, err := s.db.Exec(ctx, query, domain.KeyStatusRevoked, time.Now(), id.String())
 	return err
 }
 
-func (s *NeonDBStorage) GetKeyVersions(ctx context.Context, id string) ([]*domain.Key, error) {
+func (s *NeonDBStorage) GetKeyVersions(ctx context.Context, id domain.KeyID) ([]*domain.Key, error) {
 	query := `SELECT id, version, metadata, encrypted_dek, status, created_at, updated_at, revoked_at FROM keys WHERE id = $1 ORDER BY version DESC`
-	rows, err := s.db.Query(ctx, query, id)
+	rows, err := s.db.Query(ctx, query, id.String())
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +190,13 @@ func (s *NeonDBStorage) GetKeyVersions(ctx context.Context, id string) ([]*domai
 	for rows.Next() {
 		var key domain.Key
 		var metadataRaw []byte
-		err := rows.Scan(&key.ID, &key.Version, &metadataRaw, &key.EncryptedDEK, &key.Status, &key.CreatedAt, &key.UpdatedAt, &key.RevokedAt)
+		var idStr string
+		err := rows.Scan(&idStr, &key.Version, &metadataRaw, &key.EncryptedDEK, &key.Status, &key.CreatedAt, &key.UpdatedAt, &key.RevokedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		key.ID, err = domain.KeyIDFromString(idStr)
 		if err != nil {
 			return nil, err
 		}

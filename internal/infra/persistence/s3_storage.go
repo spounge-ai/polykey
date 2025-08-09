@@ -41,13 +41,13 @@ type s3KeyObject struct {
 	UpdatedAt     int64           `json:"updated_at"`
 }
 
-func (s *S3Storage) GetKey(ctx context.Context, id string) (*domain.Key, error) {
-	keyPath := fmt.Sprintf("keys/%s/latest.json", id)
+func (s *S3Storage) GetKey(ctx context.Context, id domain.KeyID) (*domain.Key, error) {
+	keyPath := fmt.Sprintf("keys/%s/latest.json", id.String())
 	return s.getKeyFromPath(ctx, keyPath)
 }
 
-func (s *S3Storage) GetKeyByVersion(ctx context.Context, id string, version int32) (*domain.Key, error) {
-	keyPath := fmt.Sprintf("keys/%s/v%d.json", id, version)
+func (s *S3Storage) GetKeyByVersion(ctx context.Context, id domain.KeyID, version int32) (*domain.Key, error) {
+	keyPath := fmt.Sprintf("keys/%s/v%d.json", id.String(), version)
 	return s.getKeyFromPath(ctx, keyPath)
 }
 
@@ -74,8 +74,13 @@ func (s *S3Storage) getKeyFromPath(ctx context.Context, path string) (*domain.Ke
 		return nil, fmt.Errorf("failed to decode key object from S3: %w", err)
 	}
 
+	id, err := domain.KeyIDFromString(keyObj.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &domain.Key{
-		ID:           keyObj.ID,
+		ID:           id,
 		EncryptedDEK: keyObj.EncryptedDEK,
 		Metadata:     keyObj.Metadata,
 		Version:      keyObj.Version,
@@ -87,7 +92,7 @@ func (s *S3Storage) getKeyFromPath(ctx context.Context, path string) (*domain.Ke
 
 func (s *S3Storage) putKey(ctx context.Context, key *domain.Key) error {
 	keyObj := s3KeyObject{
-		ID:           key.ID,
+		ID:           key.ID.String(),
 		EncryptedDEK: key.EncryptedDEK,
 		Metadata:     key.Metadata,
 		Version:      key.Version,
@@ -101,7 +106,7 @@ func (s *S3Storage) putKey(ctx context.Context, key *domain.Key) error {
 		return fmt.Errorf("failed to marshal key object: %w", err)
 	}
 
-	versionPath := fmt.Sprintf("keys/%s/v%d.json", key.ID, key.Version)
+	versionPath := fmt.Sprintf("keys/%s/v%d.json", key.ID.String(), key.Version)
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &s.bucketName,
 		Key:    &versionPath,
@@ -111,7 +116,7 @@ func (s *S3Storage) putKey(ctx context.Context, key *domain.Key) error {
 		return fmt.Errorf("failed to put versioned key object to S3: %w", err)
 	}
 
-	latestPath := fmt.Sprintf("keys/%s/latest.json", key.ID)
+	latestPath := fmt.Sprintf("keys/%s/latest.json", key.ID.String())
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &s.bucketName,
 		Key:    &latestPath,
@@ -144,7 +149,12 @@ func (s *S3Storage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
 		}
 
 		for _, obj := range page.CommonPrefixes {
-			keyID := strings.TrimSuffix(strings.TrimPrefix(*obj.Prefix, prefix), "/")
+			keyIDStr := strings.TrimSuffix(strings.TrimPrefix(*obj.Prefix, prefix), "/")
+			keyID, err := domain.KeyIDFromString(keyIDStr)
+			if err != nil {
+				s.logger.Error("failed to parse key id while listing", "keyID", keyIDStr, "error", err)
+				continue
+			}
 			key, err := s.GetKey(ctx, keyID)
 			if err != nil {
 				s.logger.Error("failed to get key while listing", "keyID", keyID, "error", err)
@@ -157,7 +167,7 @@ func (s *S3Storage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
 	return keys, nil
 }
 
-func (s *S3Storage) UpdateKeyMetadata(ctx context.Context, id string, metadata *pk.KeyMetadata) error {
+func (s *S3Storage) UpdateKeyMetadata(ctx context.Context, id domain.KeyID, metadata *pk.KeyMetadata) error {
 	latestKey, err := s.GetKey(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to get key for update: %w", err)
@@ -169,7 +179,7 @@ func (s *S3Storage) UpdateKeyMetadata(ctx context.Context, id string, metadata *
 	return s.putKey(ctx, latestKey)
 }
 
-func (s *S3Storage) RotateKey(ctx context.Context, id string, newEncryptedDEK []byte) (*domain.Key, error) {
+func (s *S3Storage) RotateKey(ctx context.Context, id domain.KeyID, newEncryptedDEK []byte) (*domain.Key, error) {
 	latestKey, err := s.GetKey(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get key for rotation: %w", err)
@@ -195,7 +205,7 @@ func (s *S3Storage) RotateKey(ctx context.Context, id string, newEncryptedDEK []
 	return rotatedKey, nil
 }
 
-func (s *S3Storage) RevokeKey(ctx context.Context, id string) error {
+func (s *S3Storage) RevokeKey(ctx context.Context, id domain.KeyID) error {
 	latestKey, err := s.GetKey(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to get key for revocation: %w", err)
@@ -207,8 +217,8 @@ func (s *S3Storage) RevokeKey(ctx context.Context, id string) error {
 	return s.putKey(ctx, latestKey)
 }
 
-func (s *S3Storage) GetKeyVersions(ctx context.Context, id string) ([]*domain.Key, error) {
-	prefix := fmt.Sprintf("keys/%s/v", id)
+func (s *S3Storage) GetKeyVersions(ctx context.Context, id domain.KeyID) ([]*domain.Key, error) {
+	prefix := fmt.Sprintf("keys/%s/v", id.String())
 	input := &s3.ListObjectsV2Input{
 		Bucket: &s.bucketName,
 		Prefix: &prefix,

@@ -3,17 +3,15 @@ package main
 import (
 	"bytes"
 	"context"
-	
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/spounge-ai/polykey/tests/utils"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/emptypb"
-
-	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
 func main() {
@@ -48,20 +46,22 @@ func main() {
 
 	c := pk.NewPolykeyServiceClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	r, err := c.HealthCheck(ctx, &emptypb.Empty{})
 	if err != nil {
 		logger.Error("HealthCheck failed", "error", err)
+	} else {
+		logger.Info("HealthCheck successful", "status", r.GetStatus().String(), "version", r.GetServiceVersion())
 	}
-	logger.Info("HealthCheck successful", "status", r.GetStatus().String(), "version", r.GetServiceVersion())
 
 	createKeyReq := &pk.CreateKeyRequest{
-		KeyType:          pk.KeyType_KEY_TYPE_AES_256,
-		RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
-		Description:      "A key created by the dev client",
-		Tags:             map[string]string{"source": "dev_client"},
+		KeyType:                   pk.KeyType_KEY_TYPE_AES_256,
+		RequesterContext:          &pk.RequesterContext{ClientIdentity: "admin"},
+		InitialAuthorizedContexts: []string{"admin"}, // Authorize the admin to use this key
+		Description:               "A key created by the dev client",
+		Tags:                      map[string]string{"source": "dev_client"},
 	}
 	createKeyResp, err := c.CreateKey(ctx, createKeyReq)
 	if err != nil {
@@ -71,34 +71,34 @@ func main() {
 			"keyId", createKeyResp.GetMetadata().GetKeyId(),
 			"keyType", createKeyResp.GetMetadata().GetKeyType().String(),
 		)
-	}
 
-	newKeyId := createKeyResp.GetMetadata().GetKeyId()
-	getKeyReq := &pk.GetKeyRequest{
-		KeyId:            newKeyId,
-		RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
-	}
-	getKeyResp, err := c.GetKey(ctx, getKeyReq)
-	if err != nil {
-		logger.Error("GetKey failed", "error", err)
-	} else {
-		logger.Info("GetKey successful",
-			"keyId", getKeyResp.GetMetadata().GetKeyId(),
-		)
-	}
+		newKeyId := createKeyResp.GetMetadata().GetKeyId()
+		getKeyReq := &pk.GetKeyRequest{
+			KeyId:            newKeyId,
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
+		}
+		getKeyResp, err := c.GetKey(ctx, getKeyReq)
+		if err != nil {
+			logger.Error("GetKey failed", "error", err)
+		} else {
+			logger.Info("GetKey successful",
+				"keyId", getKeyResp.GetMetadata().GetKeyId(),
+			)
+		}
 
-	rotateKeyReq := &pk.RotateKeyRequest{
-		KeyId:            newKeyId,
-		RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
-	}
-	rotateKeyResp, err := c.RotateKey(ctx, rotateKeyReq)
-	if err != nil {
-		logger.Error("RotateKey failed", "error", err)
-	} else {
-		logger.Info("RotateKey successful",
-			"keyId", rotateKeyResp.GetKeyId(),
-			"newVersion", rotateKeyResp.GetNewVersion(),
-		)
+		rotateKeyReq := &pk.RotateKeyRequest{
+			KeyId:            newKeyId,
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
+		}
+		rotateKeyResp, err := c.RotateKey(ctx, rotateKeyReq)
+		if err != nil {
+			logger.Error("RotateKey failed", "error", err)
+		} else {
+			logger.Info("RotateKey successful",
+				"keyId", rotateKeyResp.GetKeyId(),
+				"newVersion", rotateKeyResp.GetNewVersion(),
+			)
+		}
 	}
 
 	listKeysResp, err := c.ListKeys(ctx, &pk.ListKeysRequest{RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"}})

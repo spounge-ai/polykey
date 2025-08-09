@@ -105,7 +105,7 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 	defer cleanup()
 
 	t.Run("GetKey - Authorized", func(t *testing.T) {
-		keyID := "test_key_123"
+		keyID := "f47ac10b-58cc-4372-a567-0e02b2c3d479"
 		resp, err := client.GetKey(context.Background(), &pk.GetKeyRequest{
 			KeyId:            keyID,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
@@ -127,7 +127,7 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 	})
 
 	t.Run("GetKeyMetadata - Authorized", func(t *testing.T) {
-		keyID := "test_key_for_metadata"
+		keyID := "a47ac10b-58cc-4372-a567-0e02b2c3d479"
 		resp, err := client.GetKeyMetadata(context.Background(), &pk.GetKeyMetadataRequest{
 			KeyId:                keyID,
 			RequesterContext:     &pk.RequesterContext{ClientIdentity: "test_client"},
@@ -147,7 +147,7 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 	defer cleanup()
 
 	t.Run("GetKey - Unauthorized", func(t *testing.T) {
-		keyID := "restricted_key"
+		keyID := "c47ac10b-58cc-4372-a567-0e02b2c3d479"
 		_, err := client.GetKey(context.Background(), &pk.GetKeyRequest{
 			KeyId:            keyID,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
@@ -168,7 +168,7 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 	})
 
 	t.Run("GetKeyMetadata - Unauthorized", func(t *testing.T) {
-		keyID := "test_key_for_metadata"
+		keyID := "d47ac10b-58cc-4372-a567-0e02b2c3d479"
 		_, err := client.GetKeyMetadata(context.Background(), &pk.GetKeyMetadataRequest{
 			KeyId:            keyID,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "unknown_client"},
