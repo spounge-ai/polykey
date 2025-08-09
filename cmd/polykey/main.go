@@ -19,14 +19,14 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	kmsProviders, keyRepo, err := wiring.ProvideDependencies(cfg)
+	kmsProviders, keyRepo, auditRepo, err := wiring.ProvideDependencies(cfg)
 	if err != nil {
 		log.Fatalf("failed to provide dependencies: %v", err)
 	}
 
 	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
-	authorizer := auth.NewAuthorizer()
-	auditLogger := audit.NewAuditLogger(slog.Default(), nil) // nil for audit repo for now
+	authorizer := auth.NewAuthorizer(cfg.Authorization)
+	auditLogger := audit.NewAuditLogger(slog.Default(), auditRepo)
 
 	srv, port, err := grpc.New(cfg, keyService, authorizer, auditLogger, slog.Default())
 	if err != nil {

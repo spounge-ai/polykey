@@ -30,3 +30,20 @@ cockroachdb:
   url: "<your-cockroachdb-connection-string>"
 
 LOCAL_MASTER_KEY: "<your-local-master-key>"
+
+authorization:
+  roles:
+    admin:
+      allowed_operations:
+        - "/polykey.v2.PolykeyService/CreateKey"
+        - "/polykey.v2.PolykeyService/RotateKey"
+        - "/polykey.v2.PolykeyService/RevokeKey"
+        - "/polykey.v2.PolykeyService/UpdateKeyMetadata"
+        - "/polykey.v2.PolykeyService/GetKey"
+        - "/polykey.v2.PolykeyService/GetKeyMetadata"
+        - "/polykey.v2.PolykeyService/ListKeys"
+    user:
+      allowed_operations:
+        - "/polykey.v2.PolykeyService/GetKey"
+        - "/polykey.v2.PolykeyService/GetKeyMetadata"
+        - "/polykey.v2.PolykeyService/ListKeys"

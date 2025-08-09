@@ -18,10 +18,19 @@ type Config struct {
 	CockroachDB    *CockroachDBConfig   `mapstructure:"cockroachdb"`
 	Vault          *VaultConfig         `mapstructure:"vault"`
 	AWS            *AWSConfig           `mapstructure:"aws"`
+	Authorization  AuthorizationConfig  `mapstructure:"authorization"`
 	StorageBackend string               `mapstructure:"storage_backend"`
 	LocalMasterKey string               `mapstructure:"local_master_key"`
 	ServiceVersion string
 	BuildCommit    string
+}
+
+type AuthorizationConfig struct {
+	Roles map[string]RoleConfig `mapstructure:"roles"`
+}
+
+type RoleConfig struct {
+	AllowedOperations []string `mapstructure:"allowed_operations"`
 }
 
 type PersistenceConfig struct {

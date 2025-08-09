@@ -15,18 +15,23 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 )
 
-func ProvideDependencies(cfg *infra_config.Config) (map[string]kms.KMSProvider, domain.KeyRepository, error) {
+func ProvideDependencies(cfg *infra_config.Config) (map[string]kms.KMSProvider, domain.KeyRepository, domain.AuditRepository, error) {
 	kmsProviders, err := provideKMSProviders(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	keyRepo, err := provideKeyRepository(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return kmsProviders, keyRepo, nil
+	auditRepo, err := provideAuditRepository(cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return kmsProviders, keyRepo, auditRepo, nil
 }
 
 func provideKMSProviders(cfg *infra_config.Config) (map[string]kms.KMSProvider, error) {
@@ -87,4 +92,12 @@ func provideCockroachDBStorage(cfg *infra_config.Config) (domain.KeyRepository, 
 		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)
 	}
 	return persistence.NewCockroachDBStorage(dbpool)
+}
+
+func provideAuditRepository(cfg *infra_config.Config) (domain.AuditRepository, error) {
+	dbpool, err := pgxpool.New(context.Background(), cfg.NeonDB.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)
+	}
+	return persistence.NewAuditRepository(dbpool)
 }

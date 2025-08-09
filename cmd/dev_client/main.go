@@ -3,14 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
-	"fmt"
+	
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/spounge-ai/polykey/tests/utils"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
@@ -26,7 +26,14 @@ func main() {
 	}
 	logger.Info("Configuration loaded", "server", "localhost:"+port)
 
-	conn, err := grpc.NewClient("localhost:"+port, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	creds, err := credentials.NewClientTLSFromFile("certs/cert.pem", "")
+	if err != nil {
+		logger.Error("failed to load TLS credentials", "error", err)
+		utils.PrintJestReport(logBuf.String())
+		os.Exit(1)
+	}
+
+	conn, err := grpc.NewClient("localhost:"+port, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		logger.Error("gRPC connection failed", "error", err)
 		utils.PrintJestReport(logBuf.String())
@@ -63,7 +70,6 @@ func main() {
 		logger.Info("CreateKey successful",
 			"keyId", createKeyResp.GetMetadata().GetKeyId(),
 			"keyType", createKeyResp.GetMetadata().GetKeyType().String(),
-			"plaintextKey", fmt.Sprintf("%x", createKeyResp.GetKeyMaterial().GetEncryptedKeyData()),
 		)
 	}
 
@@ -78,7 +84,6 @@ func main() {
 	} else {
 		logger.Info("GetKey successful",
 			"keyId", getKeyResp.GetMetadata().GetKeyId(),
-			"plaintextKey", fmt.Sprintf("%x", getKeyResp.GetKeyMaterial().GetEncryptedKeyData()),
 		)
 	}
 
@@ -93,7 +98,6 @@ func main() {
 		logger.Info("RotateKey successful",
 			"keyId", rotateKeyResp.GetKeyId(),
 			"newVersion", rotateKeyResp.GetNewVersion(),
-			"plaintextKey", fmt.Sprintf("%x", rotateKeyResp.GetNewKeyMaterial().GetEncryptedKeyData()),
 		)
 	}
 

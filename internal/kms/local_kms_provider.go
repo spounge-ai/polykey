@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"io"
+	
 
 	"github.com/spounge-ai/polykey/internal/domain"
 )
@@ -39,7 +39,7 @@ func (p *LocalKMSProvider) EncryptDEK(ctx context.Context, key *domain.Key) ([]b
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
 

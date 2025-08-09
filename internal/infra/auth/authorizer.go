@@ -4,15 +4,18 @@ import (
 	"context"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/internal/infra/config"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
-func NewAuthorizer() domain.Authorizer {
-	return &realAuthorizer{}
+func NewAuthorizer(cfg config.AuthorizationConfig) domain.Authorizer {
+	return &realAuthorizer{cfg: cfg}
 }
 
 // realAuthorizer implements the Authorizer interface with simplified logic.
-type realAuthorizer struct{}
+type realAuthorizer struct{
+	cfg config.AuthorizationConfig
+}
 
 // Authorize performs a simplified authorization check.
 func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string) (bool, string) {
@@ -26,16 +29,16 @@ func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.Requester
 		role = "admin"
 	}
 
-	switch operation {
-	case "/polykey.v2.PolykeyService/CreateKey", "/polykey.v2.PolykeyService/RotateKey", "/polykey.v2.PolykeyService/RevokeKey", "/polykey.v2.PolykeyService/UpdateKeyMetadata":
-		if role != "admin" {
-			return false, "admin_required"
-		}
-	case "/polykey.v2.PolykeyService/GetKey", "/polykey.v2.PolykeyService/GetKeyMetadata", "/polykey.v2.PolykeyService/ListKeys":
-		// All roles can perform these operations
-	default:
-		return false, "unknown_operation"
+	roleConfig, ok := a.cfg.Roles[role]
+	if !ok {
+		return false, "invalid_role"
 	}
 
-	return true, "authorized"
+	for _, allowedOperation := range roleConfig.AllowedOperations {
+		if allowedOperation == operation {
+			return true, "authorized"
+		}
+	}
+
+	return false, "operation_not_allowed"
 }

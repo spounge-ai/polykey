@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -22,7 +21,7 @@ func main() {
 
 	// Read and display migration file content
 	fmt.Println("Migration file content:")
-	content, err := ioutil.ReadFile("migrations/001_create_keys_table.up.sql")
+	content, err := os.ReadFile("migrations/001_create_keys_table.up.sql")
 	if err != nil {
 		log.Fatalf("failed to read migration file: %v", err)
 	}
@@ -33,7 +32,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("failed to close database connection: %v", err)
+		}
+	}()
 
 	if err := db.Ping(); err != nil {
 		log.Fatalf("failed to ping database: %v", err)
@@ -85,7 +88,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create migration instance: %v", err)
 	}
-	defer m.Close()
+	defer func() {
+		sourceErr, dbErr := m.Close()
+		if sourceErr != nil {
+			log.Printf("failed to close migration source: %v", sourceErr)
+		}
+		if dbErr != nil {
+			log.Printf("failed to close migration database: %v", dbErr)
+		}
+	}()
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		log.Printf("migration failed: %v", err)
