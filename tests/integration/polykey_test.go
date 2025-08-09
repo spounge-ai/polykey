@@ -40,11 +40,11 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 			DBName:   "testdb",
 			SSLMode:  "disable",
 		},
-		Vault: infra_config.VaultConfig{
+		Vault: &infra_config.VaultConfig{
 			Address: "http://localhost:8200",
 			Token:   "testtoken",
 		},
-		AWS: infra_config.AWSConfig{
+		AWS: &infra_config.AWSConfig{
 			Region:    "us-east-1",
 			S3Bucket:  "test-bucket",
 			KMSKeyARN: "arn:aws:kms:us-east-1:123456789012:key/mrk-12345678901234567890123456789012",

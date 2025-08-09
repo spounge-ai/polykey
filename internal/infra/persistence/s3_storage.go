@@ -51,7 +51,7 @@ func (s *S3Storage) GetKeyByVersion(ctx context.Context, id string, version int3
 	return s.getKeyFromPath(ctx, keyPath)
 }
 
-func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key) error {
+func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key, isPremium bool) error {
 	return s.putKey(ctx, key)
 }
 

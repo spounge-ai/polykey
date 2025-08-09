@@ -4,9 +4,9 @@ CREATE TABLE IF NOT EXISTS keys (
     metadata JSONB,
     encrypted_dek BYTEA,
     status VARCHAR(50),
-    is_premium BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ,
     revoked_at TIMESTAMPTZ,
+    is_premium BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (id, version)
 );

@@ -43,7 +43,7 @@ client-debug:
 
 migrate:
 	@echo "Running database migrations..."
-	@POLYKEY_CONFIG_PATH=$(CONFIG_MINIMAL) go run cmd/utils/migrate.go
+	@POLYKEY_CONFIG_PATH=$(CONFIG_MINIMAL) go run cmd/utils/migrate.go -force
 
 coverage:
 	@echo "Displaying test coverage..."
@@ -91,12 +91,12 @@ server-minimal: kill build ## Run server with minimal config
 
 client: build ## Run client
 	@if ! nc -z localhost $(PORT) 2>/dev/null; then \
-		echo "$(YELLOW)Server not running, starting...$(RESET)"; \
-		$(MAKE) server; \
-		sleep 2; \
+		echo "$(YELLOW)Server not running, please start it with 'make server-minimal' or 'make server-test'$(RESET)"; \
+		exit 1; \
 	fi
 	@echo "$(CYAN)Starting client...$(RESET)"
 	@POLYKEY_GRPC_PORT=$(PORT) $(CLIENT_BINARY)
+
 
 # ============================================================================ 
 # Test Targets
@@ -117,6 +117,10 @@ test-integration: ## Run integration tests
 test-persistence: ## Run persistence tests
 	@echo "$(CYAN)Running persistence tests...$(RESET)"
 	@POLYKEY_CONFIG_PATH=../../configs/config.minimal.yaml go test -v ./internal/infra/persistence/...
+
+test-cockroachdb: ## Run CockroachDB persistence tests
+	@echo "$(CYAN)Running CockroachDB persistence tests...$(RESET)"
+	@POLYKEY_CONFIG_PATH=../../configs/config.minimal.yaml go test -v ./tests/integration/persistence_cockroachdb_test.go
 
 # ============================================================================ 
 # Cleanup Targets

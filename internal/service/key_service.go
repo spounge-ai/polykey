@@ -53,7 +53,7 @@ func (s *keyServiceImpl) getKMSProvider(key *domain.Key) (kms.KMSProvider, error
 	if key == nil {
 		return nil, fmt.Errorf("key is nil")
 	}
-	if key.IsPremium() {
+	if key.GetTier() == domain.TierPro || key.GetTier() == domain.TierEnterprise {
 		provider, ok := s.kmsProviders["aws"]
 		if !ok {
 			return nil, fmt.Errorf("aws kms provider not found")
@@ -189,7 +189,7 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	}
 	newKey.EncryptedDEK = encryptedDEK
 
-	if err := s.keyRepo.CreateKey(ctx, newKey); err != nil {
+	if err := s.keyRepo.CreateKey(ctx, newKey, newKey.GetTier() == domain.TierPro || newKey.GetTier() == domain.TierEnterprise); err != nil {
 		s.logger.ErrorContext(ctx, "failed to create key", "keyId", keyID, "error", err)
 		return nil, fmt.Errorf("failed to create key: %w", err)
 	}

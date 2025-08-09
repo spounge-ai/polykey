@@ -61,14 +61,14 @@ func (s *NeonDBStorage) GetKeyByVersion(ctx context.Context, id string, version 
 	return &key, nil
 }
 
-func (s *NeonDBStorage) CreateKey(ctx context.Context, key *domain.Key) error {
+func (s *NeonDBStorage) CreateKey(ctx context.Context, key *domain.Key, isPremium bool) error {
 	metadataRaw, err := json.Marshal(key.Metadata)
 	if err != nil {
 		return err
 	}
 
-	query := `INSERT INTO keys (id, version, metadata, encrypted_dek, status, is_premium, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-	_, err = s.db.Exec(ctx, query, key.ID, key.Version, metadataRaw, key.EncryptedDEK, key.Status, key.IsPremium(), key.CreatedAt, key.UpdatedAt)
+	query := `INSERT INTO keys (id, version, metadata, encrypted_dek, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	_, err = s.db.Exec(ctx, query, key.ID, key.Version, metadataRaw, key.EncryptedDEK, key.Status, key.CreatedAt, key.UpdatedAt)
 	return err
 }
 
@@ -145,8 +145,8 @@ func (s *NeonDBStorage) RotateKey(ctx context.Context, id string, newEncryptedDE
 		return nil, err
 	}
 
-	insertQuery := `INSERT INTO keys (id, version, metadata, encrypted_dek, status, is_premium, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-	_, err = tx.Exec(ctx, insertQuery, id, newVersion, newMetadataRaw, newEncryptedDEK, domain.KeyStatusActive, isPremium, now, now)
+	insertQuery := `INSERT INTO keys (id, version, metadata, encrypted_dek, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	_, err = tx.Exec(ctx, insertQuery, id, newVersion, newMetadataRaw, newEncryptedDEK, domain.KeyStatusActive, now, now)
 	if err != nil {
 		return nil, err
 	}

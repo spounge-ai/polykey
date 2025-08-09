@@ -50,8 +50,8 @@ func (m *MockS3Storage) GetKeyByVersion(ctx context.Context, id string, version 
 	return nil, fmt.Errorf("mock: key not found with id: %s and version: %d", id, version)
 }
 
-func (m *MockS3Storage) CreateKey(ctx context.Context, key *domain.Key) error {
-	log.Printf("MockS3Storage: CreateKey called for key id: %s", key.ID)
+func (m *MockS3Storage) CreateKey(ctx context.Context, key *domain.Key, isPremium bool) error {
+	log.Printf("MockS3Storage: CreateKey called for key id: %s, isPremium: %t", key.ID, isPremium)
 	return nil
 }
 

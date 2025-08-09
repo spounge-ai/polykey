@@ -13,26 +13,26 @@ import (
 type Config struct {
 	Server         ServerConfig         `mapstructure:"server"`
 	Persistence    PersistenceConfig    `mapstructure:"persistence"`
-	Database       DatabaseConfig       `mapstructure:"database" validate:"required"`
-	NeonDB         NeonDBConfig         `mapstructure:"neondb"   validate:"required"`
-	CockroachDB    CockroachDBConfig    `mapstructure:"cockroachdb" validate:"required"`
-	Vault          VaultConfig          `mapstructure:"vault"    validate:"required"`
-	AWS            AWSConfig            `mapstructure:"aws"      validate:"required"`
+	Database       DatabaseConfig       `mapstructure:"database"`
+	NeonDB         *NeonDBConfig        `mapstructure:"neondb"`
+	CockroachDB    *CockroachDBConfig   `mapstructure:"cockroachdb"`
+	Vault          *VaultConfig         `mapstructure:"vault"`
+	AWS            *AWSConfig           `mapstructure:"aws"`
 	StorageBackend string               `mapstructure:"storage_backend"`
 	LocalMasterKey string               `mapstructure:"local_master_key"`
 	ServiceVersion string
 	BuildCommit    string
 }
 
-type CockroachDBConfig struct {
-	URL string `mapstructure:"url" validate:"required,url"`
-}
-
 type PersistenceConfig struct {
-	Type string `mapstructure:"type" validate:"required,oneof=s3 neondb"`
+	Type string `mapstructure:"type" validate:"required,oneof=s3 neondb cockroachdb"`
 }
 
 type NeonDBConfig struct {
+	URL string `mapstructure:"url" validate:"required,url"`
+}
+
+type CockroachDBConfig struct {
 	URL string `mapstructure:"url" validate:"required,url"`
 }
 
@@ -111,6 +111,10 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
+	if err := validatePersistence(&cfg); err != nil {
+		return nil, err
+	}
+
 	cfg.ServiceVersion = getenv("POLYKEY_SERVICE_VERSION", "unknown")
 	cfg.BuildCommit = getenv("POLYKEY_BUILD_COMMIT", "unknown")
 
@@ -122,4 +126,22 @@ func getenv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func validatePersistence(cfg *Config) error {
+	switch cfg.Persistence.Type {
+	case "neondb":
+		if cfg.NeonDB == nil {
+			return fmt.Errorf("persistence type is neondb, but neondb config is missing")
+		}
+	case "cockroachdb":
+		if cfg.CockroachDB == nil {
+			return fmt.Errorf("persistence type is cockroachdb, but cockroachdb config is missing")
+		}
+	case "s3":
+		if cfg.AWS == nil {
+			return fmt.Errorf("persistence type is s3, but aws config is missing")
+		}
+	}
+	return nil
 }

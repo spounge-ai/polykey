@@ -8,14 +8,15 @@ import (
 )
 
 type Key struct {
-	ID           string
-	Version      int32
-	Metadata     *pk.KeyMetadata
-	EncryptedDEK []byte
-	Status       KeyStatus
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	RevokedAt    *time.Time
+    ID           string
+    Version      int32
+    Metadata     *pk.KeyMetadata
+    EncryptedDEK []byte
+    Status       KeyStatus
+    Tier         KeyTier     
+    CreatedAt    time.Time
+    UpdatedAt    time.Time
+    RevokedAt    *time.Time
 }
 
 type KeyTier string
@@ -63,7 +64,7 @@ const (
 type KeyRepository interface {
 	GetKey(ctx context.Context, id string) (*Key, error)
 	GetKeyByVersion(ctx context.Context, id string, version int32) (*Key, error)
-	CreateKey(ctx context.Context, key *Key) error
+	CreateKey(ctx context.Context, key *Key, isPremium bool) error
 	ListKeys(ctx context.Context) ([]*Key, error)
 	UpdateKeyMetadata(ctx context.Context, id string, metadata *pk.KeyMetadata) error
 	RotateKey(ctx context.Context, id string, newEncryptedDEK []byte) (*Key, error)
