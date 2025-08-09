@@ -17,7 +17,7 @@
 </div>
 
 
-
+> Note (08/08/25): Working on race conditions, further security, then re-apply to docker
 
 <hr style="width: 100%; height: 4px; background-color: #888; border: none; margin: 2em auto 1em;" />
 

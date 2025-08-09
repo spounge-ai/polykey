@@ -71,10 +71,8 @@ func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Au
 	}, port, nil
 }
 
-// ... rest of the file
-
-// Start starts the gRPC server.
-func (s *Server) Start() error {
+ 
+ func (s *Server) Start() error {
 	s.logger.Info("gRPC server listening", "address", s.lis.Addr().String())
 	s.healthSrv.SetServingStatus("polykey.v2.PolykeyService", grpc_health_v1.HealthCheckResponse_SERVING)
 	return s.grpcServer.Serve(s.lis)
