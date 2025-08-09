@@ -80,6 +80,7 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
 	}
 	newKey.EncryptedDEK = encryptedDEK
+	defer zeroBytes(dek)
 
 	tier := newKey.GetTier()
 	if err := s.keyRepo.CreateKey(ctx, newKey, tier == domain.TierPro || tier == domain.TierEnterprise); err != nil {

@@ -54,6 +54,7 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		s.logger.ErrorContext(ctx, "failed to encrypt new DEK", "error", err)
 		return nil, fmt.Errorf("failed to encrypt new DEK: %w", err)
 	}
+	defer zeroBytes(newDEK)
 
 	rotatedKey, err := s.keyRepo.RotateKey(ctx, keyID, encryptedNewDEK)
 	if err != nil {
