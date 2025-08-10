@@ -19,46 +19,39 @@ type realAuthorizer struct {
 }
 
 func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string, keyID domain.KeyID) (bool, string) {
+	user, ok, reason := a.authenticateAndAuthorize(ctx, operation, keyID)
+	if !ok {
+		return false, reason
+	}
+
+	if operation == "get_key" {
+		key, err := a.keyRepo.GetKey(ctx, keyID)
+		if err != nil {
+			return false, "key_not_found"
+		}
+
+		if !slices.Contains(key.Metadata.AuthorizedContexts, user.ID) {
+			return false, "insufficient_key_permissions"
+		}
+	}
+
+	return true, "authorized"
+}
+
+func (a *realAuthorizer) authenticateAndAuthorize(ctx context.Context, operation string, keyID domain.KeyID) (*domain.AuthenticatedUser, bool, string) {
 	user, ok := domain.UserFromContext(ctx)
 	if !ok {
-		return false, "missing_user_identity"
+		return nil, false, "missing_user_identity"
 	}
 
 	roleConfig, ok := a.cfg.Roles[user.Role]
 	if !ok {
-		return false, "invalid_role"
+		return nil, false, "invalid_role"
 	}
 
 	if !slices.Contains(roleConfig.AllowedOperations, operation) {
-		return false, "operation_not_allowed"
+		return nil, false, "operation_not_allowed"
 	}
 
-	switch operation {
-	case "create_key":
-		return true, "authorized"
-	case "get_key":
-		if a.isEmptyKeyID(keyID) {
-			return false, "key_id_required"
-		}
-		return a.authorizeKeyAccess(ctx, user.ID, keyID)
-	default:
-		return false, "unknown_operation"
-	}
-}
-
-func (a *realAuthorizer) isEmptyKeyID(keyID domain.KeyID) bool {
-	return keyID == domain.KeyID{} || keyID.String() == "00000000-0000-0000-0000-000000000000"
-}
-
-func (a *realAuthorizer) authorizeKeyAccess(ctx context.Context, clientIdentity string, keyID domain.KeyID) (bool, string) {
-	key, err := a.keyRepo.GetKey(ctx, keyID)
-	if err != nil {
-		return false, "key_not_found"
-	}
-
-	if slices.Contains(key.Metadata.AuthorizedContexts, clientIdentity) {
-		return true, "authorized"
-	}
-
-	return false, "insufficient_key_permissions"
+	return user, true, "authorized"
 }

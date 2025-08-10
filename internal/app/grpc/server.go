@@ -44,7 +44,10 @@ func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Au
 		opts = append(opts, grpc.Creds(creds))
 	}
 
-	tokenManager := auth.NewTokenManager(cfg.Authorization.JWTSecret)
+	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create token manager: %w", err)
+	}
 
 	opts = append(opts, grpc.ChainUnaryInterceptor(
 		interceptors.UnaryLoggingInterceptor(),

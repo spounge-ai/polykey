@@ -2,6 +2,10 @@ package integration_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"log/slog"
@@ -16,6 +20,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/service"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -24,15 +29,25 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-func setup(t *testing.T) (pk.PolykeyServiceClient, func(), context.Context) {
+func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), context.Context) {
 	truncate(t)
+
+	// Generate RSA key for testing
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privateKeyBytes,
+	})
+
 	cfg := &infra_config.Config{
 		Server: infra_config.ServerConfig{
 			Port: 0, // Dynamic port
 			Mode: "test",
 		},
 		Authorization: infra_config.AuthorizationConfig{
-			JWTSecret: "test-secret",
 			Roles: map[string]infra_config.RoleConfig{
 				"user": {
 					AllowedOperations: []string{"create_key", "get_key"},
@@ -42,11 +57,14 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, func(), context.Context) {
 				},
 			},
 		},
-		LocalMasterKey: "/kH+AgL+tN2qrA8I+nXL7is4ORj23p2YVhpTjAz2YIs=",
+		BootstrapSecrets: infra_config.BootstrapSecrets{
+			PolykeyMasterKey:   "/kH+AgL+tN2qrA8I+nXL7is4ORj23p2YVhpTjAz2YIs=",
+			JWTRSAPrivateKey: string(privateKeyPEM),
+		},
 	}
 
 	kmsProviders := make(map[string]kms.KMSProvider)
-	localKMS, err := kms.NewLocalKMSProvider(cfg.LocalMasterKey)
+	localKMS, err := kms.NewLocalKMSProvider(cfg.BootstrapSecrets.PolykeyMasterKey)
 	assert.NoError(t, err)
 	kmsProviders["local"] = localKMS
 
@@ -77,7 +95,9 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, func(), context.Context) {
 	client := pk.NewPolykeyServiceClient(conn)
 
 	// Generate a JWT token for testing
-	tokenManager := auth.NewTokenManager(cfg.Authorization.JWTSecret)
+	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
+	require.NoError(t, err)
+
 	token, err := tokenManager.GenerateToken("test-user", []string{"user"}, time.Hour)
 	assert.NoError(t, err)
 
@@ -91,11 +111,11 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, func(), context.Context) {
 		srv.Stop()
 	}
 
-	return client, cleanup, ctx
+	return client, tokenManager, cleanup, ctx
 }
 
 func TestHealthCheck(t *testing.T) {
-	client, cleanup, ctx := setup(t)
+	client, _, cleanup, ctx := setup(t)
 	defer cleanup()
 
 	resp, err := client.HealthCheck(ctx, &emptypb.Empty{})
@@ -105,7 +125,7 @@ func TestHealthCheck(t *testing.T) {
 }
 
 func TestKeyOperations_HappyPath(t *testing.T) {
-	client, cleanup, ctx := setup(t)
+	client, _, cleanup, ctx := setup(t)
 	defer cleanup()
 
 	t.Run("CreateKey - Authorized", func(t *testing.T) {
@@ -140,12 +160,11 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 }
 
 func TestKeyOperations_ErrorConditions(t *testing.T) {
-	client, cleanup, ctx := setup(t)
+	client, tokenManager, cleanup, ctx := setup(t)
 	defer cleanup()
 
 	t.Run("GetKey - Unauthorized", func(t *testing.T) {
 		// Generate a JWT token for testing with a different role
-		tokenManager := auth.NewTokenManager("test-secret")
 		token, err := tokenManager.GenerateToken("test-user", []string{"unauthorized"}, time.Hour)
 		assert.NoError(t, err)
 

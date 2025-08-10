@@ -59,8 +59,8 @@ func ProvideDependencies(cfg *infra_config.Config) (map[string]kms.KMSProvider, 
 func provideKMSProviders(cfg *infra_config.Config) (map[string]kms.KMSProvider, error) {
 	providers := make(map[string]kms.KMSProvider)
 
-	if cfg.LocalMasterKey != "" {
-		localProvider, err := kms.NewLocalKMSProvider(cfg.LocalMasterKey)
+	if cfg.BootstrapSecrets.PolykeyMasterKey != "" {
+		localProvider, err := kms.NewLocalKMSProvider(cfg.BootstrapSecrets.PolykeyMasterKey)
 		if err != nil {
 			return nil, err
 		}

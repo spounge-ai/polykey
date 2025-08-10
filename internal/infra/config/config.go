@@ -1,83 +1,38 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
+	aws_config "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/go-playground/validator/v10"
+	infra_secrets "github.com/spounge-ai/polykey/internal/infra/secrets"
+	"github.com/spounge-ai/polykey/internal/secrets"
 	"github.com/spf13/viper"
 	customvalidator "github.com/spounge-ai/polykey/pkg/validator"
 )
 
+type BootstrapSecrets struct {
+	PolykeyMasterKey     string `secretpath:"/polykey/polykey_master_key"`
+	NeonDBURLDevelopment string `secretpath:"/polykey/databases/neondb_url_development"`
+	JWTRSAPrivateKey     string `secretpath:"/polykey/jwt_secret"`
+}
+
 type Config struct {
-	Server         ServerConfig         `mapstructure:"server"`
-	Persistence    PersistenceConfig    `mapstructure:"persistence"`
-	Database       DatabaseConfig       `mapstructure:"database"`
-	NeonDB         *NeonDBConfig        `mapstructure:"neondb"`
-	CockroachDB    *CockroachDBConfig   `mapstructure:"cockroachdb"`
-	Vault          *VaultConfig         `mapstructure:"vault"`
-	AWS            *AWSConfig           `mapstructure:"aws"`
-	Authorization  AuthorizationConfig  `mapstructure:"authorization"`
-	StorageBackend string               `mapstructure:"storage_backend"`
-	LocalMasterKey string               `mapstructure:"local_master_key"`
-	ServiceVersion string
-	BuildCommit    string
-}
-
-type AuthorizationConfig struct {
-	Roles     map[string]RoleConfig `mapstructure:"roles"`
-	JWTSecret string                `mapstructure:"jwt_secret"`
-}
-
-type RoleConfig struct {
-	AllowedOperations []string `mapstructure:"allowed_operations"`
-}
-
-type PersistenceConfig struct {
-	Type string `mapstructure:"type" validate:"required,oneof=s3 neondb cockroachdb"`
-}
-
-type NeonDBConfig struct {
-	URL string `mapstructure:"url" validate:"required,url"`
-}
-
-type CockroachDBConfig struct {
-	URL string `mapstructure:"url" validate:"required,url"`
-}
-
-type AWSConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	Region    string `mapstructure:"region"     validate:"required_if=Enabled true"`
-	S3Bucket  string `mapstructure:"s3_bucket"  validate:"required_if=Enabled true"`
-	KMSKeyARN string `mapstructure:"kms_key_arn" validate:"required_if=Enabled true,omitempty,arn"`
-	CacheTTL  string `mapstructure:"cache_ttl"`
-}
-
-type ServerConfig struct {
-	Port int    `mapstructure:"port" validate:"required,gte=1024,lte=65535"`
-	TLS  TLS    `mapstructure:"tls"`
-	Mode string `mapstructure:"mode" validate:"required,oneof=development production"`
-}
-
-type TLS struct {
-	Enabled  bool   `mapstructure:"enabled"`
-	CertFile string `mapstructure:"cert_file"`
-	KeyFile  string `mapstructure:"key_file"`
-}
-
-type DatabaseConfig struct {
-	Host     string `mapstructure:"host"     validate:"required"`
-	Port     int    `mapstructure:"port"     validate:"required,gte=1024,lte=65535"`
-	User     string `mapstructure:"user"     validate:"required"`
-	Password string `mapstructure:"password" validate:"required"`
-	DBName   string `mapstructure:"dbname"   validate:"required"`
-	SSLMode  string `mapstructure:"sslmode"  validate:"required"`
-}
-
-type VaultConfig struct {
-	Address string `mapstructure:"address" validate:"required,url"`
-	Token   string `mapstructure:"token"   validate:"required"`
+	Server           ServerConfig         `mapstructure:"server"`
+	Persistence      PersistenceConfig    `mapstructure:"persistence"`
+	NeonDB           *NeonDBConfig        `mapstructure:"neondb"`
+	CockroachDB      *CockroachDBConfig   `mapstructure:"cockroachdb"`
+	Vault            *VaultConfig         `mapstructure:"vault"`
+	AWS              *AWSConfig           `mapstructure:"aws"`
+	Authorization    AuthorizationConfig  `mapstructure:"authorization"`
+	StorageBackend   string               `mapstructure:"storage_backend"`
+	ServiceVersion   string
+	BuildCommit      string
+	BootstrapSecrets BootstrapSecrets
 }
 
 func Load(path string) (*Config, error) {
@@ -115,7 +70,19 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.StorageBackend = vip.GetString("STORAGE_BACKEND")
-	cfg.LocalMasterKey = vip.GetString("LOCAL_MASTER_KEY")
+
+	if cfg.AWS.Enabled {
+		awsCfg, err := aws_config.LoadDefaultConfig(context.Background(), aws_config.WithRegion(cfg.AWS.Region))
+		if err != nil {
+			return nil, fmt.Errorf("failed to load aws config: %w", err)
+		}
+		secretProvider := infra_secrets.NewParameterStore(awsCfg)
+		bootstrapSecrets, err := loadBootstrapSecrets(secretProvider)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load bootstrap secrets: %w", err)
+		}
+		cfg.BootstrapSecrets = *bootstrapSecrets
+	}
 
 	if err := validate.Struct(&cfg); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
@@ -138,12 +105,35 @@ func getenv(key, defaultValue string) string {
 	return defaultValue
 }
 
+func loadBootstrapSecrets(secretProvider secrets.BootstrapSecretProvider) (*BootstrapSecrets, error) {
+	secrets := &BootstrapSecrets{}
+	secretsVal := reflect.ValueOf(secrets).Elem()
+	secretsType := secretsVal.Type()
+
+	for i := 0; i < secretsVal.NumField(); i++ {
+		field := secretsVal.Field(i)
+		fieldType := secretsType.Field(i)
+		secretPath := fieldType.Tag.Get("secretpath")
+
+		if secretPath == "" {
+			continue
+		}
+
+		secretValue, err := secretProvider.GetSecret(context.Background(), secretPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load secret for %s: %w", fieldType.Name, err)
+		}
+
+		if field.CanSet() {
+			field.SetString(secretValue)
+		}
+	}
+
+	return secrets, nil
+}
+
 func validatePersistence(cfg *Config) error {
 	switch cfg.Persistence.Type {
-	case "neondb":
-		if cfg.NeonDB == nil {
-			return fmt.Errorf("persistence type is neondb, but neondb config is missing")
-		}
 	case "cockroachdb":
 		if cfg.CockroachDB == nil {
 			return fmt.Errorf("persistence type is cockroachdb, but cockroachdb config is missing")

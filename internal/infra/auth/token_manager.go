@@ -1,22 +1,33 @@
 package auth
 
 import (
+	"crypto/rsa"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// TokenManager manages JWT token generation and validation.
+// TokenManager manages JWT token generation and validation using RSA keys.
 type TokenManager struct {
-	secretKey string
+	privateKey *rsa.PrivateKey
+	publicKey  *rsa.PublicKey
 }
 
-// NewTokenManager creates a new TokenManager.
-func NewTokenManager(secretKey string) *TokenManager {
-	return &TokenManager{secretKey: secretKey}
+// NewTokenManager creates a new TokenManager from a PEM-encoded RSA private key.
+func NewTokenManager(privateKeyPEM string) (*TokenManager, error) {
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(privateKeyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse RSA private key: %w", err)
+	}
+
+	return &TokenManager{
+		privateKey: privateKey,
+		publicKey:  &privateKey.PublicKey,
+	}, nil
 }
 
-// GenerateToken generates a new JWT token.
+// GenerateToken generates a new JWT token signed with RS256.
 func (tm *TokenManager) GenerateToken(userID string, roles []string, expiration time.Duration) (string, error) {
 	expirationTime := time.Now().Add(expiration)
 	claims := &Claims{
@@ -27,16 +38,19 @@ func (tm *TokenManager) GenerateToken(userID string, roles []string, expiration 
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(tm.secretKey))
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	return token.SignedString(tm.privateKey)
 }
 
-// ValidateToken validates a JWT token.
+// ValidateToken validates a JWT token signed with RS256.
 func (tm *TokenManager) ValidateToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(tm.secretKey), nil
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return tm.publicKey, nil
 	})
 
 	if err != nil {

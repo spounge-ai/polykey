@@ -22,7 +22,7 @@ func setupTestDB(t *testing.T) (*persistence.NeonDBStorage, func()) {
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
 
-	dbpool, err := pgxpool.New(context.Background(), cfg.NeonDB.URL)
+	dbpool, err := pgxpool.New(context.Background(), cfg.BootstrapSecrets.NeonDBURLDevelopment)
 	require.NoError(t, err)
 
 	storage, err := persistence.NewNeonDBStorage(dbpool)

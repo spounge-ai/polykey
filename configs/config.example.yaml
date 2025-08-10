@@ -1,44 +1,31 @@
 server:
-  port: "<your-server-port>"
-  mode: "<your-environment>"
+  port: 50053
+  mode: "development"
   tls:
-    enabled: <true-or-false>
-    cert_file: "<path-to-your-cert-file>"
-    key_file: "<path-to-your-key-file>"
+    enabled: true
+    cert_file: "certs/cert_example.pem"
+    key_file: "certs/key_example.pem"
 
 persistence:
-  type: "neondb" # can be "neondb", "s3", or "cockroachdb"
+  type: "neondb"
 
 aws:
   enabled: true
-  region: "<your-aws-region>"
-  s3_bucket: "<your-unique-bucket-name>"
-  kms_key_arn: "<your-kms-key-arn>"
-
-vault:
-  address: "<your-vault-address>"
-  token: "<your-vault-token>"
-
-database:
-  host: "<your-database-host>"
-  port: "<your-database-port>"
-  user: "<your-database-user>"
-  password: "<your-database-password>"
-  dbname: "polykey"
-  sslmode: "require"
-
-neondb:
-  url: "postgresql://<user>:<password>@<host>:<port>/<dbname>?sslmode=require"
-
-cockroachdb:
-  url: "<your-cockroachdb-connection-string>"
-
-LOCAL_MASTER_KEY: "<your-local-master-key>"
+  region: "us-east-1"
+  s3_bucket: "<your-s3-bucket-for-s3-persistence>"
+  kms_key_arn: "<your-kms-key-arn-for-aws-kms-provider>"
 
 authorization:
-  jwt_secret: "your-super-secret-key"
   roles:
     admin:
-      allowed_operations: ["*"_]
-    user:
-      allowed_operations: ["create_key", "get_key"]
+      allowed_operations: ["*"]
+    premium_user:
+      allowed_operations:
+        - "create_key"
+        - "get_key"
+        - "list_keys"
+        - "rotate_key"
+    free_user:
+      allowed_operations:
+        - "create_key"
+        - "get_key"
