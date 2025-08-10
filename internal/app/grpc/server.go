@@ -1,13 +1,13 @@
 package grpc
 
 import (
- 	"fmt"
+	"fmt"
 	"log/slog"
 	"net"
- 
 
 	"github.com/spounge-ai/polykey/internal/app/grpc/interceptors"
 	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/internal/infra/auth"
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/service"
 	"google.golang.org/grpc"
@@ -44,9 +44,11 @@ func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Au
 		opts = append(opts, grpc.Creds(creds))
 	}
 
+	tokenManager := auth.NewTokenManager(cfg.Authorization.JWTSecret)
+
 	opts = append(opts, grpc.ChainUnaryInterceptor(
 		interceptors.UnaryLoggingInterceptor(),
-		interceptors.NewUnaryAuthInterceptor(authorizer, map[string]bool{"/polykey.v2.PolykeyService/HealthCheck": true}),
+		interceptors.AuthenticationInterceptor(tokenManager),
 	))
 
 	grpcServer := grpc.NewServer(opts...)

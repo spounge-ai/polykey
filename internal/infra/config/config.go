@@ -26,7 +26,8 @@ type Config struct {
 }
 
 type AuthorizationConfig struct {
-	Roles map[string]RoleConfig `mapstructure:"roles"`
+	Roles     map[string]RoleConfig `mapstructure:"roles"`
+	JWTSecret string                `mapstructure:"jwt_secret"`
 }
 
 type RoleConfig struct {

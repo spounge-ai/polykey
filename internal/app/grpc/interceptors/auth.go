@@ -2,90 +2,45 @@ package interceptors
 
 import (
 	"context"
+	"strings"
 
 	"github.com/spounge-ai/polykey/internal/domain"
-	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	auth "github.com/spounge-ai/polykey/internal/infra/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
-type requestData struct {
-	requesterContext *pk.RequesterContext
-	accessAttributes *pk.AccessAttributes
-	keyID            domain.KeyID
-}
-
-type requesterContextGetter interface {
-	GetRequesterContext() *pk.RequesterContext
-}
-
-type keyIDGetter interface {
-	GetKeyId() string
-}
-
-func NewUnaryAuthInterceptor(
-	authorizer domain.Authorizer,
-	exemptMethods map[string]bool,
-) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		if exemptMethods[info.FullMethod] {
+func AuthenticationInterceptor(tokenManager *auth.TokenManager) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		if info.FullMethod == "/polykey.v2.PolykeyService/HealthCheck" {
 			return handler(ctx, req)
 		}
 
-		reqData, err := extractRequestData(req)
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Errorf(codes.Unauthenticated, "metadata is not provided")
+		}
+
+		authHeader := md.Get("authorization")
+		if len(authHeader) == 0 {
+			return nil, status.Errorf(codes.Unauthenticated, "authorization token is not provided")
+		}
+
+		token := strings.TrimPrefix(authHeader[0], "Bearer ")
+		claims, err := tokenManager.ValidateToken(token)
 		if err != nil {
-			return nil, err
+			return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
 		}
 
-		if reqData.requesterContext == nil {
-			return nil, status.Error(codes.Unauthenticated, "missing requester context")
+		user := &domain.AuthenticatedUser{
+			ID:   claims.UserID,
+			Role: strings.Join(claims.Roles, ","), // Or handle roles as needed
 		}
 
-		if isAuthorized, reason := authorizer.Authorize(
-			ctx,
-			reqData.requesterContext,
-			reqData.accessAttributes,
-			info.FullMethod,
-			reqData.keyID,
-		); !isAuthorized {
-			return nil, status.Errorf(codes.PermissionDenied, "permission denied: %s", reason)
-		}
+		ctx = domain.NewContextWithUser(ctx, user)
 
 		return handler(ctx, req)
 	}
-}
-
-func extractRequestData(req any) (*requestData, error) {
-	data := &requestData{}
-
-	rcReq, ok := req.(requesterContextGetter)
-	if !ok {
-		return nil, status.Errorf(codes.Unimplemented, "unsupported request type: %T", req)
-	}
-	data.requesterContext = rcReq.GetRequesterContext()
-
-	if keyReq, ok := req.(keyIDGetter); ok {
-		if err := setKeyFields(data, keyReq); err != nil {
-			return nil, err
-		}
-	}
-
-	return data, nil
-}
-
-func setKeyFields(data *requestData, keyReq keyIDGetter) error {
-	keyIDStr := keyReq.GetKeyId()
-	if keyIDStr == "" {
-		return nil
-	}
-
-	parsedID, err := domain.KeyIDFromString(keyIDStr)
-	if err != nil {
-		return status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
-	}
-
-	data.keyID = parsedID
-	data.accessAttributes = &pk.AccessAttributes{Environment: keyIDStr}
-	return nil
 }

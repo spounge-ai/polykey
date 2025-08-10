@@ -19,12 +19,12 @@ type realAuthorizer struct {
 }
 
 func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.RequesterContext, attrs *pk.AccessAttributes, operation string, keyID domain.KeyID) (bool, string) {
-	if reqContext == nil || reqContext.ClientIdentity == "" {
-		return false, "missing_client_identity"
+	user, ok := domain.UserFromContext(ctx)
+	if !ok {
+		return false, "missing_user_identity"
 	}
 
-	role := a.determineRole(reqContext.ClientIdentity)
-	roleConfig, ok := a.cfg.Roles[role]
+	roleConfig, ok := a.cfg.Roles[user.Role]
 	if !ok {
 		return false, "invalid_role"
 	}
@@ -37,15 +37,10 @@ func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.Requester
 		return true, "authorized"
 	}
 
-	return a.authorizeKeyAccess(ctx, reqContext.ClientIdentity, keyID)
+	return a.authorizeKeyAccess(ctx, user.ID, keyID)
 }
 
-func (a *realAuthorizer) determineRole(clientIdentity string) string {
-	if clientIdentity == "admin" {
-		return "admin"
-	}
-	return "user"
-}
+
 
 func (a *realAuthorizer) isEmptyKeyID(keyID domain.KeyID) bool {
 	return keyID == domain.KeyID{} || keyID.String() == "00000000-0000-0000-0000-000000000000"

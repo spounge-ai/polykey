@@ -36,18 +36,9 @@ cockroachdb:
 LOCAL_MASTER_KEY: "<your-local-master-key>"
 
 authorization:
+  jwt_secret: "your-super-secret-key"
   roles:
     admin:
-      allowed_operations:
-        - "/polykey.v2.PolykeyService/CreateKey"
-        - "/polykey.v2.PolykeyService/RotateKey"
-        - "/polykey.v2.PolykeyService/RevokeKey"
-        - "/polykey.v2.PolykeyService/UpdateKeyMetadata"
-        - "/polykey.v2.PolykeyService/GetKey"
-        - "/polykey.v2.PolykeyService/GetKeyMetadata"
-        - "/polykey.v2.PolykeyService/ListKeys"
+      allowed_operations: ["*"_]
     user:
-      allowed_operations:
-        - "/polykey.v2.PolykeyService/GetKey"
-        - "/polykey.v2.PolykeyService/GetKeyMetadata"
-        - "/polykey.v2.PolykeyService/ListKeys"
+      allowed_operations: ["create_key", "get_key"]

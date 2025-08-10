@@ -9,10 +9,11 @@ import (
 	"time"
 
 	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
+	"github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/kms"
 	"github.com/spounge-ai/polykey/internal/service"
-	"github.com/spounge-ai/polykey/tests/mocks/auth"
+	mock_auth "github.com/spounge-ai/polykey/tests/mocks/auth"
 	kms_mocks "github.com/spounge-ai/polykey/tests/mocks/kms"
 	"github.com/spounge-ai/polykey/tests/mocks/persistence"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
@@ -20,12 +21,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // setupTestServer starts a new server and returns a client connection and a cleanup function.
-func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
+func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func(), context.Context) {
 	// Create a mock config for testing
 	cfg := &infra_config.Config{
 		Server: infra_config.ServerConfig{
@@ -55,7 +57,7 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 	log.Println("Running in TEST environment: Using mock implementations.")
 	kmsProviders := make(map[string]kms.KMSProvider)
 	kmsProviders["local"] = kms_mocks.NewMockKMSAdapter()
-	authorizer := auth.NewMockAuthorizer()
+	authorizer := mock_auth.NewMockAuthorizer()
 	keyRepo := persistence.NewMockS3Storage()
 	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
 
@@ -80,6 +82,14 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 
 	client := pk.NewPolykeyServiceClient(conn)
 
+	// Generate a JWT token for testing
+	tokenManager := auth.NewTokenManager("test-secret")
+	token, err := tokenManager.GenerateToken("test-user", []string{"user"}, time.Hour)
+	assert.NoError(t, err)
+
+	// Add the token to the context of the client
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
+
 	cleanup := func() {
 		if err := conn.Close(); err != nil {
 			t.Logf("failed to close connection: %v", err)
@@ -87,26 +97,26 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 		cancelFunc()
 	}
 
-	return client, cleanup
+	return client, cleanup, ctx
 }
 
 func TestHealthCheck(t *testing.T) {
-	client, cleanup := setupTestServer(t)
+	client, cleanup, ctx := setupTestServer(t)
 	defer cleanup()
 
-	resp, err := client.HealthCheck(context.Background(), &emptypb.Empty{})
+	resp, err := client.HealthCheck(ctx, &emptypb.Empty{})
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, pk.HealthStatus_HEALTH_STATUS_HEALTHY, resp.Status)
 }
 
 func TestKeyOperations_HappyPath(t *testing.T) {
-	client, cleanup := setupTestServer(t)
+	client, cleanup, ctx := setupTestServer(t)
 	defer cleanup()
 
 	t.Run("GetKey - Authorized", func(t *testing.T) {
 		keyID := "f47ac10b-58cc-4372-a567-0e02b2c3d479"
-		resp, err := client.GetKey(context.Background(), &pk.GetKeyRequest{
+		resp, err := client.GetKey(ctx, &pk.GetKeyRequest{
 			KeyId:            keyID,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
 		})
@@ -120,7 +130,7 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 			KeyType:          pk.KeyType_KEY_TYPE_AES_256,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_creator"},
 		}
-		resp, err := client.CreateKey(context.Background(), createReq)
+		resp, err := client.CreateKey(ctx, createReq)
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.NotEmpty(t, resp.KeyId)
@@ -128,7 +138,7 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 
 	t.Run("GetKeyMetadata - Authorized", func(t *testing.T) {
 		keyID := "a47ac10b-58cc-4372-a567-0e02b2c3d479"
-		resp, err := client.GetKeyMetadata(context.Background(), &pk.GetKeyMetadataRequest{
+		resp, err := client.GetKeyMetadata(ctx, &pk.GetKeyMetadataRequest{
 			KeyId:                keyID,
 			RequesterContext:     &pk.RequesterContext{ClientIdentity: "test_client"},
 			IncludeAccessHistory: true,
@@ -143,12 +153,12 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 }
 
 func TestKeyOperations_ErrorConditions(t *testing.T) {
-	client, cleanup := setupTestServer(t)
+	client, cleanup, ctx := setupTestServer(t)
 	defer cleanup()
 
 	t.Run("GetKey - Unauthorized", func(t *testing.T) {
 		keyID := "c47ac10b-58cc-4372-a567-0e02b2c3d479"
-		_, err := client.GetKey(context.Background(), &pk.GetKeyRequest{
+		_, err := client.GetKey(ctx, &pk.GetKeyRequest{
 			KeyId:            keyID,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
 		})
@@ -158,7 +168,7 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 	})
 
 	t.Run("CreateKey - Unauthorized", func(t *testing.T) {
-		_, err := client.CreateKey(context.Background(), &pk.CreateKeyRequest{
+		_, err := client.CreateKey(ctx, &pk.CreateKeyRequest{
 			KeyType:          pk.KeyType_KEY_TYPE_API_KEY,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "unknown_creator"},
 		})
@@ -169,7 +179,7 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 
 	t.Run("GetKeyMetadata - Unauthorized", func(t *testing.T) {
 		keyID := "d47ac10b-58cc-4372-a567-0e02b2c3d479"
-		_, err := client.GetKeyMetadata(context.Background(), &pk.GetKeyMetadataRequest{
+		_, err := client.GetKeyMetadata(ctx, &pk.GetKeyMetadataRequest{
 			KeyId:            keyID,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "unknown_client"},
 		})
