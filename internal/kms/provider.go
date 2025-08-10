@@ -7,6 +7,6 @@ import (
 )
 
 type KMSProvider interface {
-	EncryptDEK(ctx context.Context, key *domain.Key) ([]byte, error)
+	EncryptDEK(ctx context.Context, plaintextDEK []byte, key *domain.Key) ([]byte, error)
 	DecryptDEK(ctx context.Context, key *domain.Key) ([]byte, error)
 }

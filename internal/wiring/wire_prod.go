@@ -6,14 +6,31 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/domain"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
-	"github.com/spounge-ai/polykey/internal/kms"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
+	"github.com/spounge-ai/polykey/internal/kms"
 )
+
+var (
+	pgxPoolOnce sync.Once
+	pgxPool     *pgxpool.Pool
+)
+
+func providePgxPool(cfg *infra_config.Config) (*pgxpool.Pool, error) {
+	var err error
+	pgxPoolOnce.Do(func() {
+		pgxPool, err = pgxpool.New(context.Background(), cfg.NeonDB.URL)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)
+	}
+	return pgxPool, nil
+}
 
 func ProvideDependencies(cfg *infra_config.Config) (map[string]kms.KMSProvider, domain.KeyRepository, domain.AuditRepository, error) {
 	kmsProviders, err := provideKMSProviders(cfg)
@@ -21,12 +38,17 @@ func ProvideDependencies(cfg *infra_config.Config) (map[string]kms.KMSProvider, 
 		return nil, nil, nil, err
 	}
 
-	keyRepo, err := provideKeyRepository(cfg)
+	dbpool, err := providePgxPool(cfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	auditRepo, err := provideAuditRepository(cfg)
+	keyRepo, err := provideKeyRepository(dbpool)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	auditRepo, err := provideAuditRepository(dbpool)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -57,18 +79,11 @@ func provideKMSProviders(cfg *infra_config.Config) (map[string]kms.KMSProvider, 
 	return providers, nil
 }
 
-func provideKeyRepository(cfg *infra_config.Config) (domain.KeyRepository, error) {
-	switch cfg.Persistence.Type {
-	case "s3":
-		return provideS3Storage(cfg)
-	case "neondb":
-		return provideNeonDBStorage(cfg)
-	
-	default:
-		return nil, fmt.Errorf("invalid persistence type: %s", cfg.Persistence.Type)
-	}
+func provideKeyRepository(dbpool *pgxpool.Pool) (domain.KeyRepository, error) {
+	return persistence.NewNeonDBStorage(dbpool)
 }
 
+//nolint:unused
 func provideS3Storage(cfg *infra_config.Config) (domain.KeyRepository, error) {
 	awsCfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(cfg.AWS.Region))
 	if err != nil {
@@ -77,20 +92,6 @@ func provideS3Storage(cfg *infra_config.Config) (domain.KeyRepository, error) {
 	return persistence.NewS3Storage(awsCfg, cfg.AWS.S3Bucket, slog.Default())
 }
 
-func provideNeonDBStorage(cfg *infra_config.Config) (domain.KeyRepository, error) {
-	dbpool, err := pgxpool.New(context.Background(), cfg.NeonDB.URL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)
-	}
-	return persistence.NewNeonDBStorage(dbpool)
-}
-
-
-
-func provideAuditRepository(cfg *infra_config.Config) (domain.AuditRepository, error) {
-	dbpool, err := pgxpool.New(context.Background(), cfg.NeonDB.URL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)
-	}
+func provideAuditRepository(dbpool *pgxpool.Pool) (domain.AuditRepository, error) {
 	return persistence.NewAuditRepository(dbpool)
 }

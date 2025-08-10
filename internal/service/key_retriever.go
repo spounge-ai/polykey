@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/spounge-ai/polykey/internal/domain"
@@ -28,11 +30,32 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 		return nil, ErrMissingMetadata
 	}
 
+	kmsProvider, err := s.getKMSProvider(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get KMS provider: %w", err)
+	}
+
+	decryptedDEK, err := kmsProvider.DecryptDEK(ctx, key)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to decrypt DEK", "keyId", req.GetKeyId(), "error", err)
+		return nil, fmt.Errorf("failed to decrypt DEK: %w", err)
+	}
+	defer zeroBytes(decryptedDEK)
+
+	_, algorithm, err := getCryptoDetails(key.Metadata.GetKeyType())
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get crypto details for key type", "keyId", req.GetKeyId(), "keyType", key.Metadata.GetKeyType(), "error", err)
+		algorithm = "unknown"
+	}
+
+	hash := sha256.Sum256(decryptedDEK)
+	checksum := hex.EncodeToString(hash[:])
+
 	resp := &pk.GetKeyResponse{
 		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    append([]byte(nil), key.EncryptedDEK...),
-			EncryptionAlgorithm: "AES-256-GCM",
-			KeyChecksum:         "sha256",
+			EncryptedKeyData:    key.EncryptedDEK,
+			EncryptionAlgorithm: algorithm,
+			KeyChecksum:         checksum,
 		},
 		ResponseTimestamp: timestamppb.Now(),
 	}
@@ -41,7 +64,7 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 		resp.Metadata = key.Metadata
 	}
 
-	s.logger.InfoContext(ctx, "key retrieved", "keyId", req.GetKeyId(), "version", key.Version)
+	s.logger.InfoContext(ctx, "key retrieved and decrypted", "keyId", req.GetKeyId(), "version", key.Version)
 	return resp, nil
 }
 

@@ -21,13 +21,13 @@ func NewAWSKMSProvider(cfg aws.Config, kmsKeyARN string) *AWSKMSProvider {
 	}
 }
 
-func (p *AWSKMSProvider) EncryptDEK(ctx context.Context, key *domain.Key) ([]byte, error) {
+func (p *AWSKMSProvider) EncryptDEK(ctx context.Context, plaintextDEK []byte, key *domain.Key) ([]byte, error) {
 	if !key.IsPremium() {
 		return nil, fmt.Errorf("cannot use aws kms for non-premium keys")
 	}
 	input := &kms.EncryptInput{
 		KeyId:     &p.kmsKeyARN,
-		Plaintext: key.EncryptedDEK,
+		Plaintext: plaintextDEK,
 	}
 
 	result, err := p.client.Encrypt(ctx, input)

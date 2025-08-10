@@ -16,7 +16,7 @@ func NewMockKMSAdapter() kms.KMSProvider {
 }
 
 // EncryptDEK is a mock implementation of the EncryptDEK method.
-func (m *MockKMSAdapter) EncryptDEK(ctx context.Context, key *domain.Key) ([]byte, error) {
+func (m *MockKMSAdapter) EncryptDEK(ctx context.Context, plaintextDEK []byte, key *domain.Key) ([]byte, error) {
 	return []byte("mock_encrypted_dek"), nil
 }
 

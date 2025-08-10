@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	
 
 	"github.com/spounge-ai/polykey/internal/domain"
 )
@@ -24,53 +23,62 @@ func NewLocalKMSProvider(masterKey string) (*LocalKMSProvider, error) {
 	return &LocalKMSProvider{masterKey: key}, nil
 }
 
-func (p *LocalKMSProvider) EncryptDEK(ctx context.Context, key *domain.Key) ([]byte, error) {
+// EncryptDEK encrypts the given plaintext DEK and returns the encrypted DEK.
+func (p *LocalKMSProvider) EncryptDEK(ctx context.Context, plaintextDEK []byte, key *domain.Key) ([]byte, error) {
 	if key.IsPremium() {
 		return nil, fmt.Errorf("cannot use local kms for premium keys")
 	}
+
+	// Encrypt the DEK with our master key
 	block, err := aes.NewCipher(p.masterKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	ciphertext := gcm.Seal(nonce, nonce, key.EncryptedDEK, nil)
-	return ciphertext, nil
+	encryptedDEK := gcm.Seal(nonce, nonce, plaintextDEK, nil)
+	return encryptedDEK, nil
 }
 
+// DecryptDEK takes the encrypted DEK from the key and returns the plaintext DEK
 func (p *LocalKMSProvider) DecryptDEK(ctx context.Context, key *domain.Key) ([]byte, error) {
 	if key.IsPremium() {
 		return nil, fmt.Errorf("cannot use local kms for premium keys")
 	}
+
+	if len(key.EncryptedDEK) == 0 {
+		return nil, fmt.Errorf("no encrypted DEK found in key")
+	}
+
 	block, err := aes.NewCipher(p.masterKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
 	}
 
 	nonceSize := gcm.NonceSize()
 	if len(key.EncryptedDEK) < nonceSize {
-		return nil, fmt.Errorf("ciphertext too short")
+		return nil, fmt.Errorf("encrypted DEK too short")
 	}
 
 	nonce, ciphertext := key.EncryptedDEK[:nonceSize], key.EncryptedDEK[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	plaintextDEK, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decrypt DEK: %w", err)
 	}
 
-	return plaintext, nil
+	return plaintextDEK, nil
 }

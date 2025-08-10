@@ -73,31 +73,50 @@ func main() {
 		)
 
 		newKeyId := createKeyResp.GetMetadata().GetKeyId()
+		
+		// Store the original key before rotation
 		getKeyReq := &pk.GetKeyRequest{
 			KeyId:            newKeyId,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
 		}
-		getKeyResp, err := c.GetKey(ctx, getKeyReq)
+		originalKeyResp, err := c.GetKey(ctx, getKeyReq)
 		if err != nil {
-			logger.Error("GetKey failed", "error", err)
+			logger.Error("GetKey (pre-rotation) failed", "error", err)
 		} else {
-			logger.Info("GetKey successful",
-				"keyId", getKeyResp.GetMetadata().GetKeyId(),
+			logger.Info("GetKey successful (pre-rotation)",
+				"keyId", originalKeyResp.GetMetadata().GetKeyId(),
+				"version", originalKeyResp.GetMetadata().GetVersion(),
 			)
-		}
 
-		rotateKeyReq := &pk.RotateKeyRequest{
-			KeyId:            newKeyId,
-			RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
-		}
-		rotateKeyResp, err := c.RotateKey(ctx, rotateKeyReq)
-		if err != nil {
-			logger.Error("RotateKey failed", "error", err)
-		} else {
-			logger.Info("RotateKey successful",
-				"keyId", rotateKeyResp.GetKeyId(),
-				"newVersion", rotateKeyResp.GetNewVersion(),
-			)
+			// Rotate the key
+			rotateKeyReq := &pk.RotateKeyRequest{
+				KeyId:            newKeyId,
+				RequesterContext: &pk.RequesterContext{ClientIdentity: "admin"},
+			}
+			rotateKeyResp, err := c.RotateKey(ctx, rotateKeyReq)
+			if err != nil {
+				logger.Error("RotateKey failed", "error", err)
+			} else {
+				logger.Info("RotateKey successful",
+					"keyId", rotateKeyResp.GetKeyId(),
+					"newVersion", rotateKeyResp.GetNewVersion(),
+					"previousVersion", rotateKeyResp.GetPreviousVersion(),
+				)
+
+				// Get the key after rotation to compare
+				postRotateKeyResp, err := c.GetKey(ctx, getKeyReq)
+				if err != nil {
+					logger.Error("GetKey (post-rotation) failed", "error", err)
+				} else {
+					logger.Info("GetKey successful (post-rotation)",
+						"keyId", postRotateKeyResp.GetMetadata().GetKeyId(),
+						"version", postRotateKeyResp.GetMetadata().GetVersion(),
+					)
+
+					// Compare the keys before and after rotation
+					compareKeys(logger, originalKeyResp, postRotateKeyResp)
+				}
+			}
 		}
 	}
 
@@ -111,4 +130,58 @@ func main() {
 	if utils.PrintJestReport(logBuf.String()) {
 		os.Exit(1)
 	}
+}
+
+func compareKeys(logger *slog.Logger, originalKey, rotatedKey *pk.GetKeyResponse) {
+	logger.Info("Starting key rotation validation")
+
+	// Compare key IDs (should be the same)
+	originalKeyId := originalKey.GetMetadata().GetKeyId()
+	rotatedKeyId := rotatedKey.GetMetadata().GetKeyId()
+	
+	if originalKeyId == rotatedKeyId {
+		logger.Info("Key ID preserved after rotation", "keyId", originalKeyId)
+	} else {
+		logger.Error("Key ID changed after rotation", 
+			"originalKeyId", originalKeyId, 
+			"rotatedKeyId", rotatedKeyId)
+	}
+
+	// Compare versions (should be different)
+	originalVersion := originalKey.GetMetadata().GetVersion()
+	rotatedVersion := rotatedKey.GetMetadata().GetVersion()
+	
+	if originalVersion != rotatedVersion && rotatedVersion == originalVersion+1 {
+		logger.Info("Key version incremented correctly", 
+			"originalVersion", originalVersion, 
+			"rotatedVersion", rotatedVersion)
+	} else {
+		logger.Error("Key version not incremented properly", 
+			"originalVersion", originalVersion, 
+			"rotatedVersion", rotatedVersion)
+	}
+
+	// Compare key material (should be different)
+	originalKeyMaterial := originalKey.GetKeyMaterial().GetEncryptedKeyData()
+	rotatedKeyMaterial := rotatedKey.GetKeyMaterial().GetEncryptedKeyData()
+	
+	if !bytes.Equal(originalKeyMaterial, rotatedKeyMaterial) {
+		logger.Info("Key material successfully rotated")
+	} else {
+		logger.Error("Key material unchanged after rotation")
+	}
+
+	// Compare key types (should be the same)
+	originalKeyType := originalKey.GetMetadata().GetKeyType()
+	rotatedKeyType := rotatedKey.GetMetadata().GetKeyType()
+	
+	if originalKeyType == rotatedKeyType {
+		logger.Info("Key type preserved", "keyType", originalKeyType.String())
+	} else {
+		logger.Error("Key type changed unexpectedly", 
+			"originalKeyType", originalKeyType.String(), 
+			"rotatedKeyType", rotatedKeyType.String())
+	}
+
+	logger.Info("Key rotation validation completed")
 }

@@ -96,27 +96,75 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		details := fmt.Sprintf("keyId=%v", entry["keyId"])
 		printStep("PASS", "GetKey", details)
 		s.passes++
+
+	case "GetKey successful (pre-rotation)":
+		printSuiteHeader(&s.currentSuite, "VALIDATION")
+		details := fmt.Sprintf("keyId=%v, version=%v", entry["keyId"], entry["version"])
+		printStep("PASS", "GetKey (pre-rotation)", details)
+		s.passes++
+
+	case "GetKey successful (post-rotation)":
+		printSuiteHeader(&s.currentSuite, "VALIDATION")
+		details := fmt.Sprintf("keyId=%v, version=%v", entry["keyId"], entry["version"])
+		printStep("PASS", "GetKey (post-rotation)", details)
+		s.passes++
 		
 	case "RotateKey successful":
 		printSuiteHeader(&s.currentSuite, "EXECUTION")
 		details := fmt.Sprintf("keyId=%v, newVersion=%v", entry["keyId"], entry["newVersion"])
 		printStep("PASS", "RotateKey", details)
 		s.passes++
+
+	case "Starting key rotation validation":
+		printSuiteHeader(&s.currentSuite, "VALIDATION")
+
+	case "Key ID preserved after rotation":
+		details := fmt.Sprintf("keyId=%v", entry["keyId"])
+		printStep("PASS", "Key ID Preserved", details)
+		s.passes++
+
+	case "Key version incremented correctly":
+		details := fmt.Sprintf("v%v → v%v", entry["originalVersion"], entry["rotatedVersion"])
+		printStep("PASS", "Version Incremented", details)
+		s.passes++
+
+	case "Key material successfully rotated":
+		printStep("PASS", "Key Material Rotated", "")
+		s.passes++
+
+	case "Key type preserved":
+		details := fmt.Sprintf("keyType=%v", entry["keyType"])
+		printStep("PASS", "Key Type Preserved", details)
+		s.passes++
+
+	case "Key rotation validation completed":
+		// Summary message, no action needed
+
 	case "ListKeys successful":
 		printSuiteHeader(&s.currentSuite, "EXECUTION")
 		details := fmt.Sprintf("count=%v", entry["count"])
 		printStep("PASS", "ListKeys", details)
 		s.passes++
 
-	case "CreateKey failed", "GetKey failed", "HealthCheck failed", "gRPC connection failed", "RotateKey failed", "ListKeys failed", "failed to load TLS credentials":
+	// Failure cases
+	case "CreateKey failed", "GetKey failed", "GetKey (pre-rotation) failed", "GetKey (post-rotation) failed", 
+		 "HealthCheck failed", "gRPC connection failed", "RotateKey failed", "ListKeys failed", 
+		 "failed to load TLS credentials":
 		printSuiteHeader(&s.currentSuite, "ERROR")
 		details := fmt.Sprintf("%v", entry["error"])
 		printStep("FAIL", msg, details)
 		s.failures = append(s.failures, fmt.Sprintf("%s: %s", msg, details))
+
+	case "Key ID changed after rotation", "Key version not incremented properly", 
+		 "Key material unchanged after rotation", "Key type changed unexpectedly":
+		details := ""
+		if entry["originalVersion"] != nil && entry["rotatedVersion"] != nil {
+			details = fmt.Sprintf("v%v → v%v", entry["originalVersion"], entry["rotatedVersion"])
+		}
+		printStep("FAIL", msg, details)
+		s.failures = append(s.failures, msg)
 	}
 }
-
-
 
 func processGoTestEntry(entry LogEntry, s *state) {
 	action, _ := entry["Action"].(string)
