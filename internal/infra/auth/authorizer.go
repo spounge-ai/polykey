@@ -33,14 +33,18 @@ func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.Requester
 		return false, "operation_not_allowed"
 	}
 
-	if a.isEmptyKeyID(keyID) {
+	switch operation {
+	case "create_key":
 		return true, "authorized"
+	case "get_key":
+		if a.isEmptyKeyID(keyID) {
+			return false, "key_id_required"
+		}
+		return a.authorizeKeyAccess(ctx, user.ID, keyID)
+	default:
+		return false, "unknown_operation"
 	}
-
-	return a.authorizeKeyAccess(ctx, user.ID, keyID)
 }
-
-
 
 func (a *realAuthorizer) isEmptyKeyID(keyID domain.KeyID) bool {
 	return keyID == domain.KeyID{} || keyID.String() == "00000000-0000-0000-0000-000000000000"

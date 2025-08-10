@@ -35,6 +35,16 @@ func NewPolykeyService(cfg *config.Config, service service.KeyService, authorize
 }
 
 func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
+	keyID, err := domain.KeyIDFromString(req.GetKeyId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+	}
+
+	ok, reason := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "get_key", keyID)
+	if !ok {
+		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+	}
+
 	resp, err := s.service.GetKey(ctx, req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get key: %v", err)
@@ -43,6 +53,11 @@ func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) 
 }
 
 func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
+	ok, reason := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "create_key", domain.KeyID{})
+	if !ok {
+		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+	}
+
 	resp, err := s.service.CreateKey(ctx, req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create key: %v", err)

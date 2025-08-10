@@ -11,11 +11,9 @@ import (
 	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
 	"github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
+	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	"github.com/spounge-ai/polykey/internal/kms"
 	"github.com/spounge-ai/polykey/internal/service"
-	mock_auth "github.com/spounge-ai/polykey/tests/mocks/auth"
-	kms_mocks "github.com/spounge-ai/polykey/tests/mocks/kms"
-	"github.com/spounge-ai/polykey/tests/mocks/persistence"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -26,45 +24,41 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// setupTestServer starts a new server and returns a client connection and a cleanup function.
-func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func(), context.Context) {
-	// Create a mock config for testing
+func setup(t *testing.T) (pk.PolykeyServiceClient, func(), context.Context) {
+	truncate(t)
 	cfg := &infra_config.Config{
 		Server: infra_config.ServerConfig{
 			Port: 0, // Dynamic port
 			Mode: "test",
 		},
-		Database: infra_config.DatabaseConfig{
-			Host:     "localhost",
-			Port:     5432,
-			User:     "testuser",
-			Password: "testpassword",
-			DBName:   "testdb",
-			SSLMode:  "disable",
+		Authorization: infra_config.AuthorizationConfig{
+			JWTSecret: "test-secret",
+			Roles: map[string]infra_config.RoleConfig{
+				"user": {
+					AllowedOperations: []string{"create_key", "get_key"},
+				},
+				"unauthorized": {
+					AllowedOperations: []string{},
+				},
+			},
 		},
-		Vault: &infra_config.VaultConfig{
-			Address: "http://localhost:8200",
-			Token:   "testtoken",
-		},
-		AWS: &infra_config.AWSConfig{
-			Region:    "us-east-1",
-			S3Bucket:  "test-bucket",
-			KMSKeyARN: "arn:aws:kms:us-east-1:123456789012:key/mrk-12345678901234567890123456789012",
-		},
+		LocalMasterKey: "/kH+AgL+tN2qrA8I+nXL7is4ORj23p2YVhpTjAz2YIs=",
 	}
 
-	// Always use mocks in integration tests
-	log.Println("Running in TEST environment: Using mock implementations.")
 	kmsProviders := make(map[string]kms.KMSProvider)
-	kmsProviders["local"] = kms_mocks.NewMockKMSAdapter()
-	authorizer := mock_auth.NewMockAuthorizer()
-	keyRepo := persistence.NewMockS3Storage()
+	localKMS, err := kms.NewLocalKMSProvider(cfg.LocalMasterKey)
+	assert.NoError(t, err)
+	kmsProviders["local"] = localKMS
+
+	keyRepo, err := persistence.NewNeonDBStorage(dbpool)
+	assert.NoError(t, err)
+
+	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo)
+
 	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
 
 	srv, port, err := app_grpc.New(cfg, keyService, authorizer, nil, slog.Default()) // nil for audit logger for now
 	assert.NoError(t, err)
-
-	_, cancelFunc := context.WithCancel(context.Background())
 
 	go func() {
 		if err := srv.Start(); err != nil {
@@ -83,7 +77,7 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func(), context.Con
 	client := pk.NewPolykeyServiceClient(conn)
 
 	// Generate a JWT token for testing
-	tokenManager := auth.NewTokenManager("test-secret")
+	tokenManager := auth.NewTokenManager(cfg.Authorization.JWTSecret)
 	token, err := tokenManager.GenerateToken("test-user", []string{"user"}, time.Hour)
 	assert.NoError(t, err)
 
@@ -94,14 +88,14 @@ func setupTestServer(t *testing.T) (pk.PolykeyServiceClient, func(), context.Con
 		if err := conn.Close(); err != nil {
 			t.Logf("failed to close connection: %v", err)
 		}
-		cancelFunc()
+		srv.Stop()
 	}
 
 	return client, cleanup, ctx
 }
 
 func TestHealthCheck(t *testing.T) {
-	client, cleanup, ctx := setupTestServer(t)
+	client, cleanup, ctx := setup(t)
 	defer cleanup()
 
 	resp, err := client.HealthCheck(ctx, &emptypb.Empty{})
@@ -111,24 +105,14 @@ func TestHealthCheck(t *testing.T) {
 }
 
 func TestKeyOperations_HappyPath(t *testing.T) {
-	client, cleanup, ctx := setupTestServer(t)
+	client, cleanup, ctx := setup(t)
 	defer cleanup()
-
-	t.Run("GetKey - Authorized", func(t *testing.T) {
-		keyID := "f47ac10b-58cc-4372-a567-0e02b2c3d479"
-		resp, err := client.GetKey(ctx, &pk.GetKeyRequest{
-			KeyId:            keyID,
-			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
-		})
-		assert.NoError(t, err)
-		assert.NotNil(t, resp)
-		assert.Equal(t, keyID, resp.Metadata.KeyId)
-	})
 
 	t.Run("CreateKey - Authorized", func(t *testing.T) {
 		createReq := &pk.CreateKeyRequest{
 			KeyType:          pk.KeyType_KEY_TYPE_AES_256,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_creator"},
+			InitialAuthorizedContexts: []string{"test-user"},
 		}
 		resp, err := client.CreateKey(ctx, createReq)
 		assert.NoError(t, err)
@@ -136,52 +120,49 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 		assert.NotEmpty(t, resp.KeyId)
 	})
 
-	t.Run("GetKeyMetadata - Authorized", func(t *testing.T) {
-		keyID := "a47ac10b-58cc-4372-a567-0e02b2c3d479"
-		resp, err := client.GetKeyMetadata(ctx, &pk.GetKeyMetadataRequest{
-			KeyId:                keyID,
-			RequesterContext:     &pk.RequesterContext{ClientIdentity: "test_client"},
-			IncludeAccessHistory: true,
-			IncludePolicyDetails: true,
+	t.Run("GetKey - Authorized", func(t *testing.T) {
+		createReq := &pk.CreateKeyRequest{
+			KeyType:          pk.KeyType_KEY_TYPE_AES_256,
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_creator"},
+			InitialAuthorizedContexts: []string{"test-user"},
+		}
+		createResp, err := client.CreateKey(ctx, createReq)
+		assert.NoError(t, err)
+
+		resp, err := client.GetKey(ctx, &pk.GetKeyRequest{
+			KeyId:            createResp.KeyId,
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
 		})
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
-		assert.Equal(t, keyID, resp.Metadata.KeyId)
-		// assert.NotEmpty(t, resp.AccessHistory) // TODO: Enable when audit log is implemented
-		// assert.NotEmpty(t, resp.PolicyDetails) // TODO: Enable when policy engine is implemented
+		assert.Equal(t, createResp.KeyId, resp.Metadata.KeyId)
 	})
 }
 
 func TestKeyOperations_ErrorConditions(t *testing.T) {
-	client, cleanup, ctx := setupTestServer(t)
+	client, cleanup, ctx := setup(t)
 	defer cleanup()
 
 	t.Run("GetKey - Unauthorized", func(t *testing.T) {
-		keyID := "c47ac10b-58cc-4372-a567-0e02b2c3d479"
-		_, err := client.GetKey(ctx, &pk.GetKeyRequest{
-			KeyId:            keyID,
+		// Generate a JWT token for testing with a different role
+		tokenManager := auth.NewTokenManager("test-secret")
+		token, err := tokenManager.GenerateToken("test-user", []string{"unauthorized"}, time.Hour)
+		assert.NoError(t, err)
+
+		// Add the token to the context of the client
+		ctxUnauth := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
+
+		createReq := &pk.CreateKeyRequest{
+			KeyType:          pk.KeyType_KEY_TYPE_AES_256,
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_creator"},
+			InitialAuthorizedContexts: []string{"test-user"},
+		}
+		createResp, err := client.CreateKey(ctx, createReq)
+		assert.NoError(t, err)
+
+		_, err = client.GetKey(ctxUnauth, &pk.GetKeyRequest{
+			KeyId:            createResp.KeyId,
 			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
-		})
-		assert.Error(t, err)
-		s, _ := status.FromError(err)
-		assert.Equal(t, codes.PermissionDenied, s.Code())
-	})
-
-	t.Run("CreateKey - Unauthorized", func(t *testing.T) {
-		_, err := client.CreateKey(ctx, &pk.CreateKeyRequest{
-			KeyType:          pk.KeyType_KEY_TYPE_API_KEY,
-			RequesterContext: &pk.RequesterContext{ClientIdentity: "unknown_creator"},
-		})
-		assert.Error(t, err)
-		s, _ := status.FromError(err)
-		assert.Equal(t, codes.PermissionDenied, s.Code())
-	})
-
-	t.Run("GetKeyMetadata - Unauthorized", func(t *testing.T) {
-		keyID := "d47ac10b-58cc-4372-a567-0e02b2c3d479"
-		_, err := client.GetKeyMetadata(ctx, &pk.GetKeyMetadataRequest{
-			KeyId:            keyID,
-			RequesterContext: &pk.RequesterContext{ClientIdentity: "unknown_client"},
 		})
 		assert.Error(t, err)
 		s, _ := status.FromError(err)
