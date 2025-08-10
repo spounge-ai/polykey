@@ -27,7 +27,14 @@ type Server struct {
 	logger     *slog.Logger
 }
 
-func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Authorizer, audit domain.AuditLogger, logger *slog.Logger) (*Server, int, error) {
+func New(
+	cfg *config.Config,
+	keyService service.KeyService,
+	authService service.AuthService,
+	authorizer domain.Authorizer,
+	auditLogger domain.AuditLogger,
+	logger *slog.Logger,
+) (*Server, int, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.Port))
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to listen: %w", err)
@@ -44,9 +51,13 @@ func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Au
 		opts = append(opts, grpc.Creds(creds))
 	}
 
+	// This part is tricky because the TokenManager is needed for the interceptor,
+	// but it's created deep within the wiring. For now, we might need to create it here
+	// or pass it up from the wiring.
+	// Let's assume for now it's passed up or created here from config.
 	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create token manager: %w", err)
+		return nil, 0, fmt.Errorf("failed to create token manager for interceptor: %w", err)
 	}
 
 	opts = append(opts, grpc.ChainUnaryInterceptor(
@@ -56,7 +67,7 @@ func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Au
 
 	grpcServer := grpc.NewServer(opts...)
 
-	polykeyService, err := NewPolykeyService(cfg, keyService, authorizer, audit, logger)
+	polykeyService, err := NewPolykeyService(cfg, keyService, authService, authorizer, auditLogger, logger)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create polykey service: %w", err)
 	}
@@ -76,8 +87,7 @@ func New(cfg *config.Config, keyService service.KeyService, authorizer domain.Au
 	}, port, nil
 }
 
- 
- func (s *Server) Start() error {
+func (s *Server) Start() error {
 	s.logger.Info("gRPC server listening", "address", s.lis.Addr().String())
 	s.healthSrv.SetServingStatus("polykey.v2.PolykeyService", grpc_health_v1.HealthCheckResponse_SERVING)
 	return s.grpcServer.Serve(s.lis)
@@ -92,4 +102,3 @@ func (s *Server) Stop() {
 	}
 	s.logger.Info("gRPC server stopped.")
 }
-

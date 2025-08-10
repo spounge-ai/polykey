@@ -15,95 +15,167 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type polykeyServiceImpl struct {
+// PolykeyService is the gRPC implementation of the pk.PolykeyServiceServer interface.
+// It acts as the transport layer, delegating business logic to various services.
+type PolykeyService struct {
 	pk.UnimplementedPolykeyServiceServer
-	cfg        *config.Config
-	service    service.KeyService
-	authorizer domain.Authorizer
-	audit      domain.AuditLogger
-	logger     *slog.Logger
+	cfg         *config.Config
+	keyService  service.KeyService
+	authService service.AuthService
+	authorizer  domain.Authorizer
+	audit       domain.AuditLogger
+	logger      *slog.Logger
 }
 
-func NewPolykeyService(cfg *config.Config, service service.KeyService, authorizer domain.Authorizer, audit domain.AuditLogger, logger *slog.Logger) (pk.PolykeyServiceServer, error) {
-	return &polykeyServiceImpl{
-		cfg:        cfg,
-		service:    service,
-		authorizer: authorizer,
-		audit:      audit,
-		logger:     logger,
+// NewPolykeyService creates a new gRPC service implementation.
+func NewPolykeyService(
+	cfg *config.Config,
+	keyService service.KeyService,
+	authService service.AuthService,
+	authorizer domain.Authorizer,
+	audit domain.AuditLogger,
+	logger *slog.Logger,
+) (pk.PolykeyServiceServer, error) {
+	return &PolykeyService{
+		cfg:         cfg,
+		keyService:  keyService,
+		authService: authService,
+		authorizer:  authorizer,
+		audit:       audit,
+		logger:      logger,
 	}, nil
 }
 
-func (s *polykeyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
+// --- Authentication Methods ---
+
+func (s *PolykeyService) Authenticate(ctx context.Context, req *pk.AuthenticateRequest) (*pk.AuthenticateResponse, error) {
+	if req.GetClientId() == "" || req.GetApiKey() == "" {
+		return nil, status.Error(codes.InvalidArgument, "client_id and api_key are required")
+	}
+
+	result, err := s.authService.Authenticate(ctx, req.GetClientId(), req.GetApiKey())
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "authentication failed: %v", err)
+	}
+
+	return &pk.AuthenticateResponse{
+		AccessToken: result.AccessToken,
+		TokenType:   result.TokenType,
+		ExpiresIn:   result.ExpiresIn,
+		IssuedAt:    timestamppb.Now(),
+	}, nil
+}
+
+// --- Key Management Methods ---
+
+func (s *PolykeyService) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
 	keyID, err := domain.KeyIDFromString(req.GetKeyId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
 	}
 
-	ok, reason := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "get_key", keyID)
-	if !ok {
+	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:read", keyID); !ok {
 		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
 	}
 
-	resp, err := s.service.GetKey(ctx, req)
+	resp, err := s.keyService.GetKey(ctx, req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get key: %v", err)
 	}
 	return resp, nil
 }
 
-func (s *polykeyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
-	ok, reason := s.authorizer.Authorize(ctx, req.GetRequesterContext(), nil, "create_key", domain.KeyID{})
-	if !ok {
+func (s *PolykeyService) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
+	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:create", domain.KeyID{}); !ok {
 		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
 	}
 
-	resp, err := s.service.CreateKey(ctx, req)
+	resp, err := s.keyService.CreateKey(ctx, req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create key: %v", err)
 	}
 	return resp, nil
 }
 
-func (s *polykeyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
-	resp, err := s.service.ListKeys(ctx, req)
+func (s *PolykeyService) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
+	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:list", domain.KeyID{}); !ok {
+		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+	}
+
+	resp, err := s.keyService.ListKeys(ctx, req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list keys: %v", err)
 	}
 	return resp, nil
 }
 
-func (s *polykeyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest) (*pk.RotateKeyResponse, error) {
-	resp, err := s.service.RotateKey(ctx, req)
+func (s *PolykeyService) RotateKey(ctx context.Context, req *pk.RotateKeyRequest) (*pk.RotateKeyResponse, error) {
+	keyID, err := domain.KeyIDFromString(req.GetKeyId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+	}
+
+	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:rotate", keyID); !ok {
+		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+	}
+
+	resp, err := s.keyService.RotateKey(ctx, req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to rotate key: %v", err)
 	}
 	return resp, nil
 }
 
-func (s *polykeyServiceImpl) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) (*emptypb.Empty, error) {
-	if err := s.service.RevokeKey(ctx, req); err != nil {
+func (s *PolykeyService) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) (*emptypb.Empty, error) {
+	keyID, err := domain.KeyIDFromString(req.GetKeyId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+	}
+
+	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:revoke", keyID); !ok {
+		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+	}
+
+	if err := s.keyService.RevokeKey(ctx, req); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to revoke key: %v", err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
-func (s *polykeyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) (*emptypb.Empty, error) {
-	if err := s.service.UpdateKeyMetadata(ctx, req); err != nil {
+func (s *PolykeyService) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) (*emptypb.Empty, error) {
+	keyID, err := domain.KeyIDFromString(req.GetKeyId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+	}
+
+	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:update", keyID); !ok {
+		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+	}
+
+	if err := s.keyService.UpdateKeyMetadata(ctx, req); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update key metadata: %v", err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
-func (s *polykeyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error) {
-	resp, err := s.service.GetKeyMetadata(ctx, req)
+func (s *PolykeyService) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error) {
+	keyID, err := domain.KeyIDFromString(req.GetKeyId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+	}
+
+	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:read", keyID); !ok {
+		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+	}
+
+	resp, err := s.keyService.GetKeyMetadata(ctx, req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get key metadata: %v", err)
 	}
 	return resp, nil
 }
 
-func (s *polykeyServiceImpl) HealthCheck(ctx context.Context, req *emptypb.Empty) (*pk.HealthCheckResponse, error) {
+func (s *PolykeyService) HealthCheck(ctx context.Context, req *emptypb.Empty) (*pk.HealthCheckResponse, error) {
 	return &pk.HealthCheckResponse{
 		Status:         pk.HealthStatus_HEALTH_STATUS_HEALTHY,
 		Timestamp:      timestamppb.Now(),

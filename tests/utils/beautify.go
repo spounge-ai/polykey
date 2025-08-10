@@ -61,8 +61,6 @@ func PrintJestReport(logData string) bool {
 		}
 	}
 
-	
-
 	printSummary(s)
 	return len(s.failures) > 0
 }
@@ -71,6 +69,7 @@ func processAppLogEntry(entry LogEntry, s *state) {
 	msg, _ := entry["msg"].(string)
 
 	switch msg {
+	// Setup & Connection
 	case "Configuration loaded":
 		printSuiteHeader(&s.currentSuite, "SETUP")
 		details := fmt.Sprintf("server=%v", entry["server"])
@@ -80,89 +79,112 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		printSuiteHeader(&s.currentSuite, "CONNECTION")
 		printStep("PASS", "gRPC Connection", "")
 		s.passes++
+
+	// Authentication
+	case "Authentication successful":
+		printSuiteHeader(&s.currentSuite, "AUTHENTICATION")
+		details := fmt.Sprintf("expires_in=%v", entry["expires_in"])
+		printStep("PASS", "Client Authentication", details)
+		s.passes++
+
+	// Happy Path Execution
 	case "HealthCheck successful":
-		printSuiteHeader(&s.currentSuite, "HEALTH CHECK")
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("status=%v, version=%v", entry["status"], entry["version"])
 		printStep("PASS", "Health Check", details)
 		s.passes++
 	case "CreateKey successful":
-		printSuiteHeader(&s.currentSuite, "EXECUTION")
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyId=%v", entry["keyId"])
 		printStep("PASS", "CreateKey", details)
 		s.passes++
-		
-	case "GetKey successful":
-		printSuiteHeader(&s.currentSuite, "EXECUTION")
-		details := fmt.Sprintf("keyId=%v", entry["keyId"])
-		printStep("PASS", "GetKey", details)
-		s.passes++
-
 	case "GetKey successful (pre-rotation)":
-		printSuiteHeader(&s.currentSuite, "VALIDATION")
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyId=%v, version=%v", entry["keyId"], entry["version"])
 		printStep("PASS", "GetKey (pre-rotation)", details)
 		s.passes++
-
-	case "GetKey successful (post-rotation)":
-		printSuiteHeader(&s.currentSuite, "VALIDATION")
-		details := fmt.Sprintf("keyId=%v, version=%v", entry["keyId"], entry["version"])
-		printStep("PASS", "GetKey (post-rotation)", details)
-		s.passes++
-		
 	case "RotateKey successful":
-		printSuiteHeader(&s.currentSuite, "EXECUTION")
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyId=%v, newVersion=%v", entry["keyId"], entry["newVersion"])
 		printStep("PASS", "RotateKey", details)
 		s.passes++
-
-	case "Starting key rotation validation":
-		printSuiteHeader(&s.currentSuite, "VALIDATION")
-
-	case "Key ID preserved after rotation":
-		details := fmt.Sprintf("keyId=%v", entry["keyId"])
-		printStep("PASS", "Key ID Preserved", details)
+	case "GetKey successful (post-rotation)":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		details := fmt.Sprintf("keyId=%v, version=%v", entry["keyId"], entry["version"])
+		printStep("PASS", "GetKey (post-rotation)", details)
 		s.passes++
-
-	case "Key version incremented correctly":
-		details := fmt.Sprintf("v%v → v%v", entry["originalVersion"], entry["rotatedVersion"])
-		printStep("PASS", "Version Incremented", details)
-		s.passes++
-
-	case "Key material successfully rotated":
-		printStep("PASS", "Key Material Rotated", "")
-		s.passes++
-
-	case "Key type preserved":
-		details := fmt.Sprintf("keyType=%v", entry["keyType"])
-		printStep("PASS", "Key Type Preserved", details)
-		s.passes++
-
-	case "Key rotation validation completed":
-		// Summary message, no action needed
-
 	case "ListKeys successful":
-		printSuiteHeader(&s.currentSuite, "EXECUTION")
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("count=%v", entry["count"])
 		printStep("PASS", "ListKeys", details)
 		s.passes++
+	case "Starting key rotation validation":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		printStep("PASS", "Key Rotation Validation Started", "")
+		s.passes++
+	case "Key ID preserved after rotation":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		details := fmt.Sprintf("keyId=%v", entry["keyId"])
+		printStep("PASS", "Key ID Preserved", details)
+		s.passes++
+	case "Key ID changed after rotation":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		details := fmt.Sprintf("originalKeyId=%v, rotatedKeyId=%v", entry["originalKeyId"], entry["rotatedKeyId"])
+		printStep("FAIL", "Key ID Changed Unexpectedly", details)
+		s.failures = append(s.failures, fmt.Sprintf("Key ID Changed Unexpectedly: %s", details))
+	case "Key version incremented correctly":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		details := fmt.Sprintf("originalVersion=%v, rotatedVersion=%v", entry["originalVersion"], entry["rotatedVersion"])
+		printStep("PASS", "Key Version Incremented", details)
+		s.passes++
+	case "Key version not incremented properly":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		details := fmt.Sprintf("originalVersion=%v, rotatedVersion=%v", entry["originalVersion"], entry["rotatedVersion"])
+		printStep("FAIL", "Key Version Not Incremented Properly", details)
+		s.failures = append(s.failures, fmt.Sprintf("Key Version Not Incremented Properly: %s", details))
+	case "Key material successfully rotated":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		printStep("PASS", "Key Material Rotated", "")
+		s.passes++
+	case "Key material unchanged after rotation":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		printStep("FAIL", "Key Material Unchanged", "")
+		s.failures = append(s.failures, "Key Material Unchanged")
+	case "Key type preserved":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		details := fmt.Sprintf("keyType=%v", entry["keyType"])
+		printStep("PASS", "Key Type Preserved", details)
+		s.passes++
+	case "Key type changed unexpectedly":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		details := fmt.Sprintf("originalKeyType=%v, rotatedKeyType=%v", entry["originalKeyType"], entry["rotatedKeyType"])
+		printStep("FAIL", "Key Type Changed Unexpectedly", details)
+		s.failures = append(s.failures, fmt.Sprintf("Key Type Changed Unexpectedly: %s", details))
+	case "Key rotation validation completed":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		printStep("PASS", "Key Rotation Validation Completed", "")
+		s.passes++
+
+	// Error Condition Tests
+	case "Unauthenticated access test passed":
+		printSuiteHeader(&s.currentSuite, "ERROR CONDITIONS")
+		details := fmt.Sprintf("gRPC_code=%v", entry["code"])
+		printStep("PASS", "Rejects request with no token", details)
+		s.passes++
+	case "Invalid token test passed":
+		printSuiteHeader(&s.currentSuite, "ERROR CONDITIONS")
+		details := fmt.Sprintf("gRPC_code=%v", entry["code"])
+		printStep("PASS", "Rejects request with invalid token", details)
+		s.passes++
 
 	// Failure cases
-	case "CreateKey failed", "GetKey failed", "GetKey (pre-rotation) failed", "GetKey (post-rotation) failed", 
-		 "HealthCheck failed", "gRPC connection failed", "RotateKey failed", "ListKeys failed", 
-		 "failed to load TLS credentials":
+	case "Authentication failed", "CreateKey failed", "GetKey failed", "GetKey (pre-rotation) failed", "GetKey (post-rotation) failed",
+		"HealthCheck failed", "gRPC connection failed", "RotateKey failed", "ListKeys failed",
+		"failed to load TLS credentials", "Unauthenticated access test failed", "Invalid token test failed":
 		printSuiteHeader(&s.currentSuite, "ERROR")
 		details := fmt.Sprintf("%v", entry["error"])
 		printStep("FAIL", msg, details)
 		s.failures = append(s.failures, fmt.Sprintf("%s: %s", msg, details))
-
-	case "Key ID changed after rotation", "Key version not incremented properly", 
-		 "Key material unchanged after rotation", "Key type changed unexpectedly":
-		details := ""
-		if entry["originalVersion"] != nil && entry["rotatedVersion"] != nil {
-			details = fmt.Sprintf("v%v → v%v", entry["originalVersion"], entry["rotatedVersion"])
-		}
-		printStep("FAIL", msg, details)
-		s.failures = append(s.failures, msg)
 	}
 }
 
@@ -197,6 +219,7 @@ func printSuiteHeader(currentSuite *string, newSuite string) {
 	if *currentSuite != newSuite {
 		separator := strings.Repeat("─", 10)
 		fmt.Printf("\n%s%s %s%s%s %s%s\n", ColorGray, separator, ColorBold, newSuite, ColorReset, separator, ColorReset)
+		*currentSuite = newSuite
 	}
 }
 

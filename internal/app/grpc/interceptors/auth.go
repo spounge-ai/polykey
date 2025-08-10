@@ -12,9 +12,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var unprotectedMethods = map[string]bool{
+	"/polykey.v2.PolykeyService/HealthCheck":   true,
+	"/polykey.v2.PolykeyService/Authenticate": true,
+}
+
+// AuthenticationInterceptor validates the JWT token from the request metadata
+// for all RPCs except for a predefined list of unprotected methods.
 func AuthenticationInterceptor(tokenManager *auth.TokenManager) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		if info.FullMethod == "/polykey.v2.PolykeyService/HealthCheck" {
+		if unprotectedMethods[info.FullMethod] {
 			return handler(ctx, req)
 		}
 
@@ -35,8 +42,8 @@ func AuthenticationInterceptor(tokenManager *auth.TokenManager) grpc.UnaryServer
 		}
 
 		user := &domain.AuthenticatedUser{
-			ID:   claims.UserID,
-			Role: strings.Join(claims.Roles, ","), // Or handle roles as needed
+			ID:          claims.UserID,
+			Permissions: claims.Roles, 
 		}
 
 		ctx = domain.NewContextWithUser(ctx, user)

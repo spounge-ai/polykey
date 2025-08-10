@@ -28,8 +28,9 @@ type Config struct {
 	CockroachDB      *CockroachDBConfig   `mapstructure:"cockroachdb"`
 	Vault            *VaultConfig         `mapstructure:"vault"`
 	AWS              *AWSConfig           `mapstructure:"aws"`
-	Authorization    AuthorizationConfig  `mapstructure:"authorization"`
-	StorageBackend   string               `mapstructure:"storage_backend"`
+	Authorization        AuthorizationConfig  `mapstructure:"authorization"`
+	ClientCredentialsPath string               `mapstructure:"client_credentials_path"`
+	StorageBackend       string               `mapstructure:"storage_backend"`
 	ServiceVersion   string
 	BuildCommit      string
 	BootstrapSecrets BootstrapSecrets

@@ -58,25 +58,34 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 			},
 		},
 		BootstrapSecrets: infra_config.BootstrapSecrets{
-			PolykeyMasterKey:   "/kH+AgL+tN2qrA8I+nXL7is4ORj23p2YVhpTjAz2YIs=",
+			PolykeyMasterKey: "/kH+AgL+tN2qrA8I+nXL7is4ORj23p2YVhpTjAz2YIs=",
 			JWTRSAPrivateKey: string(privateKeyPEM),
 		},
 	}
 
+	// --- Dependency Initialization ---
 	kmsProviders := make(map[string]kms.KMSProvider)
 	localKMS, err := kms.NewLocalKMSProvider(cfg.BootstrapSecrets.PolykeyMasterKey)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	kmsProviders["local"] = localKMS
 
 	keyRepo, err := persistence.NewNeonDBStorage(dbpool)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo)
 
-	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
+	clientStore, err := auth.NewFileClientStore("../../configs/config.client.dev.yaml")
+	require.NoError(t, err)
 
-	srv, port, err := app_grpc.New(cfg, keyService, authorizer, nil, slog.Default()) // nil for audit logger for now
-	assert.NoError(t, err)
+	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
+	require.NoError(t, err)
+
+	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
+	authService := service.NewAuthService(clientStore, tokenManager, 1*time.Hour)
+
+	// --- Server Setup ---
+	srv, port, err := app_grpc.New(cfg, keyService, authService, authorizer, nil, slog.Default()) // nil for audit logger for now
+	require.NoError(t, err)
 
 	go func() {
 		if err := srv.Start(); err != nil {
@@ -90,16 +99,13 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 		fmt.Sprintf("localhost:%d", port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	client := pk.NewPolykeyServiceClient(conn)
 
 	// Generate a JWT token for testing
-	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
-	require.NoError(t, err)
-
 	token, err := tokenManager.GenerateToken("test-user", []string{"user"}, time.Hour)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Add the token to the context of the client
 	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
