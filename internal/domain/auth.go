@@ -11,6 +11,7 @@ import (
 type AuthenticatedUser struct {
 	ID          string
 	Permissions []string
+	Tier        KeyTier
 }
 
 type contextKey string

@@ -2,6 +2,1339 @@
 // versions:
 // 	protoc-gen-go v1.36.7
 // 	protoc        (unknown)
+// source: polykey/v2/auth.proto
+
+package polykeyv2
+
+import (
+	v2 "github.com/spounge-ai/spounge-proto/gen/go/common/v2"
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+)
+
+const (
+	// Verify that this generated code is sufficiently up-to-date.
+	_ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
+	// Verify that runtime/protoimpl is sufficiently up-to-date.
+	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
+)
+
+type AuthenticateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"` // e.g., "nodus", "workflow-engine"
+	ApiKey        string                 `protobuf:"bytes,2,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`       // Pre-shared secret
+	GrantType     string                 `protobuf:"bytes,3,opt,name=grant_type,json=grantType,proto3" json:"grant_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthenticateRequest) Reset() {
+	*x = AuthenticateRequest{}
+	mi := &file_polykey_v2_auth_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthenticateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthenticateRequest) ProtoMessage() {}
+
+func (x *AuthenticateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_auth_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthenticateRequest.ProtoReflect.Descriptor instead.
+func (*AuthenticateRequest) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *AuthenticateRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *AuthenticateRequest) GetApiKey() string {
+	if x != nil {
+		return x.ApiKey
+	}
+	return ""
+}
+
+func (x *AuthenticateRequest) GetGrantType() string {
+	if x != nil {
+		return x.GrantType
+	}
+	return ""
+}
+
+type AuthenticateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"` // JWT token
+	TokenType     string                 `protobuf:"bytes,2,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`       // "Bearer"
+	ExpiresIn     int64                  `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`      // Token TTL in seconds
+	Permissions   []string               `protobuf:"bytes,4,rep,name=permissions,proto3" json:"permissions,omitempty"`                    // ["secrets:read", "secrets:write"]
+	IssuedAt      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	ClientTier    v2.ClientTier          `protobuf:"varint,6,opt,name=client_tier,json=clientTier,proto3,enum=common.v2.ClientTier" json:"client_tier,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthenticateResponse) Reset() {
+	*x = AuthenticateResponse{}
+	mi := &file_polykey_v2_auth_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthenticateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthenticateResponse) ProtoMessage() {}
+
+func (x *AuthenticateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_auth_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthenticateResponse.ProtoReflect.Descriptor instead.
+func (*AuthenticateResponse) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AuthenticateResponse) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *AuthenticateResponse) GetTokenType() string {
+	if x != nil {
+		return x.TokenType
+	}
+	return ""
+}
+
+func (x *AuthenticateResponse) GetExpiresIn() int64 {
+	if x != nil {
+		return x.ExpiresIn
+	}
+	return 0
+}
+
+func (x *AuthenticateResponse) GetPermissions() []string {
+	if x != nil {
+		return x.Permissions
+	}
+	return nil
+}
+
+func (x *AuthenticateResponse) GetIssuedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IssuedAt
+	}
+	return nil
+}
+
+func (x *AuthenticateResponse) GetClientTier() v2.ClientTier {
+	if x != nil {
+		return x.ClientTier
+	}
+	return v2.ClientTier(0)
+}
+
+type RefreshTokenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RefreshToken  string                 `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshTokenRequest) Reset() {
+	*x = RefreshTokenRequest{}
+	mi := &file_polykey_v2_auth_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshTokenRequest) ProtoMessage() {}
+
+func (x *RefreshTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_auth_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshTokenRequest.ProtoReflect.Descriptor instead.
+func (*RefreshTokenRequest) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RefreshTokenRequest) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
+type RefreshTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	TokenType     string                 `protobuf:"bytes,2,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`
+	ExpiresIn     int64                  `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
+	IssuedAt      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshTokenResponse) Reset() {
+	*x = RefreshTokenResponse{}
+	mi := &file_polykey_v2_auth_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshTokenResponse) ProtoMessage() {}
+
+func (x *RefreshTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_auth_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshTokenResponse.ProtoReflect.Descriptor instead.
+func (*RefreshTokenResponse) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RefreshTokenResponse) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *RefreshTokenResponse) GetTokenType() string {
+	if x != nil {
+		return x.TokenType
+	}
+	return ""
+}
+
+func (x *RefreshTokenResponse) GetExpiresIn() int64 {
+	if x != nil {
+		return x.ExpiresIn
+	}
+	return 0
+}
+
+func (x *RefreshTokenResponse) GetIssuedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IssuedAt
+	}
+	return nil
+}
+
+type RevokeTokenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeTokenRequest) Reset() {
+	*x = RevokeTokenRequest{}
+	mi := &file_polykey_v2_auth_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeTokenRequest) ProtoMessage() {}
+
+func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_auth_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeTokenRequest.ProtoReflect.Descriptor instead.
+func (*RevokeTokenRequest) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RevokeTokenRequest) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *RevokeTokenRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type RevokeTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Revoked       bool                   `protobuf:"varint,1,opt,name=revoked,proto3" json:"revoked,omitempty"`
+	RevokedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeTokenResponse) Reset() {
+	*x = RevokeTokenResponse{}
+	mi := &file_polykey_v2_auth_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeTokenResponse) ProtoMessage() {}
+
+func (x *RevokeTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_auth_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeTokenResponse.ProtoReflect.Descriptor instead.
+func (*RevokeTokenResponse) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RevokeTokenResponse) GetRevoked() bool {
+	if x != nil {
+		return x.Revoked
+	}
+	return false
+}
+
+func (x *RevokeTokenResponse) GetRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return nil
+}
+
+// use later for scale
+type ClientInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientName    string                 `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	Permissions   []string               `protobuf:"bytes,3,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	Environment   string                 `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"` // "dev", "staging", "prod"
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
+	ClientTier    v2.ClientTier          `protobuf:"varint,7,opt,name=client_tier,json=clientTier,proto3,enum=common.v2.ClientTier" json:"client_tier,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientInfo) Reset() {
+	*x = ClientInfo{}
+	mi := &file_polykey_v2_auth_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientInfo) ProtoMessage() {}
+
+func (x *ClientInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_auth_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientInfo.ProtoReflect.Descriptor instead.
+func (*ClientInfo) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ClientInfo) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ClientInfo) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *ClientInfo) GetPermissions() []string {
+	if x != nil {
+		return x.Permissions
+	}
+	return nil
+}
+
+func (x *ClientInfo) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *ClientInfo) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *ClientInfo) GetLastUsedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastUsedAt
+	}
+	return nil
+}
+
+func (x *ClientInfo) GetClientTier() v2.ClientTier {
+	if x != nil {
+		return x.ClientTier
+	}
+	return v2.ClientTier(0)
+}
+
+var File_polykey_v2_auth_proto protoreflect.FileDescriptor
+
+const file_polykey_v2_auth_proto_rawDesc = "" +
+	"\n" +
+	"\x15polykey/v2/auth.proto\x12\n" +
+	"polykey.v2\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v2/common.proto\"j\n" +
+	"\x13AuthenticateRequest\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x17\n" +
+	"\aapi_key\x18\x02 \x01(\tR\x06apiKey\x12\x1d\n" +
+	"\n" +
+	"grant_type\x18\x03 \x01(\tR\tgrantType\"\x8a\x02\n" +
+	"\x14AuthenticateResponse\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
+	"\n" +
+	"token_type\x18\x02 \x01(\tR\ttokenType\x12\x1d\n" +
+	"\n" +
+	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x12 \n" +
+	"\vpermissions\x18\x04 \x03(\tR\vpermissions\x127\n" +
+	"\tissued_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt\x126\n" +
+	"\vclient_tier\x18\x06 \x01(\x0e2\x15.common.v2.ClientTierR\n" +
+	"clientTier\":\n" +
+	"\x13RefreshTokenRequest\x12#\n" +
+	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"\xb0\x01\n" +
+	"\x14RefreshTokenResponse\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
+	"\n" +
+	"token_type\x18\x02 \x01(\tR\ttokenType\x12\x1d\n" +
+	"\n" +
+	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x127\n" +
+	"\tissued_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt\"T\n" +
+	"\x12RevokeTokenRequest\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"j\n" +
+	"\x13RevokeTokenResponse\x12\x18\n" +
+	"\arevoked\x18\x01 \x01(\bR\arevoked\x129\n" +
+	"\n" +
+	"revoked_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\"\xbf\x02\n" +
+	"\n" +
+	"ClientInfo\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
+	"\vclient_name\x18\x02 \x01(\tR\n" +
+	"clientName\x12 \n" +
+	"\vpermissions\x18\x03 \x03(\tR\vpermissions\x12 \n" +
+	"\venvironment\x18\x04 \x01(\tR\venvironment\x129\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12<\n" +
+	"\flast_used_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"lastUsedAt\x126\n" +
+	"\vclient_tier\x18\a \x01(\x0e2\x15.common.v2.ClientTierR\n" +
+	"clientTierB\xa5\x01\n" +
+	"\x0ecom.polykey.v2B\tAuthProtoP\x01Z?github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2\xa2\x02\x03PXX\xaa\x02\n" +
+	"Polykey.V2\xca\x02\n" +
+	"Polykey\\V2\xe2\x02\x16Polykey\\V2\\GPBMetadata\xea\x02\vPolykey::V2b\x06proto3"
+
+var (
+	file_polykey_v2_auth_proto_rawDescOnce sync.Once
+	file_polykey_v2_auth_proto_rawDescData []byte
+)
+
+func file_polykey_v2_auth_proto_rawDescGZIP() []byte {
+	file_polykey_v2_auth_proto_rawDescOnce.Do(func() {
+		file_polykey_v2_auth_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_polykey_v2_auth_proto_rawDesc), len(file_polykey_v2_auth_proto_rawDesc)))
+	})
+	return file_polykey_v2_auth_proto_rawDescData
+}
+
+var file_polykey_v2_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_polykey_v2_auth_proto_goTypes = []any{
+	(*AuthenticateRequest)(nil),   // 0: polykey.v2.AuthenticateRequest
+	(*AuthenticateResponse)(nil),  // 1: polykey.v2.AuthenticateResponse
+	(*RefreshTokenRequest)(nil),   // 2: polykey.v2.RefreshTokenRequest
+	(*RefreshTokenResponse)(nil),  // 3: polykey.v2.RefreshTokenResponse
+	(*RevokeTokenRequest)(nil),    // 4: polykey.v2.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil),   // 5: polykey.v2.RevokeTokenResponse
+	(*ClientInfo)(nil),            // 6: polykey.v2.ClientInfo
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(v2.ClientTier)(0),            // 8: common.v2.ClientTier
+}
+var file_polykey_v2_auth_proto_depIdxs = []int32{
+	7, // 0: polykey.v2.AuthenticateResponse.issued_at:type_name -> google.protobuf.Timestamp
+	8, // 1: polykey.v2.AuthenticateResponse.client_tier:type_name -> common.v2.ClientTier
+	7, // 2: polykey.v2.RefreshTokenResponse.issued_at:type_name -> google.protobuf.Timestamp
+	7, // 3: polykey.v2.RevokeTokenResponse.revoked_at:type_name -> google.protobuf.Timestamp
+	7, // 4: polykey.v2.ClientInfo.created_at:type_name -> google.protobuf.Timestamp
+	7, // 5: polykey.v2.ClientInfo.last_used_at:type_name -> google.protobuf.Timestamp
+	8, // 6: polykey.v2.ClientInfo.client_tier:type_name -> common.v2.ClientTier
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
+}
+
+func init() { file_polykey_v2_auth_proto_init() }
+func file_polykey_v2_auth_proto_init() {
+	if File_polykey_v2_auth_proto != nil {
+		return
+	}
+	type x struct{}
+	out := protoimpl.TypeBuilder{
+		File: protoimpl.DescBuilder{
+			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_polykey_v2_auth_proto_rawDesc), len(file_polykey_v2_auth_proto_rawDesc)),
+			NumEnums:      0,
+			NumMessages:   7,
+			NumExtensions: 0,
+			NumServices:   0,
+		},
+		GoTypes:           file_polykey_v2_auth_proto_goTypes,
+		DependencyIndexes: file_polykey_v2_auth_proto_depIdxs,
+		MessageInfos:      file_polykey_v2_auth_proto_msgTypes,
+	}.Build()
+	File_polykey_v2_auth_proto = out.File
+	file_polykey_v2_auth_proto_goTypes = nil
+	file_polykey_v2_auth_proto_depIdxs = nil
+}
+// Code generated by protoc-gen-go. DO NOT EDIT.
+// versions:
+// 	protoc-gen-go v1.36.7
+// 	protoc        (unknown)
+// source: polykey/v2/common.proto
+
+package polykeyv2
+
+import (
+	v2 "github.com/spounge-ai/spounge-proto/gen/go/common/v2"
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+)
+
+const (
+	// Verify that this generated code is sufficiently up-to-date.
+	_ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
+	// Verify that runtime/protoimpl is sufficiently up-to-date.
+	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
+)
+
+type RequesterContext struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	ClientIdentity         string                 `protobuf:"bytes,1,opt,name=client_identity,json=clientIdentity,proto3" json:"client_identity,omitempty"`
+	CertificateFingerprint string                 `protobuf:"bytes,2,opt,name=certificate_fingerprint,json=certificateFingerprint,proto3" json:"certificate_fingerprint,omitempty"`
+	ApplicationId          string                 `protobuf:"bytes,3,opt,name=application_id,json=applicationId,proto3" json:"application_id,omitempty"`
+	CorrelationId          string                 `protobuf:"bytes,4,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	ClientTier             v2.ClientTier          `protobuf:"varint,5,opt,name=client_tier,json=clientTier,proto3,enum=common.v2.ClientTier" json:"client_tier,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *RequesterContext) Reset() {
+	*x = RequesterContext{}
+	mi := &file_polykey_v2_common_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequesterContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequesterContext) ProtoMessage() {}
+
+func (x *RequesterContext) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_common_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequesterContext.ProtoReflect.Descriptor instead.
+func (*RequesterContext) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_common_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *RequesterContext) GetClientIdentity() string {
+	if x != nil {
+		return x.ClientIdentity
+	}
+	return ""
+}
+
+func (x *RequesterContext) GetCertificateFingerprint() string {
+	if x != nil {
+		return x.CertificateFingerprint
+	}
+	return ""
+}
+
+func (x *RequesterContext) GetApplicationId() string {
+	if x != nil {
+		return x.ApplicationId
+	}
+	return ""
+}
+
+func (x *RequesterContext) GetCorrelationId() string {
+	if x != nil {
+		return x.CorrelationId
+	}
+	return ""
+}
+
+func (x *RequesterContext) GetClientTier() v2.ClientTier {
+	if x != nil {
+		return x.ClientTier
+	}
+	return v2.ClientTier(0)
+}
+
+type AccessAttributes struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Environment      string                 `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
+	NetworkZone      string                 `protobuf:"bytes,2,opt,name=network_zone,json=networkZone,proto3" json:"network_zone,omitempty"`
+	GeographicRegion string                 `protobuf:"bytes,3,opt,name=geographic_region,json=geographicRegion,proto3" json:"geographic_region,omitempty"`
+	RequestTime      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=request_time,json=requestTime,proto3" json:"request_time,omitempty"`
+	TimeWindow       string                 `protobuf:"bytes,5,opt,name=time_window,json=timeWindow,proto3" json:"time_window,omitempty"` // e.g., "business-hours", "after-hours".
+	Roles            []string               `protobuf:"bytes,6,rep,name=roles,proto3" json:"roles,omitempty"`
+	Permissions      []string               `protobuf:"bytes,7,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	CustomAttributes map[string]string      `protobuf:"bytes,8,rep,name=custom_attributes,json=customAttributes,proto3" json:"custom_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AccessAttributes) Reset() {
+	*x = AccessAttributes{}
+	mi := &file_polykey_v2_common_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccessAttributes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccessAttributes) ProtoMessage() {}
+
+func (x *AccessAttributes) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_common_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccessAttributes.ProtoReflect.Descriptor instead.
+func (*AccessAttributes) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_common_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AccessAttributes) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *AccessAttributes) GetNetworkZone() string {
+	if x != nil {
+		return x.NetworkZone
+	}
+	return ""
+}
+
+func (x *AccessAttributes) GetGeographicRegion() string {
+	if x != nil {
+		return x.GeographicRegion
+	}
+	return ""
+}
+
+func (x *AccessAttributes) GetRequestTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RequestTime
+	}
+	return nil
+}
+
+func (x *AccessAttributes) GetTimeWindow() string {
+	if x != nil {
+		return x.TimeWindow
+	}
+	return ""
+}
+
+func (x *AccessAttributes) GetRoles() []string {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
+func (x *AccessAttributes) GetPermissions() []string {
+	if x != nil {
+		return x.Permissions
+	}
+	return nil
+}
+
+func (x *AccessAttributes) GetCustomAttributes() map[string]string {
+	if x != nil {
+		return x.CustomAttributes
+	}
+	return nil
+}
+
+type KeyMetadata struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	KeyId              string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	KeyType            KeyType                `protobuf:"varint,2,opt,name=key_type,json=keyType,proto3,enum=polykey.v2.KeyType" json:"key_type,omitempty"`
+	Status             KeyStatus              `protobuf:"varint,3,opt,name=status,proto3,enum=polykey.v2.KeyStatus" json:"status,omitempty"`
+	Version            int32                  `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
+	CreatedAt          *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt          *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ExpiresAt          *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	LastAccessedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=last_accessed_at,json=lastAccessedAt,proto3" json:"last_accessed_at,omitempty"`
+	CreatorIdentity    string                 `protobuf:"bytes,9,opt,name=creator_identity,json=creatorIdentity,proto3" json:"creator_identity,omitempty"`
+	AuthorizedContexts []string               `protobuf:"bytes,10,rep,name=authorized_contexts,json=authorizedContexts,proto3" json:"authorized_contexts,omitempty"`
+	AccessPolicies     map[string]string      `protobuf:"bytes,11,rep,name=access_policies,json=accessPolicies,proto3" json:"access_policies,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Description        string                 `protobuf:"bytes,12,opt,name=description,proto3" json:"description,omitempty"`
+	Tags               map[string]string      `protobuf:"bytes,13,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	DataClassification string                 `protobuf:"bytes,14,opt,name=data_classification,json=dataClassification,proto3" json:"data_classification,omitempty"`
+	MetadataChecksum   string                 `protobuf:"bytes,15,opt,name=metadata_checksum,json=metadataChecksum,proto3" json:"metadata_checksum,omitempty"`
+	AccessCount        int64                  `protobuf:"varint,16,opt,name=access_count,json=accessCount,proto3" json:"access_count,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *KeyMetadata) Reset() {
+	*x = KeyMetadata{}
+	mi := &file_polykey_v2_common_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeyMetadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeyMetadata) ProtoMessage() {}
+
+func (x *KeyMetadata) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_common_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeyMetadata.ProtoReflect.Descriptor instead.
+func (*KeyMetadata) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_common_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *KeyMetadata) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetKeyType() KeyType {
+	if x != nil {
+		return x.KeyType
+	}
+	return KeyType_KEY_TYPE_UNSPECIFIED
+}
+
+func (x *KeyMetadata) GetStatus() KeyStatus {
+	if x != nil {
+		return x.Status
+	}
+	return KeyStatus_KEY_STATUS_UNSPECIFIED
+}
+
+func (x *KeyMetadata) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *KeyMetadata) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *KeyMetadata) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *KeyMetadata) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *KeyMetadata) GetLastAccessedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastAccessedAt
+	}
+	return nil
+}
+
+func (x *KeyMetadata) GetCreatorIdentity() string {
+	if x != nil {
+		return x.CreatorIdentity
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetAuthorizedContexts() []string {
+	if x != nil {
+		return x.AuthorizedContexts
+	}
+	return nil
+}
+
+func (x *KeyMetadata) GetAccessPolicies() map[string]string {
+	if x != nil {
+		return x.AccessPolicies
+	}
+	return nil
+}
+
+func (x *KeyMetadata) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetTags() map[string]string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *KeyMetadata) GetDataClassification() string {
+	if x != nil {
+		return x.DataClassification
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetMetadataChecksum() string {
+	if x != nil {
+		return x.MetadataChecksum
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetAccessCount() int64 {
+	if x != nil {
+		return x.AccessCount
+	}
+	return 0
+}
+
+type KeyMaterial struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	EncryptedKeyData    []byte                 `protobuf:"bytes,1,opt,name=encrypted_key_data,json=encryptedKeyData,proto3" json:"encrypted_key_data,omitempty"`
+	EncryptionAlgorithm string                 `protobuf:"bytes,2,opt,name=encryption_algorithm,json=encryptionAlgorithm,proto3" json:"encryption_algorithm,omitempty"`
+	KeyDerivationParams string                 `protobuf:"bytes,3,opt,name=key_derivation_params,json=keyDerivationParams,proto3" json:"key_derivation_params,omitempty"`
+	KeyChecksum         string                 `protobuf:"bytes,4,opt,name=key_checksum,json=keyChecksum,proto3" json:"key_checksum,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *KeyMaterial) Reset() {
+	*x = KeyMaterial{}
+	mi := &file_polykey_v2_common_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeyMaterial) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeyMaterial) ProtoMessage() {}
+
+func (x *KeyMaterial) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_common_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeyMaterial.ProtoReflect.Descriptor instead.
+func (*KeyMaterial) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_common_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *KeyMaterial) GetEncryptedKeyData() []byte {
+	if x != nil {
+		return x.EncryptedKeyData
+	}
+	return nil
+}
+
+func (x *KeyMaterial) GetEncryptionAlgorithm() string {
+	if x != nil {
+		return x.EncryptionAlgorithm
+	}
+	return ""
+}
+
+func (x *KeyMaterial) GetKeyDerivationParams() string {
+	if x != nil {
+		return x.KeyDerivationParams
+	}
+	return ""
+}
+
+func (x *KeyMaterial) GetKeyChecksum() string {
+	if x != nil {
+		return x.KeyChecksum
+	}
+	return ""
+}
+
+type AccessHistoryEntry struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Timestamp      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	ClientIdentity string                 `protobuf:"bytes,2,opt,name=client_identity,json=clientIdentity,proto3" json:"client_identity,omitempty"`
+	Operation      string                 `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
+	Success        bool                   `protobuf:"varint,4,opt,name=success,proto3" json:"success,omitempty"`
+	CorrelationId  string                 `protobuf:"bytes,5,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AccessHistoryEntry) Reset() {
+	*x = AccessHistoryEntry{}
+	mi := &file_polykey_v2_common_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccessHistoryEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccessHistoryEntry) ProtoMessage() {}
+
+func (x *AccessHistoryEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_common_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccessHistoryEntry.ProtoReflect.Descriptor instead.
+func (*AccessHistoryEntry) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_common_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *AccessHistoryEntry) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *AccessHistoryEntry) GetClientIdentity() string {
+	if x != nil {
+		return x.ClientIdentity
+	}
+	return ""
+}
+
+func (x *AccessHistoryEntry) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *AccessHistoryEntry) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *AccessHistoryEntry) GetCorrelationId() string {
+	if x != nil {
+		return x.CorrelationId
+	}
+	return ""
+}
+
+type PolicyDetail struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	PolicyId       string                 `protobuf:"bytes,1,opt,name=policy_id,json=policyId,proto3" json:"policy_id,omitempty"`
+	PolicyType     string                 `protobuf:"bytes,2,opt,name=policy_type,json=policyType,proto3" json:"policy_type,omitempty"` // e.g., "RBAC", "ABAC", "TimeBased".
+	PolicyParams   map[string]string      `protobuf:"bytes,3,rep,name=policy_params,json=policyParams,proto3" json:"policy_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	EffectiveFrom  *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=effective_from,json=effectiveFrom,proto3" json:"effective_from,omitempty"`
+	EffectiveUntil *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=effective_until,json=effectiveUntil,proto3" json:"effective_until,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PolicyDetail) Reset() {
+	*x = PolicyDetail{}
+	mi := &file_polykey_v2_common_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyDetail) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyDetail) ProtoMessage() {}
+
+func (x *PolicyDetail) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_common_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyDetail.ProtoReflect.Descriptor instead.
+func (*PolicyDetail) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_common_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *PolicyDetail) GetPolicyId() string {
+	if x != nil {
+		return x.PolicyId
+	}
+	return ""
+}
+
+func (x *PolicyDetail) GetPolicyType() string {
+	if x != nil {
+		return x.PolicyType
+	}
+	return ""
+}
+
+func (x *PolicyDetail) GetPolicyParams() map[string]string {
+	if x != nil {
+		return x.PolicyParams
+	}
+	return nil
+}
+
+func (x *PolicyDetail) GetEffectiveFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveFrom
+	}
+	return nil
+}
+
+func (x *PolicyDetail) GetEffectiveUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EffectiveUntil
+	}
+	return nil
+}
+
+var File_polykey_v2_common_proto protoreflect.FileDescriptor
+
+const file_polykey_v2_common_proto_rawDesc = "" +
+	"\n" +
+	"\x17polykey/v2/common.proto\x12\n" +
+	"polykey.v2\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1apolykey/v2/key_types.proto\x1a\x16common/v2/common.proto\"\xfa\x01\n" +
+	"\x10RequesterContext\x12'\n" +
+	"\x0fclient_identity\x18\x01 \x01(\tR\x0eclientIdentity\x127\n" +
+	"\x17certificate_fingerprint\x18\x02 \x01(\tR\x16certificateFingerprint\x12%\n" +
+	"\x0eapplication_id\x18\x03 \x01(\tR\rapplicationId\x12%\n" +
+	"\x0ecorrelation_id\x18\x04 \x01(\tR\rcorrelationId\x126\n" +
+	"\vclient_tier\x18\x05 \x01(\x0e2\x15.common.v2.ClientTierR\n" +
+	"clientTier\"\xc2\x03\n" +
+	"\x10AccessAttributes\x12 \n" +
+	"\venvironment\x18\x01 \x01(\tR\venvironment\x12!\n" +
+	"\fnetwork_zone\x18\x02 \x01(\tR\vnetworkZone\x12+\n" +
+	"\x11geographic_region\x18\x03 \x01(\tR\x10geographicRegion\x12=\n" +
+	"\frequest_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vrequestTime\x12\x1f\n" +
+	"\vtime_window\x18\x05 \x01(\tR\n" +
+	"timeWindow\x12\x14\n" +
+	"\x05roles\x18\x06 \x03(\tR\x05roles\x12 \n" +
+	"\vpermissions\x18\a \x03(\tR\vpermissions\x12_\n" +
+	"\x11custom_attributes\x18\b \x03(\v22.polykey.v2.AccessAttributes.CustomAttributesEntryR\x10customAttributes\x1aC\n" +
+	"\x15CustomAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9c\a\n" +
+	"\vKeyMetadata\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12.\n" +
+	"\bkey_type\x18\x02 \x01(\x0e2\x13.polykey.v2.KeyTypeR\akeyType\x12-\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x15.polykey.v2.KeyStatusR\x06status\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\x05R\aversion\x129\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x129\n" +
+	"\n" +
+	"expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12D\n" +
+	"\x10last_accessed_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x0elastAccessedAt\x12)\n" +
+	"\x10creator_identity\x18\t \x01(\tR\x0fcreatorIdentity\x12/\n" +
+	"\x13authorized_contexts\x18\n" +
+	" \x03(\tR\x12authorizedContexts\x12T\n" +
+	"\x0faccess_policies\x18\v \x03(\v2+.polykey.v2.KeyMetadata.AccessPoliciesEntryR\x0eaccessPolicies\x12 \n" +
+	"\vdescription\x18\f \x01(\tR\vdescription\x125\n" +
+	"\x04tags\x18\r \x03(\v2!.polykey.v2.KeyMetadata.TagsEntryR\x04tags\x12/\n" +
+	"\x13data_classification\x18\x0e \x01(\tR\x12dataClassification\x12+\n" +
+	"\x11metadata_checksum\x18\x0f \x01(\tR\x10metadataChecksum\x12!\n" +
+	"\faccess_count\x18\x10 \x01(\x03R\vaccessCount\x1aA\n" +
+	"\x13AccessPoliciesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
+	"\tTagsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc5\x01\n" +
+	"\vKeyMaterial\x12,\n" +
+	"\x12encrypted_key_data\x18\x01 \x01(\fR\x10encryptedKeyData\x121\n" +
+	"\x14encryption_algorithm\x18\x02 \x01(\tR\x13encryptionAlgorithm\x122\n" +
+	"\x15key_derivation_params\x18\x03 \x01(\tR\x13keyDerivationParams\x12!\n" +
+	"\fkey_checksum\x18\x04 \x01(\tR\vkeyChecksum\"\xd6\x01\n" +
+	"\x12AccessHistoryEntry\x128\n" +
+	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12'\n" +
+	"\x0fclient_identity\x18\x02 \x01(\tR\x0eclientIdentity\x12\x1c\n" +
+	"\toperation\x18\x03 \x01(\tR\toperation\x12\x18\n" +
+	"\asuccess\x18\x04 \x01(\bR\asuccess\x12%\n" +
+	"\x0ecorrelation_id\x18\x05 \x01(\tR\rcorrelationId\"\xe6\x02\n" +
+	"\fPolicyDetail\x12\x1b\n" +
+	"\tpolicy_id\x18\x01 \x01(\tR\bpolicyId\x12\x1f\n" +
+	"\vpolicy_type\x18\x02 \x01(\tR\n" +
+	"policyType\x12O\n" +
+	"\rpolicy_params\x18\x03 \x03(\v2*.polykey.v2.PolicyDetail.PolicyParamsEntryR\fpolicyParams\x12A\n" +
+	"\x0eeffective_from\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\reffectiveFrom\x12C\n" +
+	"\x0feffective_until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0eeffectiveUntil\x1a?\n" +
+	"\x11PolicyParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\xa7\x01\n" +
+	"\x0ecom.polykey.v2B\vCommonProtoP\x01Z?github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2\xa2\x02\x03PXX\xaa\x02\n" +
+	"Polykey.V2\xca\x02\n" +
+	"Polykey\\V2\xe2\x02\x16Polykey\\V2\\GPBMetadata\xea\x02\vPolykey::V2b\x06proto3"
+
+var (
+	file_polykey_v2_common_proto_rawDescOnce sync.Once
+	file_polykey_v2_common_proto_rawDescData []byte
+)
+
+func file_polykey_v2_common_proto_rawDescGZIP() []byte {
+	file_polykey_v2_common_proto_rawDescOnce.Do(func() {
+		file_polykey_v2_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_polykey_v2_common_proto_rawDesc), len(file_polykey_v2_common_proto_rawDesc)))
+	})
+	return file_polykey_v2_common_proto_rawDescData
+}
+
+var file_polykey_v2_common_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_polykey_v2_common_proto_goTypes = []any{
+	(*RequesterContext)(nil),      // 0: polykey.v2.RequesterContext
+	(*AccessAttributes)(nil),      // 1: polykey.v2.AccessAttributes
+	(*KeyMetadata)(nil),           // 2: polykey.v2.KeyMetadata
+	(*KeyMaterial)(nil),           // 3: polykey.v2.KeyMaterial
+	(*AccessHistoryEntry)(nil),    // 4: polykey.v2.AccessHistoryEntry
+	(*PolicyDetail)(nil),          // 5: polykey.v2.PolicyDetail
+	nil,                           // 6: polykey.v2.AccessAttributes.CustomAttributesEntry
+	nil,                           // 7: polykey.v2.KeyMetadata.AccessPoliciesEntry
+	nil,                           // 8: polykey.v2.KeyMetadata.TagsEntry
+	nil,                           // 9: polykey.v2.PolicyDetail.PolicyParamsEntry
+	(v2.ClientTier)(0),            // 10: common.v2.ClientTier
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(KeyType)(0),                  // 12: polykey.v2.KeyType
+	(KeyStatus)(0),                // 13: polykey.v2.KeyStatus
+}
+var file_polykey_v2_common_proto_depIdxs = []int32{
+	10, // 0: polykey.v2.RequesterContext.client_tier:type_name -> common.v2.ClientTier
+	11, // 1: polykey.v2.AccessAttributes.request_time:type_name -> google.protobuf.Timestamp
+	6,  // 2: polykey.v2.AccessAttributes.custom_attributes:type_name -> polykey.v2.AccessAttributes.CustomAttributesEntry
+	12, // 3: polykey.v2.KeyMetadata.key_type:type_name -> polykey.v2.KeyType
+	13, // 4: polykey.v2.KeyMetadata.status:type_name -> polykey.v2.KeyStatus
+	11, // 5: polykey.v2.KeyMetadata.created_at:type_name -> google.protobuf.Timestamp
+	11, // 6: polykey.v2.KeyMetadata.updated_at:type_name -> google.protobuf.Timestamp
+	11, // 7: polykey.v2.KeyMetadata.expires_at:type_name -> google.protobuf.Timestamp
+	11, // 8: polykey.v2.KeyMetadata.last_accessed_at:type_name -> google.protobuf.Timestamp
+	7,  // 9: polykey.v2.KeyMetadata.access_policies:type_name -> polykey.v2.KeyMetadata.AccessPoliciesEntry
+	8,  // 10: polykey.v2.KeyMetadata.tags:type_name -> polykey.v2.KeyMetadata.TagsEntry
+	11, // 11: polykey.v2.AccessHistoryEntry.timestamp:type_name -> google.protobuf.Timestamp
+	9,  // 12: polykey.v2.PolicyDetail.policy_params:type_name -> polykey.v2.PolicyDetail.PolicyParamsEntry
+	11, // 13: polykey.v2.PolicyDetail.effective_from:type_name -> google.protobuf.Timestamp
+	11, // 14: polykey.v2.PolicyDetail.effective_until:type_name -> google.protobuf.Timestamp
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
+}
+
+func init() { file_polykey_v2_common_proto_init() }
+func file_polykey_v2_common_proto_init() {
+	if File_polykey_v2_common_proto != nil {
+		return
+	}
+	file_polykey_v2_key_types_proto_init()
+	type x struct{}
+	out := protoimpl.TypeBuilder{
+		File: protoimpl.DescBuilder{
+			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_polykey_v2_common_proto_rawDesc), len(file_polykey_v2_common_proto_rawDesc)),
+			NumEnums:      0,
+			NumMessages:   10,
+			NumExtensions: 0,
+			NumServices:   0,
+		},
+		GoTypes:           file_polykey_v2_common_proto_goTypes,
+		DependencyIndexes: file_polykey_v2_common_proto_depIdxs,
+		MessageInfos:      file_polykey_v2_common_proto_msgTypes,
+	}.Build()
+	File_polykey_v2_common_proto = out.File
+	file_polykey_v2_common_proto_goTypes = nil
+	file_polykey_v2_common_proto_depIdxs = nil
+}
+// Code generated by protoc-gen-go. DO NOT EDIT.
+// versions:
+// 	protoc-gen-go v1.36.7
+// 	protoc        (unknown)
 // source: polykey/v2/key_types.proto
 
 package polykeyv2
@@ -263,7 +1596,7 @@ func file_polykey_v2_key_types_proto_init() {
 // versions:
 // 	protoc-gen-go v1.36.7
 // 	protoc        (unknown)
-// source: polykey/v2/auth.proto
+// source: polykey/v2/metrics.proto
 
 package polykeyv2
 
@@ -283,30 +1616,87 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type AuthenticateRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"` // e.g., "nodus", "workflow-engine"
-	ApiKey        string                 `protobuf:"bytes,2,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`       // Pre-shared secret
-	GrantType     string                 `protobuf:"bytes,3,opt,name=grant_type,json=grantType,proto3" json:"grant_type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type HealthStatus int32
+
+const (
+	HealthStatus_HEALTH_STATUS_UNSPECIFIED HealthStatus = 0
+	HealthStatus_HEALTH_STATUS_HEALTHY     HealthStatus = 1
+	HealthStatus_HEALTH_STATUS_DEGRADED    HealthStatus = 2
+	HealthStatus_HEALTH_STATUS_UNHEALTHY   HealthStatus = 3
+)
+
+// Enum value maps for HealthStatus.
+var (
+	HealthStatus_name = map[int32]string{
+		0: "HEALTH_STATUS_UNSPECIFIED",
+		1: "HEALTH_STATUS_HEALTHY",
+		2: "HEALTH_STATUS_DEGRADED",
+		3: "HEALTH_STATUS_UNHEALTHY",
+	}
+	HealthStatus_value = map[string]int32{
+		"HEALTH_STATUS_UNSPECIFIED": 0,
+		"HEALTH_STATUS_HEALTHY":     1,
+		"HEALTH_STATUS_DEGRADED":    2,
+		"HEALTH_STATUS_UNHEALTHY":   3,
+	}
+)
+
+func (x HealthStatus) Enum() *HealthStatus {
+	p := new(HealthStatus)
+	*p = x
+	return p
 }
 
-func (x *AuthenticateRequest) Reset() {
-	*x = AuthenticateRequest{}
-	mi := &file_polykey_v2_auth_proto_msgTypes[0]
+func (x HealthStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HealthStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_polykey_v2_metrics_proto_enumTypes[0].Descriptor()
+}
+
+func (HealthStatus) Type() protoreflect.EnumType {
+	return &file_polykey_v2_metrics_proto_enumTypes[0]
+}
+
+func (x HealthStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HealthStatus.Descriptor instead.
+func (HealthStatus) EnumDescriptor() ([]byte, []int) {
+	return file_polykey_v2_metrics_proto_rawDescGZIP(), []int{0}
+}
+
+type ServiceMetrics struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	AverageResponseTimeMs float64                `protobuf:"fixed64,1,opt,name=average_response_time_ms,json=averageResponseTimeMs,proto3" json:"average_response_time_ms,omitempty"`
+	RequestsPerSecond     int64                  `protobuf:"varint,2,opt,name=requests_per_second,json=requestsPerSecond,proto3" json:"requests_per_second,omitempty"`
+	ErrorRatePercent      float64                `protobuf:"fixed64,3,opt,name=error_rate_percent,json=errorRatePercent,proto3" json:"error_rate_percent,omitempty"`
+	CpuUsagePercent       float64                `protobuf:"fixed64,4,opt,name=cpu_usage_percent,json=cpuUsagePercent,proto3" json:"cpu_usage_percent,omitempty"`
+	MemoryUsagePercent    float64                `protobuf:"fixed64,5,opt,name=memory_usage_percent,json=memoryUsagePercent,proto3" json:"memory_usage_percent,omitempty"`
+	ActiveKeysCount       int64                  `protobuf:"varint,6,opt,name=active_keys_count,json=activeKeysCount,proto3" json:"active_keys_count,omitempty"`
+	TotalRequestsHandled  int64                  `protobuf:"varint,7,opt,name=total_requests_handled,json=totalRequestsHandled,proto3" json:"total_requests_handled,omitempty"`
+	UptimeSince           *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=uptime_since,json=uptimeSince,proto3" json:"uptime_since,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *ServiceMetrics) Reset() {
+	*x = ServiceMetrics{}
+	mi := &file_polykey_v2_metrics_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AuthenticateRequest) String() string {
+func (x *ServiceMetrics) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AuthenticateRequest) ProtoMessage() {}
+func (*ServiceMetrics) ProtoMessage() {}
 
-func (x *AuthenticateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_auth_proto_msgTypes[0]
+func (x *ServiceMetrics) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_metrics_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -317,243 +1707,93 @@ func (x *AuthenticateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AuthenticateRequest.ProtoReflect.Descriptor instead.
-func (*AuthenticateRequest) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{0}
+// Deprecated: Use ServiceMetrics.ProtoReflect.Descriptor instead.
+func (*ServiceMetrics) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_metrics_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *AuthenticateRequest) GetClientId() string {
+func (x *ServiceMetrics) GetAverageResponseTimeMs() float64 {
 	if x != nil {
-		return x.ClientId
-	}
-	return ""
-}
-
-func (x *AuthenticateRequest) GetApiKey() string {
-	if x != nil {
-		return x.ApiKey
-	}
-	return ""
-}
-
-func (x *AuthenticateRequest) GetGrantType() string {
-	if x != nil {
-		return x.GrantType
-	}
-	return ""
-}
-
-type AuthenticateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"` // JWT token
-	TokenType     string                 `protobuf:"bytes,2,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`       // "Bearer"
-	ExpiresIn     int64                  `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`      // Token TTL in seconds
-	Permissions   []string               `protobuf:"bytes,4,rep,name=permissions,proto3" json:"permissions,omitempty"`                    // ["secrets:read", "secrets:write"]
-	IssuedAt      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthenticateResponse) Reset() {
-	*x = AuthenticateResponse{}
-	mi := &file_polykey_v2_auth_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthenticateResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthenticateResponse) ProtoMessage() {}
-
-func (x *AuthenticateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_auth_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthenticateResponse.ProtoReflect.Descriptor instead.
-func (*AuthenticateResponse) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *AuthenticateResponse) GetAccessToken() string {
-	if x != nil {
-		return x.AccessToken
-	}
-	return ""
-}
-
-func (x *AuthenticateResponse) GetTokenType() string {
-	if x != nil {
-		return x.TokenType
-	}
-	return ""
-}
-
-func (x *AuthenticateResponse) GetExpiresIn() int64 {
-	if x != nil {
-		return x.ExpiresIn
+		return x.AverageResponseTimeMs
 	}
 	return 0
 }
 
-func (x *AuthenticateResponse) GetPermissions() []string {
+func (x *ServiceMetrics) GetRequestsPerSecond() int64 {
 	if x != nil {
-		return x.Permissions
-	}
-	return nil
-}
-
-func (x *AuthenticateResponse) GetIssuedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.IssuedAt
-	}
-	return nil
-}
-
-type RefreshTokenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RefreshToken  string                 `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RefreshTokenRequest) Reset() {
-	*x = RefreshTokenRequest{}
-	mi := &file_polykey_v2_auth_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RefreshTokenRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RefreshTokenRequest) ProtoMessage() {}
-
-func (x *RefreshTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_auth_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RefreshTokenRequest.ProtoReflect.Descriptor instead.
-func (*RefreshTokenRequest) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *RefreshTokenRequest) GetRefreshToken() string {
-	if x != nil {
-		return x.RefreshToken
-	}
-	return ""
-}
-
-type RefreshTokenResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
-	TokenType     string                 `protobuf:"bytes,2,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`
-	ExpiresIn     int64                  `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
-	IssuedAt      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RefreshTokenResponse) Reset() {
-	*x = RefreshTokenResponse{}
-	mi := &file_polykey_v2_auth_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RefreshTokenResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RefreshTokenResponse) ProtoMessage() {}
-
-func (x *RefreshTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_auth_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RefreshTokenResponse.ProtoReflect.Descriptor instead.
-func (*RefreshTokenResponse) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *RefreshTokenResponse) GetAccessToken() string {
-	if x != nil {
-		return x.AccessToken
-	}
-	return ""
-}
-
-func (x *RefreshTokenResponse) GetTokenType() string {
-	if x != nil {
-		return x.TokenType
-	}
-	return ""
-}
-
-func (x *RefreshTokenResponse) GetExpiresIn() int64 {
-	if x != nil {
-		return x.ExpiresIn
+		return x.RequestsPerSecond
 	}
 	return 0
 }
 
-func (x *RefreshTokenResponse) GetIssuedAt() *timestamppb.Timestamp {
+func (x *ServiceMetrics) GetErrorRatePercent() float64 {
 	if x != nil {
-		return x.IssuedAt
+		return x.ErrorRatePercent
+	}
+	return 0
+}
+
+func (x *ServiceMetrics) GetCpuUsagePercent() float64 {
+	if x != nil {
+		return x.CpuUsagePercent
+	}
+	return 0
+}
+
+func (x *ServiceMetrics) GetMemoryUsagePercent() float64 {
+	if x != nil {
+		return x.MemoryUsagePercent
+	}
+	return 0
+}
+
+func (x *ServiceMetrics) GetActiveKeysCount() int64 {
+	if x != nil {
+		return x.ActiveKeysCount
+	}
+	return 0
+}
+
+func (x *ServiceMetrics) GetTotalRequestsHandled() int64 {
+	if x != nil {
+		return x.TotalRequestsHandled
+	}
+	return 0
+}
+
+func (x *ServiceMetrics) GetUptimeSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UptimeSince
 	}
 	return nil
 }
 
-type RevokeTokenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
-	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type HealthCheckResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Status         HealthStatus           `protobuf:"varint,1,opt,name=status,proto3,enum=polykey.v2.HealthStatus" json:"status,omitempty"`
+	Timestamp      *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Metrics        *ServiceMetrics        `protobuf:"bytes,3,opt,name=metrics,proto3" json:"metrics,omitempty"`
+	ServiceVersion string                 `protobuf:"bytes,4,opt,name=service_version,json=serviceVersion,proto3" json:"service_version,omitempty"`
+	BuildCommit    string                 `protobuf:"bytes,5,opt,name=build_commit,json=buildCommit,proto3" json:"build_commit,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
-func (x *RevokeTokenRequest) Reset() {
-	*x = RevokeTokenRequest{}
-	mi := &file_polykey_v2_auth_proto_msgTypes[4]
+func (x *HealthCheckResponse) Reset() {
+	*x = HealthCheckResponse{}
+	mi := &file_polykey_v2_metrics_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RevokeTokenRequest) String() string {
+func (x *HealthCheckResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RevokeTokenRequest) ProtoMessage() {}
+func (*HealthCheckResponse) ProtoMessage() {}
 
-func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_auth_proto_msgTypes[4]
+func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_polykey_v2_metrics_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -564,270 +1804,131 @@ func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RevokeTokenRequest.ProtoReflect.Descriptor instead.
-func (*RevokeTokenRequest) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
+func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
+	return file_polykey_v2_metrics_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *RevokeTokenRequest) GetAccessToken() string {
+func (x *HealthCheckResponse) GetStatus() HealthStatus {
 	if x != nil {
-		return x.AccessToken
+		return x.Status
 	}
-	return ""
+	return HealthStatus_HEALTH_STATUS_UNSPECIFIED
 }
 
-func (x *RevokeTokenRequest) GetClientId() string {
+func (x *HealthCheckResponse) GetTimestamp() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ClientId
-	}
-	return ""
-}
-
-type RevokeTokenResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Revoked       bool                   `protobuf:"varint,1,opt,name=revoked,proto3" json:"revoked,omitempty"`
-	RevokedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RevokeTokenResponse) Reset() {
-	*x = RevokeTokenResponse{}
-	mi := &file_polykey_v2_auth_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RevokeTokenResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RevokeTokenResponse) ProtoMessage() {}
-
-func (x *RevokeTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_auth_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RevokeTokenResponse.ProtoReflect.Descriptor instead.
-func (*RevokeTokenResponse) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *RevokeTokenResponse) GetRevoked() bool {
-	if x != nil {
-		return x.Revoked
-	}
-	return false
-}
-
-func (x *RevokeTokenResponse) GetRevokedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.RevokedAt
+		return x.Timestamp
 	}
 	return nil
 }
 
-// use later for scale
-type ClientInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	ClientName    string                 `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
-	Permissions   []string               `protobuf:"bytes,3,rep,name=permissions,proto3" json:"permissions,omitempty"`
-	Environment   string                 `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"` // "dev", "staging", "prod"
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ClientInfo) Reset() {
-	*x = ClientInfo{}
-	mi := &file_polykey_v2_auth_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ClientInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ClientInfo) ProtoMessage() {}
-
-func (x *ClientInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_auth_proto_msgTypes[6]
+func (x *HealthCheckResponse) GetMetrics() *ServiceMetrics {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ClientInfo.ProtoReflect.Descriptor instead.
-func (*ClientInfo) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_auth_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *ClientInfo) GetClientId() string {
-	if x != nil {
-		return x.ClientId
-	}
-	return ""
-}
-
-func (x *ClientInfo) GetClientName() string {
-	if x != nil {
-		return x.ClientName
-	}
-	return ""
-}
-
-func (x *ClientInfo) GetPermissions() []string {
-	if x != nil {
-		return x.Permissions
+		return x.Metrics
 	}
 	return nil
 }
 
-func (x *ClientInfo) GetEnvironment() string {
+func (x *HealthCheckResponse) GetServiceVersion() string {
 	if x != nil {
-		return x.Environment
+		return x.ServiceVersion
 	}
 	return ""
 }
 
-func (x *ClientInfo) GetCreatedAt() *timestamppb.Timestamp {
+func (x *HealthCheckResponse) GetBuildCommit() string {
 	if x != nil {
-		return x.CreatedAt
+		return x.BuildCommit
 	}
-	return nil
+	return ""
 }
 
-func (x *ClientInfo) GetLastUsedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastUsedAt
-	}
-	return nil
-}
+var File_polykey_v2_metrics_proto protoreflect.FileDescriptor
 
-var File_polykey_v2_auth_proto protoreflect.FileDescriptor
-
-const file_polykey_v2_auth_proto_rawDesc = "" +
+const file_polykey_v2_metrics_proto_rawDesc = "" +
 	"\n" +
-	"\x15polykey/v2/auth.proto\x12\n" +
-	"polykey.v2\x1a\x1fgoogle/protobuf/timestamp.proto\"j\n" +
-	"\x13AuthenticateRequest\x12\x1b\n" +
-	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x17\n" +
-	"\aapi_key\x18\x02 \x01(\tR\x06apiKey\x12\x1d\n" +
-	"\n" +
-	"grant_type\x18\x03 \x01(\tR\tgrantType\"\xd2\x01\n" +
-	"\x14AuthenticateResponse\x12!\n" +
-	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
-	"\n" +
-	"token_type\x18\x02 \x01(\tR\ttokenType\x12\x1d\n" +
-	"\n" +
-	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x12 \n" +
-	"\vpermissions\x18\x04 \x03(\tR\vpermissions\x127\n" +
-	"\tissued_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt\":\n" +
-	"\x13RefreshTokenRequest\x12#\n" +
-	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"\xb0\x01\n" +
-	"\x14RefreshTokenResponse\x12!\n" +
-	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
-	"\n" +
-	"token_type\x18\x02 \x01(\tR\ttokenType\x12\x1d\n" +
-	"\n" +
-	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x127\n" +
-	"\tissued_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt\"T\n" +
-	"\x12RevokeTokenRequest\x12!\n" +
-	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1b\n" +
-	"\tclient_id\x18\x02 \x01(\tR\bclientId\"j\n" +
-	"\x13RevokeTokenResponse\x12\x18\n" +
-	"\arevoked\x18\x01 \x01(\bR\arevoked\x129\n" +
-	"\n" +
-	"revoked_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\"\x87\x02\n" +
-	"\n" +
-	"ClientInfo\x12\x1b\n" +
-	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
-	"\vclient_name\x18\x02 \x01(\tR\n" +
-	"clientName\x12 \n" +
-	"\vpermissions\x18\x03 \x03(\tR\vpermissions\x12 \n" +
-	"\venvironment\x18\x04 \x01(\tR\venvironment\x129\n" +
-	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12<\n" +
-	"\flast_used_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastUsedAtB\xa5\x01\n" +
-	"\x0ecom.polykey.v2B\tAuthProtoP\x01Z?github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2\xa2\x02\x03PXX\xaa\x02\n" +
+	"\x18polykey/v2/metrics.proto\x12\n" +
+	"polykey.v2\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa6\x03\n" +
+	"\x0eServiceMetrics\x127\n" +
+	"\x18average_response_time_ms\x18\x01 \x01(\x01R\x15averageResponseTimeMs\x12.\n" +
+	"\x13requests_per_second\x18\x02 \x01(\x03R\x11requestsPerSecond\x12,\n" +
+	"\x12error_rate_percent\x18\x03 \x01(\x01R\x10errorRatePercent\x12*\n" +
+	"\x11cpu_usage_percent\x18\x04 \x01(\x01R\x0fcpuUsagePercent\x120\n" +
+	"\x14memory_usage_percent\x18\x05 \x01(\x01R\x12memoryUsagePercent\x12*\n" +
+	"\x11active_keys_count\x18\x06 \x01(\x03R\x0factiveKeysCount\x124\n" +
+	"\x16total_requests_handled\x18\a \x01(\x03R\x14totalRequestsHandled\x12=\n" +
+	"\fuptime_since\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vuptimeSince\"\x83\x02\n" +
+	"\x13HealthCheckResponse\x120\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x18.polykey.v2.HealthStatusR\x06status\x128\n" +
+	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x124\n" +
+	"\ametrics\x18\x03 \x01(\v2\x1a.polykey.v2.ServiceMetricsR\ametrics\x12'\n" +
+	"\x0fservice_version\x18\x04 \x01(\tR\x0eserviceVersion\x12!\n" +
+	"\fbuild_commit\x18\x05 \x01(\tR\vbuildCommit*\x81\x01\n" +
+	"\fHealthStatus\x12\x1d\n" +
+	"\x19HEALTH_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15HEALTH_STATUS_HEALTHY\x10\x01\x12\x1a\n" +
+	"\x16HEALTH_STATUS_DEGRADED\x10\x02\x12\x1b\n" +
+	"\x17HEALTH_STATUS_UNHEALTHY\x10\x03B\xa8\x01\n" +
+	"\x0ecom.polykey.v2B\fMetricsProtoP\x01Z?github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2\xa2\x02\x03PXX\xaa\x02\n" +
 	"Polykey.V2\xca\x02\n" +
 	"Polykey\\V2\xe2\x02\x16Polykey\\V2\\GPBMetadata\xea\x02\vPolykey::V2b\x06proto3"
 
 var (
-	file_polykey_v2_auth_proto_rawDescOnce sync.Once
-	file_polykey_v2_auth_proto_rawDescData []byte
+	file_polykey_v2_metrics_proto_rawDescOnce sync.Once
+	file_polykey_v2_metrics_proto_rawDescData []byte
 )
 
-func file_polykey_v2_auth_proto_rawDescGZIP() []byte {
-	file_polykey_v2_auth_proto_rawDescOnce.Do(func() {
-		file_polykey_v2_auth_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_polykey_v2_auth_proto_rawDesc), len(file_polykey_v2_auth_proto_rawDesc)))
+func file_polykey_v2_metrics_proto_rawDescGZIP() []byte {
+	file_polykey_v2_metrics_proto_rawDescOnce.Do(func() {
+		file_polykey_v2_metrics_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_polykey_v2_metrics_proto_rawDesc), len(file_polykey_v2_metrics_proto_rawDesc)))
 	})
-	return file_polykey_v2_auth_proto_rawDescData
+	return file_polykey_v2_metrics_proto_rawDescData
 }
 
-var file_polykey_v2_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_polykey_v2_auth_proto_goTypes = []any{
-	(*AuthenticateRequest)(nil),   // 0: polykey.v2.AuthenticateRequest
-	(*AuthenticateResponse)(nil),  // 1: polykey.v2.AuthenticateResponse
-	(*RefreshTokenRequest)(nil),   // 2: polykey.v2.RefreshTokenRequest
-	(*RefreshTokenResponse)(nil),  // 3: polykey.v2.RefreshTokenResponse
-	(*RevokeTokenRequest)(nil),    // 4: polykey.v2.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil),   // 5: polykey.v2.RevokeTokenResponse
-	(*ClientInfo)(nil),            // 6: polykey.v2.ClientInfo
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+var file_polykey_v2_metrics_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_polykey_v2_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_polykey_v2_metrics_proto_goTypes = []any{
+	(HealthStatus)(0),             // 0: polykey.v2.HealthStatus
+	(*ServiceMetrics)(nil),        // 1: polykey.v2.ServiceMetrics
+	(*HealthCheckResponse)(nil),   // 2: polykey.v2.HealthCheckResponse
+	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
 }
-var file_polykey_v2_auth_proto_depIdxs = []int32{
-	7, // 0: polykey.v2.AuthenticateResponse.issued_at:type_name -> google.protobuf.Timestamp
-	7, // 1: polykey.v2.RefreshTokenResponse.issued_at:type_name -> google.protobuf.Timestamp
-	7, // 2: polykey.v2.RevokeTokenResponse.revoked_at:type_name -> google.protobuf.Timestamp
-	7, // 3: polykey.v2.ClientInfo.created_at:type_name -> google.protobuf.Timestamp
-	7, // 4: polykey.v2.ClientInfo.last_used_at:type_name -> google.protobuf.Timestamp
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+var file_polykey_v2_metrics_proto_depIdxs = []int32{
+	3, // 0: polykey.v2.ServiceMetrics.uptime_since:type_name -> google.protobuf.Timestamp
+	0, // 1: polykey.v2.HealthCheckResponse.status:type_name -> polykey.v2.HealthStatus
+	3, // 2: polykey.v2.HealthCheckResponse.timestamp:type_name -> google.protobuf.Timestamp
+	1, // 3: polykey.v2.HealthCheckResponse.metrics:type_name -> polykey.v2.ServiceMetrics
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
-func init() { file_polykey_v2_auth_proto_init() }
-func file_polykey_v2_auth_proto_init() {
-	if File_polykey_v2_auth_proto != nil {
+func init() { file_polykey_v2_metrics_proto_init() }
+func file_polykey_v2_metrics_proto_init() {
+	if File_polykey_v2_metrics_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_polykey_v2_auth_proto_rawDesc), len(file_polykey_v2_auth_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   7,
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_polykey_v2_metrics_proto_rawDesc), len(file_polykey_v2_metrics_proto_rawDesc)),
+			NumEnums:      1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_polykey_v2_auth_proto_goTypes,
-		DependencyIndexes: file_polykey_v2_auth_proto_depIdxs,
-		MessageInfos:      file_polykey_v2_auth_proto_msgTypes,
+		GoTypes:           file_polykey_v2_metrics_proto_goTypes,
+		DependencyIndexes: file_polykey_v2_metrics_proto_depIdxs,
+		EnumInfos:         file_polykey_v2_metrics_proto_enumTypes,
+		MessageInfos:      file_polykey_v2_metrics_proto_msgTypes,
 	}.Build()
-	File_polykey_v2_auth_proto = out.File
-	file_polykey_v2_auth_proto_goTypes = nil
-	file_polykey_v2_auth_proto_depIdxs = nil
+	File_polykey_v2_metrics_proto = out.File
+	file_polykey_v2_metrics_proto_goTypes = nil
+	file_polykey_v2_metrics_proto_depIdxs = nil
 }
 // Code generated by protoc-gen-go. DO NOT EDIT.
 // versions:
@@ -2191,344 +3292,6 @@ func file_polykey_v2_service_proto_init() {
 	file_polykey_v2_service_proto_goTypes = nil
 	file_polykey_v2_service_proto_depIdxs = nil
 }
-// Code generated by protoc-gen-go. DO NOT EDIT.
-// versions:
-// 	protoc-gen-go v1.36.7
-// 	protoc        (unknown)
-// source: polykey/v2/metrics.proto
-
-package polykeyv2
-
-import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-)
-
-const (
-	// Verify that this generated code is sufficiently up-to-date.
-	_ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
-	// Verify that runtime/protoimpl is sufficiently up-to-date.
-	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
-)
-
-type HealthStatus int32
-
-const (
-	HealthStatus_HEALTH_STATUS_UNSPECIFIED HealthStatus = 0
-	HealthStatus_HEALTH_STATUS_HEALTHY     HealthStatus = 1
-	HealthStatus_HEALTH_STATUS_DEGRADED    HealthStatus = 2
-	HealthStatus_HEALTH_STATUS_UNHEALTHY   HealthStatus = 3
-)
-
-// Enum value maps for HealthStatus.
-var (
-	HealthStatus_name = map[int32]string{
-		0: "HEALTH_STATUS_UNSPECIFIED",
-		1: "HEALTH_STATUS_HEALTHY",
-		2: "HEALTH_STATUS_DEGRADED",
-		3: "HEALTH_STATUS_UNHEALTHY",
-	}
-	HealthStatus_value = map[string]int32{
-		"HEALTH_STATUS_UNSPECIFIED": 0,
-		"HEALTH_STATUS_HEALTHY":     1,
-		"HEALTH_STATUS_DEGRADED":    2,
-		"HEALTH_STATUS_UNHEALTHY":   3,
-	}
-)
-
-func (x HealthStatus) Enum() *HealthStatus {
-	p := new(HealthStatus)
-	*p = x
-	return p
-}
-
-func (x HealthStatus) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (HealthStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_polykey_v2_metrics_proto_enumTypes[0].Descriptor()
-}
-
-func (HealthStatus) Type() protoreflect.EnumType {
-	return &file_polykey_v2_metrics_proto_enumTypes[0]
-}
-
-func (x HealthStatus) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use HealthStatus.Descriptor instead.
-func (HealthStatus) EnumDescriptor() ([]byte, []int) {
-	return file_polykey_v2_metrics_proto_rawDescGZIP(), []int{0}
-}
-
-type ServiceMetrics struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	AverageResponseTimeMs float64                `protobuf:"fixed64,1,opt,name=average_response_time_ms,json=averageResponseTimeMs,proto3" json:"average_response_time_ms,omitempty"`
-	RequestsPerSecond     int64                  `protobuf:"varint,2,opt,name=requests_per_second,json=requestsPerSecond,proto3" json:"requests_per_second,omitempty"`
-	ErrorRatePercent      float64                `protobuf:"fixed64,3,opt,name=error_rate_percent,json=errorRatePercent,proto3" json:"error_rate_percent,omitempty"`
-	CpuUsagePercent       float64                `protobuf:"fixed64,4,opt,name=cpu_usage_percent,json=cpuUsagePercent,proto3" json:"cpu_usage_percent,omitempty"`
-	MemoryUsagePercent    float64                `protobuf:"fixed64,5,opt,name=memory_usage_percent,json=memoryUsagePercent,proto3" json:"memory_usage_percent,omitempty"`
-	ActiveKeysCount       int64                  `protobuf:"varint,6,opt,name=active_keys_count,json=activeKeysCount,proto3" json:"active_keys_count,omitempty"`
-	TotalRequestsHandled  int64                  `protobuf:"varint,7,opt,name=total_requests_handled,json=totalRequestsHandled,proto3" json:"total_requests_handled,omitempty"`
-	UptimeSince           *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=uptime_since,json=uptimeSince,proto3" json:"uptime_since,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
-}
-
-func (x *ServiceMetrics) Reset() {
-	*x = ServiceMetrics{}
-	mi := &file_polykey_v2_metrics_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ServiceMetrics) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ServiceMetrics) ProtoMessage() {}
-
-func (x *ServiceMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_metrics_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ServiceMetrics.ProtoReflect.Descriptor instead.
-func (*ServiceMetrics) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_metrics_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *ServiceMetrics) GetAverageResponseTimeMs() float64 {
-	if x != nil {
-		return x.AverageResponseTimeMs
-	}
-	return 0
-}
-
-func (x *ServiceMetrics) GetRequestsPerSecond() int64 {
-	if x != nil {
-		return x.RequestsPerSecond
-	}
-	return 0
-}
-
-func (x *ServiceMetrics) GetErrorRatePercent() float64 {
-	if x != nil {
-		return x.ErrorRatePercent
-	}
-	return 0
-}
-
-func (x *ServiceMetrics) GetCpuUsagePercent() float64 {
-	if x != nil {
-		return x.CpuUsagePercent
-	}
-	return 0
-}
-
-func (x *ServiceMetrics) GetMemoryUsagePercent() float64 {
-	if x != nil {
-		return x.MemoryUsagePercent
-	}
-	return 0
-}
-
-func (x *ServiceMetrics) GetActiveKeysCount() int64 {
-	if x != nil {
-		return x.ActiveKeysCount
-	}
-	return 0
-}
-
-func (x *ServiceMetrics) GetTotalRequestsHandled() int64 {
-	if x != nil {
-		return x.TotalRequestsHandled
-	}
-	return 0
-}
-
-func (x *ServiceMetrics) GetUptimeSince() *timestamppb.Timestamp {
-	if x != nil {
-		return x.UptimeSince
-	}
-	return nil
-}
-
-type HealthCheckResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Status         HealthStatus           `protobuf:"varint,1,opt,name=status,proto3,enum=polykey.v2.HealthStatus" json:"status,omitempty"`
-	Timestamp      *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Metrics        *ServiceMetrics        `protobuf:"bytes,3,opt,name=metrics,proto3" json:"metrics,omitempty"`
-	ServiceVersion string                 `protobuf:"bytes,4,opt,name=service_version,json=serviceVersion,proto3" json:"service_version,omitempty"`
-	BuildCommit    string                 `protobuf:"bytes,5,opt,name=build_commit,json=buildCommit,proto3" json:"build_commit,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *HealthCheckResponse) Reset() {
-	*x = HealthCheckResponse{}
-	mi := &file_polykey_v2_metrics_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HealthCheckResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HealthCheckResponse) ProtoMessage() {}
-
-func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_metrics_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
-func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_metrics_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *HealthCheckResponse) GetStatus() HealthStatus {
-	if x != nil {
-		return x.Status
-	}
-	return HealthStatus_HEALTH_STATUS_UNSPECIFIED
-}
-
-func (x *HealthCheckResponse) GetTimestamp() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Timestamp
-	}
-	return nil
-}
-
-func (x *HealthCheckResponse) GetMetrics() *ServiceMetrics {
-	if x != nil {
-		return x.Metrics
-	}
-	return nil
-}
-
-func (x *HealthCheckResponse) GetServiceVersion() string {
-	if x != nil {
-		return x.ServiceVersion
-	}
-	return ""
-}
-
-func (x *HealthCheckResponse) GetBuildCommit() string {
-	if x != nil {
-		return x.BuildCommit
-	}
-	return ""
-}
-
-var File_polykey_v2_metrics_proto protoreflect.FileDescriptor
-
-const file_polykey_v2_metrics_proto_rawDesc = "" +
-	"\n" +
-	"\x18polykey/v2/metrics.proto\x12\n" +
-	"polykey.v2\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa6\x03\n" +
-	"\x0eServiceMetrics\x127\n" +
-	"\x18average_response_time_ms\x18\x01 \x01(\x01R\x15averageResponseTimeMs\x12.\n" +
-	"\x13requests_per_second\x18\x02 \x01(\x03R\x11requestsPerSecond\x12,\n" +
-	"\x12error_rate_percent\x18\x03 \x01(\x01R\x10errorRatePercent\x12*\n" +
-	"\x11cpu_usage_percent\x18\x04 \x01(\x01R\x0fcpuUsagePercent\x120\n" +
-	"\x14memory_usage_percent\x18\x05 \x01(\x01R\x12memoryUsagePercent\x12*\n" +
-	"\x11active_keys_count\x18\x06 \x01(\x03R\x0factiveKeysCount\x124\n" +
-	"\x16total_requests_handled\x18\a \x01(\x03R\x14totalRequestsHandled\x12=\n" +
-	"\fuptime_since\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vuptimeSince\"\x83\x02\n" +
-	"\x13HealthCheckResponse\x120\n" +
-	"\x06status\x18\x01 \x01(\x0e2\x18.polykey.v2.HealthStatusR\x06status\x128\n" +
-	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x124\n" +
-	"\ametrics\x18\x03 \x01(\v2\x1a.polykey.v2.ServiceMetricsR\ametrics\x12'\n" +
-	"\x0fservice_version\x18\x04 \x01(\tR\x0eserviceVersion\x12!\n" +
-	"\fbuild_commit\x18\x05 \x01(\tR\vbuildCommit*\x81\x01\n" +
-	"\fHealthStatus\x12\x1d\n" +
-	"\x19HEALTH_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15HEALTH_STATUS_HEALTHY\x10\x01\x12\x1a\n" +
-	"\x16HEALTH_STATUS_DEGRADED\x10\x02\x12\x1b\n" +
-	"\x17HEALTH_STATUS_UNHEALTHY\x10\x03B\xa8\x01\n" +
-	"\x0ecom.polykey.v2B\fMetricsProtoP\x01Z?github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2\xa2\x02\x03PXX\xaa\x02\n" +
-	"Polykey.V2\xca\x02\n" +
-	"Polykey\\V2\xe2\x02\x16Polykey\\V2\\GPBMetadata\xea\x02\vPolykey::V2b\x06proto3"
-
-var (
-	file_polykey_v2_metrics_proto_rawDescOnce sync.Once
-	file_polykey_v2_metrics_proto_rawDescData []byte
-)
-
-func file_polykey_v2_metrics_proto_rawDescGZIP() []byte {
-	file_polykey_v2_metrics_proto_rawDescOnce.Do(func() {
-		file_polykey_v2_metrics_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_polykey_v2_metrics_proto_rawDesc), len(file_polykey_v2_metrics_proto_rawDesc)))
-	})
-	return file_polykey_v2_metrics_proto_rawDescData
-}
-
-var file_polykey_v2_metrics_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_polykey_v2_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_polykey_v2_metrics_proto_goTypes = []any{
-	(HealthStatus)(0),             // 0: polykey.v2.HealthStatus
-	(*ServiceMetrics)(nil),        // 1: polykey.v2.ServiceMetrics
-	(*HealthCheckResponse)(nil),   // 2: polykey.v2.HealthCheckResponse
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
-}
-var file_polykey_v2_metrics_proto_depIdxs = []int32{
-	3, // 0: polykey.v2.ServiceMetrics.uptime_since:type_name -> google.protobuf.Timestamp
-	0, // 1: polykey.v2.HealthCheckResponse.status:type_name -> polykey.v2.HealthStatus
-	3, // 2: polykey.v2.HealthCheckResponse.timestamp:type_name -> google.protobuf.Timestamp
-	1, // 3: polykey.v2.HealthCheckResponse.metrics:type_name -> polykey.v2.ServiceMetrics
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
-}
-
-func init() { file_polykey_v2_metrics_proto_init() }
-func file_polykey_v2_metrics_proto_init() {
-	if File_polykey_v2_metrics_proto != nil {
-		return
-	}
-	type x struct{}
-	out := protoimpl.TypeBuilder{
-		File: protoimpl.DescBuilder{
-			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_polykey_v2_metrics_proto_rawDesc), len(file_polykey_v2_metrics_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   2,
-			NumExtensions: 0,
-			NumServices:   0,
-		},
-		GoTypes:           file_polykey_v2_metrics_proto_goTypes,
-		DependencyIndexes: file_polykey_v2_metrics_proto_depIdxs,
-		EnumInfos:         file_polykey_v2_metrics_proto_enumTypes,
-		MessageInfos:      file_polykey_v2_metrics_proto_msgTypes,
-	}.Build()
-	File_polykey_v2_metrics_proto = out.File
-	file_polykey_v2_metrics_proto_goTypes = nil
-	file_polykey_v2_metrics_proto_depIdxs = nil
-}
 // Code generated by protoc-gen-go-grpc. DO NOT EDIT.
 // versions:
 // - protoc-gen-go-grpc v1.5.1
@@ -3030,730 +3793,4 @@ var PolykeyService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "polykey/v2/service.proto",
-}
-// Code generated by protoc-gen-go. DO NOT EDIT.
-// versions:
-// 	protoc-gen-go v1.36.7
-// 	protoc        (unknown)
-// source: polykey/v2/common.proto
-
-package polykeyv2
-
-import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-)
-
-const (
-	// Verify that this generated code is sufficiently up-to-date.
-	_ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
-	// Verify that runtime/protoimpl is sufficiently up-to-date.
-	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
-)
-
-type RequesterContext struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	ClientIdentity         string                 `protobuf:"bytes,1,opt,name=client_identity,json=clientIdentity,proto3" json:"client_identity,omitempty"`
-	CertificateFingerprint string                 `protobuf:"bytes,2,opt,name=certificate_fingerprint,json=certificateFingerprint,proto3" json:"certificate_fingerprint,omitempty"`
-	ApplicationId          string                 `protobuf:"bytes,3,opt,name=application_id,json=applicationId,proto3" json:"application_id,omitempty"`
-	CorrelationId          string                 `protobuf:"bytes,4,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
-}
-
-func (x *RequesterContext) Reset() {
-	*x = RequesterContext{}
-	mi := &file_polykey_v2_common_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RequesterContext) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RequesterContext) ProtoMessage() {}
-
-func (x *RequesterContext) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_common_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RequesterContext.ProtoReflect.Descriptor instead.
-func (*RequesterContext) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_common_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *RequesterContext) GetClientIdentity() string {
-	if x != nil {
-		return x.ClientIdentity
-	}
-	return ""
-}
-
-func (x *RequesterContext) GetCertificateFingerprint() string {
-	if x != nil {
-		return x.CertificateFingerprint
-	}
-	return ""
-}
-
-func (x *RequesterContext) GetApplicationId() string {
-	if x != nil {
-		return x.ApplicationId
-	}
-	return ""
-}
-
-func (x *RequesterContext) GetCorrelationId() string {
-	if x != nil {
-		return x.CorrelationId
-	}
-	return ""
-}
-
-type AccessAttributes struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Environment      string                 `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
-	NetworkZone      string                 `protobuf:"bytes,2,opt,name=network_zone,json=networkZone,proto3" json:"network_zone,omitempty"`
-	GeographicRegion string                 `protobuf:"bytes,3,opt,name=geographic_region,json=geographicRegion,proto3" json:"geographic_region,omitempty"`
-	RequestTime      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=request_time,json=requestTime,proto3" json:"request_time,omitempty"`
-	TimeWindow       string                 `protobuf:"bytes,5,opt,name=time_window,json=timeWindow,proto3" json:"time_window,omitempty"` // e.g., "business-hours", "after-hours".
-	Roles            []string               `protobuf:"bytes,6,rep,name=roles,proto3" json:"roles,omitempty"`
-	Permissions      []string               `protobuf:"bytes,7,rep,name=permissions,proto3" json:"permissions,omitempty"`
-	CustomAttributes map[string]string      `protobuf:"bytes,8,rep,name=custom_attributes,json=customAttributes,proto3" json:"custom_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *AccessAttributes) Reset() {
-	*x = AccessAttributes{}
-	mi := &file_polykey_v2_common_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AccessAttributes) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AccessAttributes) ProtoMessage() {}
-
-func (x *AccessAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_common_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AccessAttributes.ProtoReflect.Descriptor instead.
-func (*AccessAttributes) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_common_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *AccessAttributes) GetEnvironment() string {
-	if x != nil {
-		return x.Environment
-	}
-	return ""
-}
-
-func (x *AccessAttributes) GetNetworkZone() string {
-	if x != nil {
-		return x.NetworkZone
-	}
-	return ""
-}
-
-func (x *AccessAttributes) GetGeographicRegion() string {
-	if x != nil {
-		return x.GeographicRegion
-	}
-	return ""
-}
-
-func (x *AccessAttributes) GetRequestTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.RequestTime
-	}
-	return nil
-}
-
-func (x *AccessAttributes) GetTimeWindow() string {
-	if x != nil {
-		return x.TimeWindow
-	}
-	return ""
-}
-
-func (x *AccessAttributes) GetRoles() []string {
-	if x != nil {
-		return x.Roles
-	}
-	return nil
-}
-
-func (x *AccessAttributes) GetPermissions() []string {
-	if x != nil {
-		return x.Permissions
-	}
-	return nil
-}
-
-func (x *AccessAttributes) GetCustomAttributes() map[string]string {
-	if x != nil {
-		return x.CustomAttributes
-	}
-	return nil
-}
-
-type KeyMetadata struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	KeyId              string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
-	KeyType            KeyType                `protobuf:"varint,2,opt,name=key_type,json=keyType,proto3,enum=polykey.v2.KeyType" json:"key_type,omitempty"`
-	Status             KeyStatus              `protobuf:"varint,3,opt,name=status,proto3,enum=polykey.v2.KeyStatus" json:"status,omitempty"`
-	Version            int32                  `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
-	CreatedAt          *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt          *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	ExpiresAt          *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	LastAccessedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=last_accessed_at,json=lastAccessedAt,proto3" json:"last_accessed_at,omitempty"`
-	CreatorIdentity    string                 `protobuf:"bytes,9,opt,name=creator_identity,json=creatorIdentity,proto3" json:"creator_identity,omitempty"`
-	AuthorizedContexts []string               `protobuf:"bytes,10,rep,name=authorized_contexts,json=authorizedContexts,proto3" json:"authorized_contexts,omitempty"`
-	AccessPolicies     map[string]string      `protobuf:"bytes,11,rep,name=access_policies,json=accessPolicies,proto3" json:"access_policies,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Description        string                 `protobuf:"bytes,12,opt,name=description,proto3" json:"description,omitempty"`
-	Tags               map[string]string      `protobuf:"bytes,13,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	DataClassification string                 `protobuf:"bytes,14,opt,name=data_classification,json=dataClassification,proto3" json:"data_classification,omitempty"`
-	MetadataChecksum   string                 `protobuf:"bytes,15,opt,name=metadata_checksum,json=metadataChecksum,proto3" json:"metadata_checksum,omitempty"`
-	AccessCount        int64                  `protobuf:"varint,16,opt,name=access_count,json=accessCount,proto3" json:"access_count,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
-}
-
-func (x *KeyMetadata) Reset() {
-	*x = KeyMetadata{}
-	mi := &file_polykey_v2_common_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *KeyMetadata) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*KeyMetadata) ProtoMessage() {}
-
-func (x *KeyMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_common_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use KeyMetadata.ProtoReflect.Descriptor instead.
-func (*KeyMetadata) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_common_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *KeyMetadata) GetKeyId() string {
-	if x != nil {
-		return x.KeyId
-	}
-	return ""
-}
-
-func (x *KeyMetadata) GetKeyType() KeyType {
-	if x != nil {
-		return x.KeyType
-	}
-	return KeyType_KEY_TYPE_UNSPECIFIED
-}
-
-func (x *KeyMetadata) GetStatus() KeyStatus {
-	if x != nil {
-		return x.Status
-	}
-	return KeyStatus_KEY_STATUS_UNSPECIFIED
-}
-
-func (x *KeyMetadata) GetVersion() int32 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
-}
-
-func (x *KeyMetadata) GetCreatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return nil
-}
-
-func (x *KeyMetadata) GetUpdatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.UpdatedAt
-	}
-	return nil
-}
-
-func (x *KeyMetadata) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
-func (x *KeyMetadata) GetLastAccessedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastAccessedAt
-	}
-	return nil
-}
-
-func (x *KeyMetadata) GetCreatorIdentity() string {
-	if x != nil {
-		return x.CreatorIdentity
-	}
-	return ""
-}
-
-func (x *KeyMetadata) GetAuthorizedContexts() []string {
-	if x != nil {
-		return x.AuthorizedContexts
-	}
-	return nil
-}
-
-func (x *KeyMetadata) GetAccessPolicies() map[string]string {
-	if x != nil {
-		return x.AccessPolicies
-	}
-	return nil
-}
-
-func (x *KeyMetadata) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *KeyMetadata) GetTags() map[string]string {
-	if x != nil {
-		return x.Tags
-	}
-	return nil
-}
-
-func (x *KeyMetadata) GetDataClassification() string {
-	if x != nil {
-		return x.DataClassification
-	}
-	return ""
-}
-
-func (x *KeyMetadata) GetMetadataChecksum() string {
-	if x != nil {
-		return x.MetadataChecksum
-	}
-	return ""
-}
-
-func (x *KeyMetadata) GetAccessCount() int64 {
-	if x != nil {
-		return x.AccessCount
-	}
-	return 0
-}
-
-type KeyMaterial struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	EncryptedKeyData    []byte                 `protobuf:"bytes,1,opt,name=encrypted_key_data,json=encryptedKeyData,proto3" json:"encrypted_key_data,omitempty"`
-	EncryptionAlgorithm string                 `protobuf:"bytes,2,opt,name=encryption_algorithm,json=encryptionAlgorithm,proto3" json:"encryption_algorithm,omitempty"`
-	KeyDerivationParams string                 `protobuf:"bytes,3,opt,name=key_derivation_params,json=keyDerivationParams,proto3" json:"key_derivation_params,omitempty"`
-	KeyChecksum         string                 `protobuf:"bytes,4,opt,name=key_checksum,json=keyChecksum,proto3" json:"key_checksum,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
-}
-
-func (x *KeyMaterial) Reset() {
-	*x = KeyMaterial{}
-	mi := &file_polykey_v2_common_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *KeyMaterial) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*KeyMaterial) ProtoMessage() {}
-
-func (x *KeyMaterial) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_common_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use KeyMaterial.ProtoReflect.Descriptor instead.
-func (*KeyMaterial) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_common_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *KeyMaterial) GetEncryptedKeyData() []byte {
-	if x != nil {
-		return x.EncryptedKeyData
-	}
-	return nil
-}
-
-func (x *KeyMaterial) GetEncryptionAlgorithm() string {
-	if x != nil {
-		return x.EncryptionAlgorithm
-	}
-	return ""
-}
-
-func (x *KeyMaterial) GetKeyDerivationParams() string {
-	if x != nil {
-		return x.KeyDerivationParams
-	}
-	return ""
-}
-
-func (x *KeyMaterial) GetKeyChecksum() string {
-	if x != nil {
-		return x.KeyChecksum
-	}
-	return ""
-}
-
-type AccessHistoryEntry struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Timestamp      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	ClientIdentity string                 `protobuf:"bytes,2,opt,name=client_identity,json=clientIdentity,proto3" json:"client_identity,omitempty"`
-	Operation      string                 `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
-	Success        bool                   `protobuf:"varint,4,opt,name=success,proto3" json:"success,omitempty"`
-	CorrelationId  string                 `protobuf:"bytes,5,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *AccessHistoryEntry) Reset() {
-	*x = AccessHistoryEntry{}
-	mi := &file_polykey_v2_common_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AccessHistoryEntry) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AccessHistoryEntry) ProtoMessage() {}
-
-func (x *AccessHistoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_common_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AccessHistoryEntry.ProtoReflect.Descriptor instead.
-func (*AccessHistoryEntry) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_common_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *AccessHistoryEntry) GetTimestamp() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Timestamp
-	}
-	return nil
-}
-
-func (x *AccessHistoryEntry) GetClientIdentity() string {
-	if x != nil {
-		return x.ClientIdentity
-	}
-	return ""
-}
-
-func (x *AccessHistoryEntry) GetOperation() string {
-	if x != nil {
-		return x.Operation
-	}
-	return ""
-}
-
-func (x *AccessHistoryEntry) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *AccessHistoryEntry) GetCorrelationId() string {
-	if x != nil {
-		return x.CorrelationId
-	}
-	return ""
-}
-
-type PolicyDetail struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	PolicyId       string                 `protobuf:"bytes,1,opt,name=policy_id,json=policyId,proto3" json:"policy_id,omitempty"`
-	PolicyType     string                 `protobuf:"bytes,2,opt,name=policy_type,json=policyType,proto3" json:"policy_type,omitempty"` // e.g., "RBAC", "ABAC", "TimeBased".
-	PolicyParams   map[string]string      `protobuf:"bytes,3,rep,name=policy_params,json=policyParams,proto3" json:"policy_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	EffectiveFrom  *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=effective_from,json=effectiveFrom,proto3" json:"effective_from,omitempty"`
-	EffectiveUntil *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=effective_until,json=effectiveUntil,proto3" json:"effective_until,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *PolicyDetail) Reset() {
-	*x = PolicyDetail{}
-	mi := &file_polykey_v2_common_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PolicyDetail) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PolicyDetail) ProtoMessage() {}
-
-func (x *PolicyDetail) ProtoReflect() protoreflect.Message {
-	mi := &file_polykey_v2_common_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PolicyDetail.ProtoReflect.Descriptor instead.
-func (*PolicyDetail) Descriptor() ([]byte, []int) {
-	return file_polykey_v2_common_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *PolicyDetail) GetPolicyId() string {
-	if x != nil {
-		return x.PolicyId
-	}
-	return ""
-}
-
-func (x *PolicyDetail) GetPolicyType() string {
-	if x != nil {
-		return x.PolicyType
-	}
-	return ""
-}
-
-func (x *PolicyDetail) GetPolicyParams() map[string]string {
-	if x != nil {
-		return x.PolicyParams
-	}
-	return nil
-}
-
-func (x *PolicyDetail) GetEffectiveFrom() *timestamppb.Timestamp {
-	if x != nil {
-		return x.EffectiveFrom
-	}
-	return nil
-}
-
-func (x *PolicyDetail) GetEffectiveUntil() *timestamppb.Timestamp {
-	if x != nil {
-		return x.EffectiveUntil
-	}
-	return nil
-}
-
-var File_polykey_v2_common_proto protoreflect.FileDescriptor
-
-const file_polykey_v2_common_proto_rawDesc = "" +
-	"\n" +
-	"\x17polykey/v2/common.proto\x12\n" +
-	"polykey.v2\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1apolykey/v2/key_types.proto\"\xc2\x01\n" +
-	"\x10RequesterContext\x12'\n" +
-	"\x0fclient_identity\x18\x01 \x01(\tR\x0eclientIdentity\x127\n" +
-	"\x17certificate_fingerprint\x18\x02 \x01(\tR\x16certificateFingerprint\x12%\n" +
-	"\x0eapplication_id\x18\x03 \x01(\tR\rapplicationId\x12%\n" +
-	"\x0ecorrelation_id\x18\x04 \x01(\tR\rcorrelationId\"\xc2\x03\n" +
-	"\x10AccessAttributes\x12 \n" +
-	"\venvironment\x18\x01 \x01(\tR\venvironment\x12!\n" +
-	"\fnetwork_zone\x18\x02 \x01(\tR\vnetworkZone\x12+\n" +
-	"\x11geographic_region\x18\x03 \x01(\tR\x10geographicRegion\x12=\n" +
-	"\frequest_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vrequestTime\x12\x1f\n" +
-	"\vtime_window\x18\x05 \x01(\tR\n" +
-	"timeWindow\x12\x14\n" +
-	"\x05roles\x18\x06 \x03(\tR\x05roles\x12 \n" +
-	"\vpermissions\x18\a \x03(\tR\vpermissions\x12_\n" +
-	"\x11custom_attributes\x18\b \x03(\v22.polykey.v2.AccessAttributes.CustomAttributesEntryR\x10customAttributes\x1aC\n" +
-	"\x15CustomAttributesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9c\a\n" +
-	"\vKeyMetadata\x12\x15\n" +
-	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12.\n" +
-	"\bkey_type\x18\x02 \x01(\x0e2\x13.polykey.v2.KeyTypeR\akeyType\x12-\n" +
-	"\x06status\x18\x03 \x01(\x0e2\x15.polykey.v2.KeyStatusR\x06status\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\x05R\aversion\x129\n" +
-	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
-	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x129\n" +
-	"\n" +
-	"expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12D\n" +
-	"\x10last_accessed_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x0elastAccessedAt\x12)\n" +
-	"\x10creator_identity\x18\t \x01(\tR\x0fcreatorIdentity\x12/\n" +
-	"\x13authorized_contexts\x18\n" +
-	" \x03(\tR\x12authorizedContexts\x12T\n" +
-	"\x0faccess_policies\x18\v \x03(\v2+.polykey.v2.KeyMetadata.AccessPoliciesEntryR\x0eaccessPolicies\x12 \n" +
-	"\vdescription\x18\f \x01(\tR\vdescription\x125\n" +
-	"\x04tags\x18\r \x03(\v2!.polykey.v2.KeyMetadata.TagsEntryR\x04tags\x12/\n" +
-	"\x13data_classification\x18\x0e \x01(\tR\x12dataClassification\x12+\n" +
-	"\x11metadata_checksum\x18\x0f \x01(\tR\x10metadataChecksum\x12!\n" +
-	"\faccess_count\x18\x10 \x01(\x03R\vaccessCount\x1aA\n" +
-	"\x13AccessPoliciesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
-	"\tTagsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc5\x01\n" +
-	"\vKeyMaterial\x12,\n" +
-	"\x12encrypted_key_data\x18\x01 \x01(\fR\x10encryptedKeyData\x121\n" +
-	"\x14encryption_algorithm\x18\x02 \x01(\tR\x13encryptionAlgorithm\x122\n" +
-	"\x15key_derivation_params\x18\x03 \x01(\tR\x13keyDerivationParams\x12!\n" +
-	"\fkey_checksum\x18\x04 \x01(\tR\vkeyChecksum\"\xd6\x01\n" +
-	"\x12AccessHistoryEntry\x128\n" +
-	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12'\n" +
-	"\x0fclient_identity\x18\x02 \x01(\tR\x0eclientIdentity\x12\x1c\n" +
-	"\toperation\x18\x03 \x01(\tR\toperation\x12\x18\n" +
-	"\asuccess\x18\x04 \x01(\bR\asuccess\x12%\n" +
-	"\x0ecorrelation_id\x18\x05 \x01(\tR\rcorrelationId\"\xe6\x02\n" +
-	"\fPolicyDetail\x12\x1b\n" +
-	"\tpolicy_id\x18\x01 \x01(\tR\bpolicyId\x12\x1f\n" +
-	"\vpolicy_type\x18\x02 \x01(\tR\n" +
-	"policyType\x12O\n" +
-	"\rpolicy_params\x18\x03 \x03(\v2*.polykey.v2.PolicyDetail.PolicyParamsEntryR\fpolicyParams\x12A\n" +
-	"\x0eeffective_from\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\reffectiveFrom\x12C\n" +
-	"\x0feffective_until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0eeffectiveUntil\x1a?\n" +
-	"\x11PolicyParamsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\xa7\x01\n" +
-	"\x0ecom.polykey.v2B\vCommonProtoP\x01Z?github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2\xa2\x02\x03PXX\xaa\x02\n" +
-	"Polykey.V2\xca\x02\n" +
-	"Polykey\\V2\xe2\x02\x16Polykey\\V2\\GPBMetadata\xea\x02\vPolykey::V2b\x06proto3"
-
-var (
-	file_polykey_v2_common_proto_rawDescOnce sync.Once
-	file_polykey_v2_common_proto_rawDescData []byte
-)
-
-func file_polykey_v2_common_proto_rawDescGZIP() []byte {
-	file_polykey_v2_common_proto_rawDescOnce.Do(func() {
-		file_polykey_v2_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_polykey_v2_common_proto_rawDesc), len(file_polykey_v2_common_proto_rawDesc)))
-	})
-	return file_polykey_v2_common_proto_rawDescData
-}
-
-var file_polykey_v2_common_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
-var file_polykey_v2_common_proto_goTypes = []any{
-	(*RequesterContext)(nil),      // 0: polykey.v2.RequesterContext
-	(*AccessAttributes)(nil),      // 1: polykey.v2.AccessAttributes
-	(*KeyMetadata)(nil),           // 2: polykey.v2.KeyMetadata
-	(*KeyMaterial)(nil),           // 3: polykey.v2.KeyMaterial
-	(*AccessHistoryEntry)(nil),    // 4: polykey.v2.AccessHistoryEntry
-	(*PolicyDetail)(nil),          // 5: polykey.v2.PolicyDetail
-	nil,                           // 6: polykey.v2.AccessAttributes.CustomAttributesEntry
-	nil,                           // 7: polykey.v2.KeyMetadata.AccessPoliciesEntry
-	nil,                           // 8: polykey.v2.KeyMetadata.TagsEntry
-	nil,                           // 9: polykey.v2.PolicyDetail.PolicyParamsEntry
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
-	(KeyType)(0),                  // 11: polykey.v2.KeyType
-	(KeyStatus)(0),                // 12: polykey.v2.KeyStatus
-}
-var file_polykey_v2_common_proto_depIdxs = []int32{
-	10, // 0: polykey.v2.AccessAttributes.request_time:type_name -> google.protobuf.Timestamp
-	6,  // 1: polykey.v2.AccessAttributes.custom_attributes:type_name -> polykey.v2.AccessAttributes.CustomAttributesEntry
-	11, // 2: polykey.v2.KeyMetadata.key_type:type_name -> polykey.v2.KeyType
-	12, // 3: polykey.v2.KeyMetadata.status:type_name -> polykey.v2.KeyStatus
-	10, // 4: polykey.v2.KeyMetadata.created_at:type_name -> google.protobuf.Timestamp
-	10, // 5: polykey.v2.KeyMetadata.updated_at:type_name -> google.protobuf.Timestamp
-	10, // 6: polykey.v2.KeyMetadata.expires_at:type_name -> google.protobuf.Timestamp
-	10, // 7: polykey.v2.KeyMetadata.last_accessed_at:type_name -> google.protobuf.Timestamp
-	7,  // 8: polykey.v2.KeyMetadata.access_policies:type_name -> polykey.v2.KeyMetadata.AccessPoliciesEntry
-	8,  // 9: polykey.v2.KeyMetadata.tags:type_name -> polykey.v2.KeyMetadata.TagsEntry
-	10, // 10: polykey.v2.AccessHistoryEntry.timestamp:type_name -> google.protobuf.Timestamp
-	9,  // 11: polykey.v2.PolicyDetail.policy_params:type_name -> polykey.v2.PolicyDetail.PolicyParamsEntry
-	10, // 12: polykey.v2.PolicyDetail.effective_from:type_name -> google.protobuf.Timestamp
-	10, // 13: polykey.v2.PolicyDetail.effective_until:type_name -> google.protobuf.Timestamp
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
-}
-
-func init() { file_polykey_v2_common_proto_init() }
-func file_polykey_v2_common_proto_init() {
-	if File_polykey_v2_common_proto != nil {
-		return
-	}
-	file_polykey_v2_key_types_proto_init()
-	type x struct{}
-	out := protoimpl.TypeBuilder{
-		File: protoimpl.DescBuilder{
-			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_polykey_v2_common_proto_rawDesc), len(file_polykey_v2_common_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   10,
-			NumExtensions: 0,
-			NumServices:   0,
-		},
-		GoTypes:           file_polykey_v2_common_proto_goTypes,
-		DependencyIndexes: file_polykey_v2_common_proto_depIdxs,
-		MessageInfos:      file_polykey_v2_common_proto_msgTypes,
-	}.Build()
-	File_polykey_v2_common_proto = out.File
-	file_polykey_v2_common_proto_goTypes = nil
-	file_polykey_v2_common_proto_depIdxs = nil
 }

@@ -17,8 +17,6 @@ import (
 	"github.com/spounge-ai/polykey/internal/kms"
 )
 
-
-
 var (
 	pgxPoolOnce sync.Once
 	pgxPool     *pgxpool.Pool

@@ -25,10 +25,6 @@ func NewLocalKMSProvider(masterKey string) (*LocalKMSProvider, error) {
 
 // EncryptDEK encrypts the given plaintext DEK and returns the encrypted DEK.
 func (p *LocalKMSProvider) EncryptDEK(ctx context.Context, plaintextDEK []byte, key *domain.Key) ([]byte, error) {
-	if key.IsPremium() {
-		return nil, fmt.Errorf("cannot use local kms for premium keys")
-	}
-
 	// Encrypt the DEK with our master key
 	block, err := aes.NewCipher(p.masterKey)
 	if err != nil {
@@ -51,10 +47,6 @@ func (p *LocalKMSProvider) EncryptDEK(ctx context.Context, plaintextDEK []byte, 
 
 // DecryptDEK takes the encrypted DEK from the key and returns the plaintext DEK
 func (p *LocalKMSProvider) DecryptDEK(ctx context.Context, key *domain.Key) ([]byte, error) {
-	if key.IsPremium() {
-		return nil, fmt.Errorf("cannot use local kms for premium keys")
-	}
-
 	if len(key.EncryptedDEK) == 0 {
 		return nil, fmt.Errorf("no encrypted DEK found in key")
 	}

@@ -46,16 +46,13 @@ func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProvider
 	}
 }
 
-func (s *keyServiceImpl) getKMSProvider(key *domain.Key) (kms.KMSProvider, error) {
-	if key == nil {
-		return nil, fmt.Errorf("key is nil")
-	}
-	
+func (s *keyServiceImpl) getKMSProvider(dataClassification string) (kms.KMSProvider, error) {
+	// Determine provider based on the data classification (tier) of the key itself.
 	providerName := "local"
-	if tier := key.GetTier(); tier == domain.TierPro || tier == domain.TierEnterprise {
+	if dataClassification == string(domain.TierPro) || dataClassification == string(domain.TierEnterprise) {
 		providerName = "aws"
 	}
-	
+
 	provider, ok := s.kmsProviders[providerName]
 	if !ok {
 		return nil, fmt.Errorf("%s kms provider not found", providerName)

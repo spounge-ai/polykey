@@ -2,7 +2,6 @@ package kms
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -22,9 +21,6 @@ func NewAWSKMSProvider(cfg aws.Config, kmsKeyARN string) *AWSKMSProvider {
 }
 
 func (p *AWSKMSProvider) EncryptDEK(ctx context.Context, plaintextDEK []byte, key *domain.Key) ([]byte, error) {
-	if !key.IsPremium() {
-		return nil, fmt.Errorf("cannot use aws kms for non-premium keys")
-	}
 	input := &kms.EncryptInput{
 		KeyId:     &p.kmsKeyARN,
 		Plaintext: plaintextDEK,
@@ -39,9 +35,6 @@ func (p *AWSKMSProvider) EncryptDEK(ctx context.Context, plaintextDEK []byte, ke
 }
 
 func (p *AWSKMSProvider) DecryptDEK(ctx context.Context, key *domain.Key) ([]byte, error) {
-	if !key.IsPremium() {
-		return nil, fmt.Errorf("cannot use aws kms for non-premium keys")
-	}
 	input := &kms.DecryptInput{
 		CiphertextBlob: key.EncryptedDEK,
 		KeyId:          &p.kmsKeyARN,

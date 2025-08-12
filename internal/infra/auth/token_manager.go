@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/spounge-ai/polykey/internal/domain"
 )
 
 // TokenManager manages JWT token generation and validation using RSA keys.
@@ -28,11 +29,12 @@ func NewTokenManager(privateKeyPEM string) (*TokenManager, error) {
 }
 
 // GenerateToken generates a new JWT token signed with RS256.
-func (tm *TokenManager) GenerateToken(userID string, roles []string, expiration time.Duration) (string, error) {
+func (tm *TokenManager) GenerateToken(userID string, roles []string, tier domain.KeyTier, expiration time.Duration) (string, error) {
 	expirationTime := time.Now().Add(expiration)
 	claims := &Claims{
 		UserID: userID,
 		Roles:  roles,
+		Tier:   tier,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},

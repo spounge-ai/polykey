@@ -21,9 +21,10 @@ type clientConfig struct {
 
 // clientData represents the YAML structure for individual client data
 type clientData struct {
-	HashedAPIKey string   `yaml:"hashed_api_key"`
-	Permissions  []string `yaml:"permissions"`
-	Description  string   `yaml:"description,omitempty"`
+	HashedAPIKey string         `yaml:"hashed_api_key"`
+	Permissions  []string       `yaml:"permissions"`
+	Description  string         `yaml:"description,omitempty"`
+	Tier         domain.KeyTier `yaml:"tier"`
 }
 
 // FileClientStore implements the domain.ClientStore interface using a local YAML file.
@@ -59,6 +60,7 @@ func NewFileClientStore(filePath string) (*FileClientStore, error) {
 			ID:           id,
 			HashedAPIKey: data.HashedAPIKey,
 			Permissions:  data.Permissions,
+			Tier:         data.Tier,
 		}
 	}
 
@@ -72,12 +74,13 @@ func (s *FileClientStore) FindClientByID(ctx context.Context, clientID string) (
 	if !exists {
 		return nil, fmt.Errorf("%w: client ID '%s'", ErrClientNotFound, clientID)
 	}
-	
+
 	// Return a copy to prevent external modification
 	return &domain.Client{
 		ID:           client.ID,
 		HashedAPIKey: client.HashedAPIKey,
 		Permissions:  append([]string(nil), client.Permissions...),
+		Tier:         client.Tier,
 	}, nil
 }
 
@@ -98,8 +101,12 @@ func validateClientData(id string, data clientData) error {
 	if len(data.Permissions) == 0 {
 		return fmt.Errorf("permissions cannot be empty")
 	}
+	if data.Tier != "" && data.Tier != domain.TierFree && data.Tier != domain.TierPro && data.Tier != domain.TierEnterprise {
+		return fmt.Errorf("invalid tier: '%s', must be one of '%s', '%s', or '%s'", data.Tier, domain.TierFree, domain.TierPro, domain.TierEnterprise)
+	}
+
 	// Validate bcrypt hash format (starts with $2a$, $2b$, or $2y$)
-	if len(data.HashedAPIKey) < 60 || (data.HashedAPIKey[:4] != "$2a$" && 
+	if len(data.HashedAPIKey) < 60 || (data.HashedAPIKey[:4] != "$2a$" &&
 		data.HashedAPIKey[:4] != "$2b$" && data.HashedAPIKey[:4] != "$2y$") {
 		return fmt.Errorf("hashed_api_key must be a valid bcrypt hash")
 	}

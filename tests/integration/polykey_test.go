@@ -13,6 +13,7 @@ import (
 	"time"
 
 	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
+	"github.com/spounge-ai/polykey/internal/domain"
 	"github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
@@ -104,7 +105,7 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	client := pk.NewPolykeyServiceClient(conn)
 
 	// Generate a JWT token for testing
-	token, err := tokenManager.GenerateToken("test-user", []string{"user"}, time.Hour)
+	token, err := tokenManager.GenerateToken("test-user", []string{"user"}, domain.TierFree, time.Hour)
 	require.NoError(t, err)
 
 	// Add the token to the context of the client
@@ -171,7 +172,7 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 
 	t.Run("GetKey - Unauthorized", func(t *testing.T) {
 		// Generate a JWT token for testing with a different role
-		token, err := tokenManager.GenerateToken("test-user", []string{"unauthorized"}, time.Hour)
+		token, err := tokenManager.GenerateToken("test-user", []string{"unauthorized"}, domain.TierFree, time.Hour)
 		assert.NoError(t, err)
 
 		// Add the token to the context of the client

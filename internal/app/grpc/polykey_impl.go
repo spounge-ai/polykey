@@ -3,11 +3,13 @@ package grpc
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/spounge-ai/polykey/internal/domain"
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/service"
+	cmn "github.com/spounge-ai/spounge-proto/gen/go/common/v2"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -63,6 +65,7 @@ func (s *PolykeyService) Authenticate(ctx context.Context, req *pk.AuthenticateR
 		TokenType:   result.TokenType,
 		ExpiresIn:   result.ExpiresIn,
 		IssuedAt:    timestamppb.Now(),
+		ClientTier:  cmn.ClientTier(cmn.ClientTier_value[strings.ToUpper(string(result.ClientTier))]),
 	}, nil
 }
 

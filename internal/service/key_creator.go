@@ -4,17 +4,27 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"math/bits"
 	"time"
 
 	"github.com/spounge-ai/polykey/internal/domain"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
 	if req == nil || req.RequesterContext == nil || req.RequesterContext.GetClientIdentity() == "" {
 		return nil, fmt.Errorf("%w: requester context required", ErrInvalidRequest)
+	}
+
+	authenticatedUser, ok := domain.UserFromContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "user identity not found in context")
+	}
+
+	if err := validateTier(authenticatedUser.Tier, req.GetDataClassification()); err != nil {
+		return nil, status.Errorf(codes.PermissionDenied, "tier validation failed: %v", err)
 	}
 
 	description, err := domain.NewDescription(req.GetDescription())
@@ -34,19 +44,35 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	}
 	defer secureZeroBytes(dek)
 
-	if err := validateEntropy(dek); err != nil {
+	if err := validateEntropyChiSquare(dek); err != nil {
 		return nil, err
 	}
 
 	keyID := domain.NewKeyID()
 	now := time.Now()
 
-	// The domain.Key object is created here to determine the tier and select the correct KMS provider.
-	// The EncryptedDEK field is intentionally left nil initially.
-	keyToCreate := &domain.Key{
-		ID:      keyID,
-		Version: 1,
-		Status:  domain.KeyStatusActive,
+	kmsProvider, err := s.getKMSProvider(req.GetDataClassification())
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a temporary key object to pass to the KMS provider if needed.
+	tempKeyForKMS := &domain.Key{}
+
+	// Immediate encryption pattern: Encrypt the DEK right after generation.
+	encryptedDEK, err := kmsProvider.EncryptDEK(ctx, dek, tempKeyForKMS)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
+	}
+
+	// Now, populate the final domain object with the encrypted DEK for storage.
+	finalKey := &domain.Key{
+		ID:           keyID,
+		Version:      1,
+		EncryptedDEK: encryptedDEK,
+		Status:       domain.KeyStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 		Metadata: &pk.KeyMetadata{
 			KeyId:              keyID.String(),
 			KeyType:            req.GetKeyType(),
@@ -65,30 +91,9 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		},
 	}
 
-	kmsProvider, err := s.getKMSProvider(keyToCreate)
-	if err != nil {
-		return nil, err
-	}
-
-	// Immediate encryption pattern: Encrypt the DEK right after generation.
-	encryptedDEK, err := kmsProvider.EncryptDEK(ctx, dek, keyToCreate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
-	}
-
-	// Now, populate the final domain object with the encrypted DEK for storage.
-	finalKey := &domain.Key{
-		ID:           keyID,
-		Version:      1,
-		EncryptedDEK: encryptedDEK,
-		Status:       domain.KeyStatusActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata:     keyToCreate.Metadata,
-	}
-
-	tier := finalKey.GetTier()
-	if err := s.keyRepo.CreateKey(ctx, finalKey, tier == domain.TierPro || tier == domain.TierEnterprise); err != nil {
+	// The key's tier is now based on the validated data classification.
+	isPremium := req.GetDataClassification() == string(domain.TierPro) || req.GetDataClassification() == string(domain.TierEnterprise)
+	if err := s.keyRepo.CreateKey(ctx, finalKey, isPremium); err != nil {
 		return nil, fmt.Errorf("failed to create key: %w", err)
 	}
 
@@ -106,19 +111,63 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	}, nil
 }
 
-func validateEntropy(data []byte) error {
-	setBits := 0
+func validateTier(clientTier domain.KeyTier, requestedClassification string) error {
+	switch clientTier {
+	case domain.TierEnterprise:
+		// Enterprise clients can create keys of any classification.
+		return nil
+	case domain.TierPro:
+		if requestedClassification == string(domain.TierEnterprise) {
+			return fmt.Errorf("pro tier clients cannot create enterprise classification keys")
+		}
+		return nil
+	case domain.TierFree:
+		if requestedClassification == string(domain.TierEnterprise) || requestedClassification == string(domain.TierPro) {
+			return fmt.Errorf("free tier clients can only create free classification keys")
+		}
+		return nil
+	default:
+		// Default to free tier behavior if client tier is unknown or not set.
+		if requestedClassification == string(domain.TierEnterprise) || requestedClassification == string(domain.TierPro) {
+			return fmt.Errorf("clients with no tier can only create free classification keys")
+		}
+		return nil
+	}
+}
+
+func validateEntropyChiSquare(data []byte) error {
+	const (
+		numBins          = 256
+		degreesOfFreedom = numBins - 1
+		// Critical values for chi-square distribution with 255 degrees of freedom.
+		// A value too low or too high suggests non-randomness.
+		// Lower bound for p=0.99 (indicates data is too uniform)
+		lowerCriticalValue = 199.46
+		// Upper bound for p=0.01 (indicates data is not uniform enough)
+		upperCriticalValue = 310.46
+	)
+
+	if len(data) < numBins*5 {
+		return fmt.Errorf("%w: not enough data for a meaningful chi-square test (need at least %d bytes)", ErrEntropyValidationFail, numBins*5)
+	}
+
+	frequencies := make([]int, numBins)
 	for _, b := range data {
-		setBits += bits.OnesCount8(b)
+		frequencies[b]++
 	}
 
-	totalBits := len(data) * 8
-	lowerBound := totalBits * 3 / 8  // 37.5%
-	upperBound := totalBits * 5 / 8  // 62.5%
+	expectedFrequency := float64(len(data)) / float64(numBins)
 
-	if setBits < lowerBound || setBits > upperBound {
-		return fmt.Errorf("%w: expected %d-%d set bits, got %d", 
-			ErrEntropyValidationFail, lowerBound, upperBound, setBits)
+	var chiSquareStat float64
+	for _, freq := range frequencies {
+		diff := float64(freq) - expectedFrequency
+		chiSquareStat += (diff * diff) / expectedFrequency
 	}
+
+	if chiSquareStat < lowerCriticalValue || chiSquareStat > upperCriticalValue {
+		return fmt.Errorf("%w: chi-square statistic %.2f is outside the acceptable range [%.2f, %.2f]",
+			ErrEntropyValidationFail, chiSquareStat, lowerCriticalValue, upperCriticalValue)
+	}
+
 	return nil
 }
