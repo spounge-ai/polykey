@@ -27,34 +27,30 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		return nil, fmt.Errorf("failed to get current key: %w", err)
 	}
 
-	newDEK := make([]byte, 32)
+	// Determine DEK size from the current key's type
+	dekSize, _, err := getCryptoDetails(currentKey.Metadata.GetKeyType())
+	if err != nil {
+		return nil, fmt.Errorf("could not get crypto details for key rotation: %w", err)
+	}
+
+	newDEK := make([]byte, dekSize)
+	defer secureZeroBytes(newDEK)
 	if _, err := rand.Read(newDEK); err != nil {
 		s.logger.ErrorContext(ctx, "failed to generate new DEK", "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
 
-	now := time.Now()
-	newKey := &domain.Key{
-		ID:           currentKey.ID,
-		Version:      currentKey.Version + 1,
-		Metadata:     currentKey.Metadata,
-		EncryptedDEK: newDEK, // Temporary, will be encrypted below
-		Status:       domain.KeyStatusActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-
-	kmsProvider, err := s.getKMSProvider(newKey)
+	kmsProvider, err := s.getKMSProvider(currentKey)
 	if err != nil {
 		return nil, err
 	}
 
-	encryptedNewDEK, err := kmsProvider.EncryptDEK(ctx, newDEK, newKey)
+	// Immediately encrypt the new DEK
+	encryptedNewDEK, err := kmsProvider.EncryptDEK(ctx, newDEK, currentKey)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to encrypt new DEK", "error", err)
 		return nil, fmt.Errorf("failed to encrypt new DEK: %w", err)
 	}
-	defer zeroBytes(newDEK)
 
 	rotatedKey, err := s.keyRepo.RotateKey(ctx, keyID, encryptedNewDEK)
 	if err != nil {
@@ -63,6 +59,7 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 	}
 
 	gracePeriod := time.Duration(req.GetGracePeriodSeconds()) * time.Second
+	now := time.Now()
 
 	resp := &pk.RotateKeyResponse{
 		KeyId:           req.GetKeyId(),
@@ -74,7 +71,7 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 			KeyChecksum:         "sha256",
 		},
 		Metadata:            rotatedKey.Metadata,
-		RotationTimestamp:   timestamppb.Now(),
+		RotationTimestamp:   timestamppb.New(now),
 		OldVersionExpiresAt: timestamppb.New(now.Add(gracePeriod)),
 	}
 

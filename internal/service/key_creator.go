@@ -27,11 +27,12 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, err
 	}
 
+	// Generate the DEK and ensure it is securely zeroed after use.
 	dek := make([]byte, dekSize)
 	if _, err := rand.Read(dek); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
-	defer zeroBytes(dek)
+	defer secureZeroBytes(dek)
 
 	if err := validateEntropy(dek); err != nil {
 		return nil, err
@@ -40,13 +41,12 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	keyID := domain.NewKeyID()
 	now := time.Now()
 
-	newKey := &domain.Key{
-		ID:           keyID,
-		Version:      1,
-		EncryptedDEK: dek, // Temporary, encrypted below
-		Status:       domain.KeyStatusActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+	// The domain.Key object is created here to determine the tier and select the correct KMS provider.
+	// The EncryptedDEK field is intentionally left nil initially.
+	keyToCreate := &domain.Key{
+		ID:      keyID,
+		Version: 1,
+		Status:  domain.KeyStatusActive,
 		Metadata: &pk.KeyMetadata{
 			KeyId:              keyID.String(),
 			KeyType:            req.GetKeyType(),
@@ -65,17 +65,30 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		},
 	}
 
-	kmsProvider, err := s.getKMSProvider(newKey)
+	kmsProvider, err := s.getKMSProvider(keyToCreate)
 	if err != nil {
 		return nil, err
 	}
 
-	if newKey.EncryptedDEK, err = kmsProvider.EncryptDEK(ctx, dek, newKey); err != nil {
+	// Immediate encryption pattern: Encrypt the DEK right after generation.
+	encryptedDEK, err := kmsProvider.EncryptDEK(ctx, dek, keyToCreate)
+	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
 	}
 
-	tier := newKey.GetTier()
-	if err := s.keyRepo.CreateKey(ctx, newKey, tier == domain.TierPro || tier == domain.TierEnterprise); err != nil {
+	// Now, populate the final domain object with the encrypted DEK for storage.
+	finalKey := &domain.Key{
+		ID:           keyID,
+		Version:      1,
+		EncryptedDEK: encryptedDEK,
+		Status:       domain.KeyStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata:     keyToCreate.Metadata,
+	}
+
+	tier := finalKey.GetTier()
+	if err := s.keyRepo.CreateKey(ctx, finalKey, tier == domain.TierPro || tier == domain.TierEnterprise); err != nil {
 		return nil, fmt.Errorf("failed to create key: %w", err)
 	}
 
@@ -83,11 +96,11 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 
 	return &pk.CreateKeyResponse{
 		KeyId:    keyID.String(),
-		Metadata: newKey.Metadata,
+		Metadata: finalKey.Metadata,
 		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    append([]byte(nil), newKey.EncryptedDEK...),
+			EncryptedKeyData:    append([]byte(nil), finalKey.EncryptedDEK...),
 			EncryptionAlgorithm: algorithm,
-			KeyChecksum:         "sha256",
+			KeyChecksum:         "sha256", // Note: This checksum is of the *encrypted* key, which is less useful.
 		},
 		ResponseTimestamp: timestamppb.Now(),
 	}, nil

@@ -40,7 +40,7 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 		s.logger.ErrorContext(ctx, "failed to decrypt DEK", "keyId", req.GetKeyId(), "error", err)
 		return nil, fmt.Errorf("failed to decrypt DEK: %w", err)
 	}
-	defer zeroBytes(decryptedDEK)
+	defer secureZeroBytes(decryptedDEK)
 
 	_, algorithm, err := getCryptoDetails(key.Metadata.GetKeyType())
 	if err != nil {
