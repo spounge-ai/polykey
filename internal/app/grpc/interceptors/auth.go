@@ -43,7 +43,7 @@ func AuthenticationInterceptor(tokenManager *auth.TokenManager) grpc.UnaryServer
 
 		user := &domain.AuthenticatedUser{
 			ID:          claims.UserID,
-			Permissions: claims.Roles,
+			Permissions: claims.Permissions,
 			Tier:        claims.Tier,
 		}
 

@@ -10,6 +10,8 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/auth"
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/service"
+	"github.com/spounge-ai/polykey/internal/validation"
+	"github.com/spounge-ai/polykey/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
@@ -34,6 +36,9 @@ func New(
 	authorizer domain.Authorizer,
 	auditLogger domain.AuditLogger,
 	logger *slog.Logger,
+	errorClassifier *errors.ErrorClassifier,
+	validator *validation.RequestValidator,
+	queryValidator *validation.QueryValidator,
 ) (*Server, int, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.Port))
 	if err != nil {
@@ -63,11 +68,12 @@ func New(
 	opts = append(opts, grpc.ChainUnaryInterceptor(
 		interceptors.UnaryLoggingInterceptor(),
 		interceptors.AuthenticationInterceptor(tokenManager),
+		interceptors.UnaryValidationInterceptor(validator),
 	))
 
 	grpcServer := grpc.NewServer(opts...)
 
-	polykeyService, err := NewPolykeyService(cfg, keyService, authService, authorizer, auditLogger, logger)
+	polykeyService, err := NewPolykeyService(cfg, keyService, authService, authorizer, auditLogger, logger, errorClassifier, queryValidator)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create polykey service: %w", err)
 	}

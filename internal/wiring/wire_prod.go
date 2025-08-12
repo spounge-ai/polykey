@@ -4,8 +4,11 @@ package wiring
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -26,7 +29,47 @@ var (
 func providePgxPool(cfg *infra_config.Config) (*pgxpool.Pool, error) {
 	var err error
 	pgxPoolOnce.Do(func() {
-		pgxPool, err = pgxpool.New(context.Background(), cfg.BootstrapSecrets.NeonDBURLDevelopment)
+		dbURL := cfg.BootstrapSecrets.NeonDBURLDevelopment
+		if dbURL == "" {
+			dbURL = cfg.Persistence.Database.URL
+		}
+
+		poolConfig, err := pgxpool.ParseConfig(dbURL)
+		if err != nil {
+			// Use a local variable for the error to avoid shadowing in the outer scope.
+			// This assignment is what will be returned by the function.
+			pgxPool, err = nil, fmt.Errorf("failed to parse pgx config: %w", err)
+			return
+		}
+
+		// Apply secure settings from config
+		dbCfg := cfg.Persistence.Database
+		poolConfig.MaxConns = dbCfg.Connection.MaxConns
+		poolConfig.MinConns = dbCfg.Connection.MinConns
+		poolConfig.MaxConnLifetime = dbCfg.Connection.MaxConnLifetime
+		poolConfig.MaxConnIdleTime = dbCfg.Connection.MaxConnIdleTime
+		poolConfig.HealthCheckPeriod = dbCfg.Connection.HealthCheckPeriod
+
+		if dbCfg.TLS.Enabled {
+			rootCertPool := x509.NewCertPool()
+			if dbCfg.TLS.SSLRootCert != "" {
+				caCert, err := os.ReadFile(dbCfg.TLS.SSLRootCert)
+				if err != nil {
+					pgxPool, err = nil, fmt.Errorf("failed to read CA cert: %w", err)
+					return
+				}
+				if ok := rootCertPool.AppendCertsFromPEM(caCert); !ok {
+					pgxPool, err = nil, fmt.Errorf("failed to append CA cert")
+					return
+				}
+			}
+			poolConfig.ConnConfig.TLSConfig = &tls.Config{
+				RootCAs:    rootCertPool,
+				ServerName: poolConfig.ConnConfig.Host,
+			}
+		}
+
+		pgxPool, err = pgxpool.NewWithConfig(context.Background(), poolConfig)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)

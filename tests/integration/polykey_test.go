@@ -14,11 +14,14 @@ import (
 
 	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
 	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/internal/infra/audit"
 	"github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	"github.com/spounge-ai/polykey/internal/kms"
 	"github.com/spounge-ai/polykey/internal/service"
+	"github.com/spounge-ai/polykey/internal/validation"
+	"github.com/spounge-ai/polykey/pkg/errors"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,16 +51,6 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 			Port: 0, // Dynamic port
 			Mode: "test",
 		},
-		Authorization: infra_config.AuthorizationConfig{
-			Roles: map[string]infra_config.RoleConfig{
-				"user": {
-					AllowedOperations: []string{"create_key", "get_key"},
-				},
-				"unauthorized": {
-					AllowedOperations: []string{},
-				},
-			},
-		},
 		BootstrapSecrets: infra_config.BootstrapSecrets{
 			PolykeyMasterKey: "/kH+AgL+tN2qrA8I+nXL7is4ORj23p2YVhpTjAz2YIs=",
 			JWTRSAPrivateKey: string(privateKeyPEM),
@@ -65,27 +58,36 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	}
 
 	// --- Dependency Initialization ---
+	logger := slog.Default()
 	kmsProviders := make(map[string]kms.KMSProvider)
 	localKMS, err := kms.NewLocalKMSProvider(cfg.BootstrapSecrets.PolykeyMasterKey)
 	require.NoError(t, err)
 	kmsProviders["local"] = localKMS
 
-	keyRepo, err := persistence.NewNeonDBStorage(dbpool, slog.Default())
+	keyRepo, err := persistence.NewNeonDBStorage(dbpool, logger)
+	require.NoError(t, err)
+
+	auditRepo, err := persistence.NewAuditRepository(dbpool)
 	require.NoError(t, err)
 
 	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo)
 
-	clientStore, err := auth.NewFileClientStore("../../configs/config.client.dev.yaml")
+	clientStore, err := auth.NewFileClientStore("../../configs/dev_client/config.client.dev.yaml")
 	require.NoError(t, err)
 
 	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
 	require.NoError(t, err)
 
-	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
+	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, logger)
 	authService := service.NewAuthService(clientStore, tokenManager, 1*time.Hour)
+	auditLogger := audit.NewAuditLogger(logger, auditRepo)
+	errorClassifier := errors.NewErrorClassifier(logger)
+	validator, err := validation.NewRequestValidator()
+	require.NoError(t, err)
+	queryValidator := validation.NewQueryValidator()
 
 	// --- Server Setup ---
-	srv, port, err := app_grpc.New(cfg, keyService, authService, authorizer, nil, slog.Default()) // nil for audit logger for now
+	srv, port, err := app_grpc.New(cfg, keyService, authService, authorizer, auditLogger, logger, errorClassifier, validator, queryValidator)
 	require.NoError(t, err)
 
 	go func() {
@@ -105,7 +107,8 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	client := pk.NewPolykeyServiceClient(conn)
 
 	// Generate a JWT token for testing
-	token, err := tokenManager.GenerateToken("test-user", []string{"user"}, domain.TierFree, time.Hour)
+	permissions := []string{"keys:create", "keys:read", "keys:list"}
+	token, err := tokenManager.GenerateToken("test-user", permissions, domain.TierFree, time.Hour)
 	require.NoError(t, err)
 
 	// Add the token to the context of the client
@@ -171,8 +174,8 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 	defer cleanup()
 
 	t.Run("GetKey - Unauthorized", func(t *testing.T) {
-		// Generate a JWT token for testing with a different role
-		token, err := tokenManager.GenerateToken("test-user", []string{"unauthorized"}, domain.TierFree, time.Hour)
+		// Generate a JWT token for testing with no permissions
+		token, err := tokenManager.GenerateToken("test-user", []string{}, domain.TierFree, time.Hour)
 		assert.NoError(t, err)
 
 		// Add the token to the context of the client
@@ -193,5 +196,28 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 		assert.Error(t, err)
 		s, _ := status.FromError(err)
 		assert.Equal(t, codes.PermissionDenied, s.Code())
+	})
+
+	t.Run("CreateKey - Invalid Request", func(t *testing.T) {
+		// Test case for missing key type
+		createReq := &pk.CreateKeyRequest{
+			KeyType: pk.KeyType_KEY_TYPE_UNSPECIFIED,
+		}
+		_, err := client.CreateKey(ctx, createReq)
+		assert.Error(t, err)
+		s, _ := status.FromError(err)
+		assert.Equal(t, codes.InvalidArgument, s.Code())
+		assert.Contains(t, s.Message(), "key type is required")
+	})
+
+	t.Run("ListKeys - Invalid Page Size", func(t *testing.T) {
+		listReq := &pk.ListKeysRequest{
+			PageSize: -1,
+		}
+		_, err := client.ListKeys(ctx, listReq)
+		assert.Error(t, err)
+		s, _ := status.FromError(err)
+		assert.Equal(t, codes.InvalidArgument, s.Code())
+		assert.Equal(t, "The request contains invalid parameters.", s.Message())
 	})
 }
