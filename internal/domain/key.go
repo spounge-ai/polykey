@@ -39,7 +39,7 @@ const (
 type KeyRepository interface {
 	GetKey(ctx context.Context, id KeyID) (*Key, error)
 	GetKeyByVersion(ctx context.Context, id KeyID, version int32) (*Key, error)
-		CreateKey(ctx context.Context, key *Key, isPremium bool) error
+	CreateKey(ctx context.Context, key *Key, isPremium bool) error
 	ListKeys(ctx context.Context) ([]*Key, error)
 	UpdateKeyMetadata(ctx context.Context, id KeyID, metadata *pk.KeyMetadata) error
 	RotateKey(ctx context.Context, id KeyID, newEncryptedDEK []byte) (*Key, error)

@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	"github.com/spounge-ai/polykey/internal/domain"
-	"github.com/spounge-ai/polykey/internal/infra/persistence" // Add this import
+	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,26 +26,20 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 
 	key, err := s.getKeyByRequest(ctx, keyID, req.GetVersion())
 	if err != nil {
-		// Check if the error contains a gRPC status error (even if wrapped)
-		var currentErr error = err
+		currentErr := err
 		for currentErr != nil {
 			if statusErr, ok := status.FromError(currentErr); ok {
-				// Found a gRPC status error, return it
 				return nil, statusErr.Err()
 			}
-			// Check if it's a wrapped error and unwrap it
 			if wrappedErr := errors.Unwrap(currentErr); wrappedErr != nil {
 				currentErr = wrappedErr
 			} else {
 				break
 			}
 		}
-		
-		// Convert storage errors to appropriate gRPC status codes
 		if errors.Is(err, persistence.ErrKeyNotFound) {
 			return nil, status.Errorf(codes.NotFound, "key not found: %s", req.GetKeyId())
 		}
-		
 		s.logger.ErrorContext(ctx, "failed to get key from repository", "keyId", req.GetKeyId(), "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to retrieve key")
 	}
@@ -103,11 +97,9 @@ func (s *keyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetad
 
 	key, err := s.getKeyByRequest(ctx, keyID, req.GetVersion())
 	if err != nil {
-		// Convert storage errors to appropriate gRPC status codes
 		if errors.Is(err, persistence.ErrKeyNotFound) {
 			return nil, status.Errorf(codes.NotFound, "key not found: %s", req.GetKeyId())
 		}
-		
 		s.logger.ErrorContext(ctx, "failed to get key metadata", "keyId", req.GetKeyId(), "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to retrieve key metadata")
 	}
