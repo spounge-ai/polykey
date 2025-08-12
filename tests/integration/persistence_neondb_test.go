@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"testing"
 
@@ -25,7 +26,7 @@ func setupTestDB(t *testing.T) (*persistence.NeonDBStorage, func()) {
 	dbpool, err := pgxpool.New(context.Background(), cfg.BootstrapSecrets.NeonDBURLDevelopment)
 	require.NoError(t, err)
 
-	storage, err := persistence.NewNeonDBStorage(dbpool)
+	storage, err := persistence.NewNeonDBStorage(dbpool, slog.Default())
 	require.NoError(t, err)
 
 	cleanup := func() {

@@ -93,7 +93,7 @@ func provideKMSProviders(cfg *infra_config.Config) (map[string]kms.KMSProvider, 
 }
 
 func provideKeyRepository(dbpool *pgxpool.Pool) (domain.KeyRepository, error) {
-	return persistence.NewNeonDBStorage(dbpool)
+	return persistence.NewNeonDBStorage(dbpool, slog.Default())
 }
 
 func provideClientStore(path string) (domain.ClientStore, error) {

@@ -70,7 +70,7 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	require.NoError(t, err)
 	kmsProviders["local"] = localKMS
 
-	keyRepo, err := persistence.NewNeonDBStorage(dbpool)
+	keyRepo, err := persistence.NewNeonDBStorage(dbpool, slog.Default())
 	require.NoError(t, err)
 
 	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo)

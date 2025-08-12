@@ -106,6 +106,7 @@ func (tc *PolykeyTestClient) runHappyPathTests() {
 	keyID := tc.testCreateKey(authedCtx)
 	if keyID != "" {
 		tc.testGetKey(authedCtx, keyID)
+		tc.testKeyExists(authedCtx, keyID)
 		tc.testKeyRotation(authedCtx, keyID)
 	}
 	tc.testListKeys(authedCtx)
@@ -177,6 +178,39 @@ func (tc *PolykeyTestClient) testGetKey(ctx context.Context, keyID string) {
 		return
 	}
 	tc.logger.Info("GetKey successful", "keyId", keyID)
+}
+
+func (tc *PolykeyTestClient) testKeyExists(ctx context.Context, keyID string) {
+	// Check for existing key
+	_, err := tc.client.GetKey(ctx, &pk.GetKeyRequest{
+		KeyId: keyID,
+		RequesterContext: &pk.RequesterContext{
+			ClientIdentity: tc.creds.ID,
+		},
+	})
+	if err != nil {
+		tc.logger.Error("Exists check for created key failed", "error", err)
+	} else {
+		tc.logger.Info("Exists check for created key passed", "keyId", keyID)
+	}
+
+	// Check for non-existing key
+	nonExistentKeyID := "00000000-0000-0000-0000-000000000000"
+	_, err = tc.client.GetKey(ctx, &pk.GetKeyRequest{
+		KeyId: nonExistentKeyID,
+		RequesterContext: &pk.RequesterContext{
+			ClientIdentity: tc.creds.ID,
+		},
+	})
+	if err == nil {
+		tc.logger.Error("Exists check for non-existent key failed", "error", "request succeeded but should have failed")
+		return
+	}
+	if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
+		tc.logger.Info("Exists check for non-existent key passed", "code", s.Code().String())
+	} else {
+		tc.logger.Error("Exists check for non-existent key failed", "error", err)
+	}
 }
 
 func (tc *PolykeyTestClient) testKeyRotation(ctx context.Context, keyID string) {

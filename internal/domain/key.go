@@ -45,6 +45,7 @@ type KeyRepository interface {
 	RotateKey(ctx context.Context, id KeyID, newEncryptedDEK []byte) (*Key, error)
 	RevokeKey(ctx context.Context, id KeyID) error
 	GetKeyVersions(ctx context.Context, id KeyID) ([]*Key, error)
+	Exists(ctx context.Context, id KeyID) (bool, error)
 }
 
 type AuditEvent struct {

@@ -4,10 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/internal/infra/persistence" // Add this import
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -17,28 +21,48 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 	}
 	keyID, err := domain.KeyIDFromString(req.GetKeyId())
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
 	}
 
 	key, err := s.getKeyByRequest(ctx, keyID, req.GetVersion())
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get key", "keyId", req.GetKeyId(), "error", err)
-		return nil, fmt.Errorf("failed to get key: %w", err)
+		// Check if the error contains a gRPC status error (even if wrapped)
+		var currentErr error = err
+		for currentErr != nil {
+			if statusErr, ok := status.FromError(currentErr); ok {
+				// Found a gRPC status error, return it
+				return nil, statusErr.Err()
+			}
+			// Check if it's a wrapped error and unwrap it
+			if wrappedErr := errors.Unwrap(currentErr); wrappedErr != nil {
+				currentErr = wrappedErr
+			} else {
+				break
+			}
+		}
+		
+		// Convert storage errors to appropriate gRPC status codes
+		if errors.Is(err, persistence.ErrKeyNotFound) {
+			return nil, status.Errorf(codes.NotFound, "key not found: %s", req.GetKeyId())
+		}
+		
+		s.logger.ErrorContext(ctx, "failed to get key from repository", "keyId", req.GetKeyId(), "error", err)
+		return nil, status.Errorf(codes.Internal, "failed to retrieve key")
 	}
 
 	if key.Metadata == nil {
-		return nil, ErrMissingMetadata
+		return nil, status.Errorf(codes.Internal, "key metadata is missing")
 	}
 
 	kmsProvider, err := s.getKMSProvider(key.Metadata.GetDataClassification())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get KMS provider: %w", err)
+		return nil, status.Errorf(codes.Internal, "failed to get KMS provider: %v", err)
 	}
 
 	decryptedDEK, err := kmsProvider.DecryptDEK(ctx, key)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to decrypt DEK", "keyId", req.GetKeyId(), "error", err)
-		return nil, fmt.Errorf("failed to decrypt DEK: %w", err)
+		return nil, status.Errorf(codes.Internal, "failed to decrypt key material")
 	}
 	defer secureZeroBytes(decryptedDEK)
 
@@ -74,13 +98,18 @@ func (s *keyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetad
 	}
 	keyID, err := domain.KeyIDFromString(req.GetKeyId())
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
 	}
 
 	key, err := s.getKeyByRequest(ctx, keyID, req.GetVersion())
 	if err != nil {
+		// Convert storage errors to appropriate gRPC status codes
+		if errors.Is(err, persistence.ErrKeyNotFound) {
+			return nil, status.Errorf(codes.NotFound, "key not found: %s", req.GetKeyId())
+		}
+		
 		s.logger.ErrorContext(ctx, "failed to get key metadata", "keyId", req.GetKeyId(), "error", err)
-		return nil, fmt.Errorf("failed to get key metadata: %w", err)
+		return nil, status.Errorf(codes.Internal, "failed to retrieve key metadata")
 	}
 
 	resp := &pk.GetKeyMetadataResponse{

@@ -37,5 +37,5 @@ func provideKMSProviders(cfg *infra_config.Config) (map[string]kms.KMSProvider, 
 }
 
 func provideKeyRepository(cfg *infra_config.Config) (domain.KeyRepository, error) {
-	return persistence.NewMockS3Storage(), nil
+	return persistence.NewInMemoryKeyRepository(), nil
 }

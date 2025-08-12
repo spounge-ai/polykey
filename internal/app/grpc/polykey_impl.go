@@ -83,6 +83,11 @@ func (s *PolykeyService) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 
 	resp, err := s.keyService.GetKey(ctx, req)
 	if err != nil {
+		// Preserve the original gRPC status code from the service layer
+		if statusErr, ok := status.FromError(err); ok {
+			return nil, statusErr.Err()
+		}
+		// Only wrap as Internal if it's not already a gRPC status error
 		return nil, status.Errorf(codes.Internal, "failed to get key: %v", err)
 	}
 	return resp, nil

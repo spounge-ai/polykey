@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/spounge-ai/polykey/internal/domain"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
@@ -247,6 +249,22 @@ func (s *S3Storage) GetKeyVersions(ctx context.Context, id domain.KeyID) ([]*dom
 	})
 
 	return versions, nil
+}
+
+func (s *S3Storage) Exists(ctx context.Context, id domain.KeyID) (bool, error) {
+	keyPath := fmt.Sprintf("keys/%s/latest.json", id.String())
+	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: &s.bucketName,
+		Key:    &keyPath,
+	})
+	if err != nil {
+		var nsk *types.NoSuchKey
+		if errors.As(err, &nsk) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *S3Storage) HealthCheck() error {

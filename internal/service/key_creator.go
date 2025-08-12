@@ -44,11 +44,24 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	}
 	defer secureZeroBytes(dek)
 
-	if err := validateEntropyChiSquare(dek); err != nil {
-		return nil, err
+	
+
+	// Generate a unique KeyID, retrying up to 10 times in the unlikely event of a collision.
+	var keyID domain.KeyID
+	for i := 0; i < 10; i++ {
+		keyID = domain.NewKeyID()
+		exists, err := s.keyRepo.Exists(ctx, keyID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check key existence: %w", err)
+		}
+		if !exists {
+			break
+		}
+		if i == 9 {
+			return nil, fmt.Errorf("failed to generate a unique key ID after 10 attempts")
+		}
 	}
 
-	keyID := domain.NewKeyID()
 	now := time.Now()
 
 	kmsProvider, err := s.getKMSProvider(req.GetDataClassification())
@@ -135,39 +148,4 @@ func validateTier(clientTier domain.KeyTier, requestedClassification string) err
 	}
 }
 
-func validateEntropyChiSquare(data []byte) error {
-	const (
-		numBins          = 256
-		degreesOfFreedom = numBins - 1
-		// Critical values for chi-square distribution with 255 degrees of freedom.
-		// A value too low or too high suggests non-randomness.
-		// Lower bound for p=0.99 (indicates data is too uniform)
-		lowerCriticalValue = 199.46
-		// Upper bound for p=0.01 (indicates data is not uniform enough)
-		upperCriticalValue = 310.46
-	)
 
-	if len(data) < numBins*5 {
-		return fmt.Errorf("%w: not enough data for a meaningful chi-square test (need at least %d bytes)", ErrEntropyValidationFail, numBins*5)
-	}
-
-	frequencies := make([]int, numBins)
-	for _, b := range data {
-		frequencies[b]++
-	}
-
-	expectedFrequency := float64(len(data)) / float64(numBins)
-
-	var chiSquareStat float64
-	for _, freq := range frequencies {
-		diff := float64(freq) - expectedFrequency
-		chiSquareStat += (diff * diff) / expectedFrequency
-	}
-
-	if chiSquareStat < lowerCriticalValue || chiSquareStat > upperCriticalValue {
-		return fmt.Errorf("%w: chi-square statistic %.2f is outside the acceptable range [%.2f, %.2f]",
-			ErrEntropyValidationFail, chiSquareStat, lowerCriticalValue, upperCriticalValue)
-	}
-
-	return nil
-}

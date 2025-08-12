@@ -177,10 +177,22 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		printStep("PASS", "Rejects request with invalid token", details)
 		s.passes++
 
+	case "Exists check for created key passed":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		details := fmt.Sprintf("keyId=%v", entry["keyId"])
+		printStep("PASS", "Exists check for created key", details)
+		s.passes++
+	case "Exists check for non-existent key passed":
+		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
+		details := fmt.Sprintf("gRPC_code=%v", entry["code"])
+		printStep("PASS", "Exists check for non-existent key", details)
+		s.passes++
+
 	// Failure cases
 	case "Authentication failed", "CreateKey failed", "GetKey failed", "GetKey (pre-rotation) failed", "GetKey (post-rotation) failed",
 		"HealthCheck failed", "gRPC connection failed", "RotateKey failed", "ListKeys failed",
-		"failed to load TLS credentials", "Unauthenticated access test failed", "Invalid token test failed":
+		"failed to load TLS credentials", "Unauthenticated access test failed", "Invalid token test failed",
+		"Exists check for created key failed", "Exists check for non-existent key failed":
 		printSuiteHeader(&s.currentSuite, "ERROR")
 		details := fmt.Sprintf("%v", entry["error"])
 		printStep("FAIL", msg, details)

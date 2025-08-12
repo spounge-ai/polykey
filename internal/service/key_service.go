@@ -74,4 +74,5 @@ func (s *keyServiceImpl) getKeyByRequest(ctx context.Context, keyID domain.KeyID
 		return s.keyRepo.GetKeyByVersion(ctx, keyID, version)
 	}
 	return s.keyRepo.GetKey(ctx, keyID)
+	// Don't wrap the error here - let the caller handle it properly
 }
