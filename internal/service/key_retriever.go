@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/grpc/codes"
@@ -17,53 +18,47 @@ import (
 
 func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
 	if req == nil {
-		return nil, fmt.Errorf("%w: request is nil", ErrInvalidRequest)
+		return nil, app_errors.ErrInvalidInput
 	}
 	keyID, err := domain.KeyIDFromString(req.GetKeyId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+		classifiedErr := s.errorClassifier.Classify(fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err), "GetKey")
+		classifiedErr.Metadata["requested_id"] = req.GetKeyId()
+		return nil, s.errorClassifier.LogAndSanitize(ctx, classifiedErr)
 	}
 
 	key, err := s.getKeyByRequest(ctx, keyID, req.GetVersion())
 	if err != nil {
-		currentErr := err
-		for currentErr != nil {
-			if statusErr, ok := status.FromError(currentErr); ok {
-				return nil, statusErr.Err()
-			}
-			if wrappedErr := errors.Unwrap(currentErr); wrappedErr != nil {
-				currentErr = wrappedErr
-			} else {
-				break
-			}
-		}
-		if errors.Is(err, persistence.ErrKeyNotFound) {
-			return nil, status.Errorf(codes.NotFound, "key not found: %s", req.GetKeyId())
-		}
-		s.logger.ErrorContext(ctx, "failed to get key from repository", "keyId", req.GetKeyId(), "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to retrieve key")
+		// The persistence layer should return a standard error type
+		classifiedErr := s.errorClassifier.Classify(err, "GetKey")
+		classifiedErr.KeyID = keyID.String()
+		return nil, s.errorClassifier.LogAndSanitize(ctx, classifiedErr)
 	}
 
 	if key.Metadata == nil {
-		return nil, status.Errorf(codes.Internal, "key metadata is missing")
+		return nil, ErrMissingMetadata
 	}
 
 	kmsProvider, err := s.getKMSProvider(key.Metadata.GetDataClassification())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get KMS provider: %v", err)
+		classifiedErr := s.errorClassifier.Classify(fmt.Errorf("failed to get KMS provider: %w", err), "GetKey")
+		classifiedErr.KeyID = keyID.String()
+		return nil, s.errorClassifier.LogAndSanitize(ctx, classifiedErr)
 	}
 
 	decryptedDEK, err := kmsProvider.DecryptDEK(ctx, key)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to decrypt DEK", "keyId", req.GetKeyId(), "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to decrypt key material")
+		classifiedErr := s.errorClassifier.Classify(fmt.Errorf("%w: %w", app_errors.ErrKMSFailure, err), "GetKey")
+		classifiedErr.KeyID = keyID.String()
+		return nil, s.errorClassifier.LogAndSanitize(ctx, classifiedErr)
 	}
 	defer secureZeroBytes(decryptedDEK)
 
 	_, algorithm, err := getCryptoDetails(key.Metadata.GetKeyType())
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get crypto details for key type", "keyId", req.GetKeyId(), "keyType", key.Metadata.GetKeyType(), "error", err)
-		algorithm = "unknown"
+		classifiedErr := s.errorClassifier.Classify(err, "GetKey")
+		classifiedErr.KeyID = keyID.String()
+		return nil, s.errorClassifier.LogAndSanitize(ctx, classifiedErr)
 	}
 
 	hash := sha256.Sum256(decryptedDEK)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spounge-ai/polykey/internal/app/grpc/interceptors"
 	"github.com/spounge-ai/polykey/internal/domain"
+	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/auth"
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/service"
@@ -34,6 +35,7 @@ func New(
 	authorizer domain.Authorizer,
 	auditLogger domain.AuditLogger,
 	logger *slog.Logger,
+	errorClassifier *app_errors.ErrorClassifier,
 ) (*Server, int, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.Port))
 	if err != nil {
@@ -51,10 +53,6 @@ func New(
 		opts = append(opts, grpc.Creds(creds))
 	}
 
-	// This part is tricky because the TokenManager is needed for the interceptor,
-	// but it's created deep within the wiring. For now, we might need to create it here
-	// or pass it up from the wiring.
-	// Let's assume for now it's passed up or created here from config.
 	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create token manager for interceptor: %w", err)
@@ -63,6 +61,7 @@ func New(
 	opts = append(opts, grpc.ChainUnaryInterceptor(
 		interceptors.UnaryLoggingInterceptor(),
 		interceptors.AuthenticationInterceptor(tokenManager),
+		interceptors.UnaryValidationInterceptor(errorClassifier),
 	))
 
 	grpcServer := grpc.NewServer(opts...)

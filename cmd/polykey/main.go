@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/spounge-ai/polykey/internal/app/grpc"
+	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/audit"
 	"github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
@@ -29,12 +30,14 @@ func main() {
 		log.Fatalf("failed to provide dependencies: %v", err)
 	}
 
-	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
+	errorClassifier := app_errors.NewErrorClassifier(slog.Default())
+
+	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default(), errorClassifier)
 	authService := service.NewAuthService(clientStore, tokenManager, defaultTokenTTL)
 	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo)
 	auditLogger := audit.NewAuditLogger(slog.Default(), auditRepo)
 
-	srv, port, err := grpc.New(cfg, keyService, authService, authorizer, auditLogger, slog.Default())
+	srv, port, err := grpc.New(cfg, keyService, authService, authorizer, auditLogger, slog.Default(), errorClassifier)
 	if err != nil {
 		slog.Error("failed to create server", "error", err)
 		os.Exit(1)

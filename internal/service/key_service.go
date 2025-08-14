@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/kms"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
@@ -31,18 +32,20 @@ type KeyService interface {
 }
 
 type keyServiceImpl struct {
-	keyRepo      domain.KeyRepository
-	kmsProviders map[string]kms.KMSProvider
-	logger       *slog.Logger
-	cfg          *config.Config
+	keyRepo         domain.KeyRepository
+	kmsProviders    map[string]kms.KMSProvider
+	logger          *slog.Logger
+	cfg             *config.Config
+	errorClassifier *app_errors.ErrorClassifier
 }
 
-func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProviders map[string]kms.KMSProvider, logger *slog.Logger) KeyService {
+func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProviders map[string]kms.KMSProvider, logger *slog.Logger, errorClassifier *app_errors.ErrorClassifier) KeyService {
 	return &keyServiceImpl{
-		cfg:          cfg,
-		keyRepo:      keyRepo,
-		kmsProviders: kmsProviders,
-		logger:       logger,
+		cfg:             cfg,
+		keyRepo:         keyRepo,
+		kmsProviders:    kmsProviders,
+		logger:          logger,
+		errorClassifier: errorClassifier,
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
 	"github.com/spounge-ai/polykey/internal/domain"
+	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
@@ -81,11 +82,11 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
 	require.NoError(t, err)
 
-	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default())
+	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default(), app_errors.NewErrorClassifier(slog.Default()))
 	authService := service.NewAuthService(clientStore, tokenManager, 1*time.Hour)
 
 	// --- Server Setup ---
-	srv, port, err := app_grpc.New(cfg, keyService, authService, authorizer, nil, slog.Default()) // nil for audit logger for now
+	srv, port, err := app_grpc.New(cfg, keyService, authService, authorizer, nil, slog.Default(), app_errors.NewErrorClassifier(slog.Default())) // nil for audit logger for now
 	require.NoError(t, err)
 
 	go func() {
