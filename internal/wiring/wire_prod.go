@@ -26,7 +26,7 @@ var (
 func providePgxPool(cfg *infra_config.Config) (*pgxpool.Pool, error) {
 	var err error
 	pgxPoolOnce.Do(func() {
-		pgxPool, err = pgxpool.New(context.Background(), cfg.BootstrapSecrets.NeonDBURLDevelopment)
+		pgxPool, err = persistence.NewSecureConnectionPool(context.Background(), *cfg.NeonDB, cfg.Server, cfg.Persistence)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)
