@@ -25,6 +25,7 @@ type state struct {
 	failures      []string
 	passes        int
 	tests         map[string]time.Time
+	startTime     time.Time
 }
 
 func PrintJestReport(logData string) bool {
@@ -41,6 +42,11 @@ func PrintJestReport(logData string) bool {
 		var entry LogEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
+		}
+
+		// Set start time from the first valid entry
+		if s.startTime.IsZero() {
+			s.startTime = extractTimestampAsTime(entry)
 		}
 
 		if i == 0 {
@@ -67,125 +73,126 @@ func PrintJestReport(logData string) bool {
 
 func processAppLogEntry(entry LogEntry, s *state) {
 	msg, _ := entry["msg"].(string)
+	timestamp := extractTimestamp(entry, s.startTime)
 
 	switch msg {
 	// Setup & Connection
 	case "Configuration loaded":
 		printSuiteHeader(&s.currentSuite, "SETUP")
 		details := fmt.Sprintf("server=%v", entry["server"])
-		printStep("PASS", "Configuration", details)
+		printStepWithTime("PASS", "Configuration", details, timestamp)
 		s.passes++
 	case "gRPC connection established successfully":
 		printSuiteHeader(&s.currentSuite, "CONNECTION")
-		printStep("PASS", "gRPC Connection", "")
+		printStepWithTime("PASS", "gRPC Connection", "", timestamp)
 		s.passes++
 
 	// Authentication
 	case "Authentication successful":
 		printSuiteHeader(&s.currentSuite, "AUTHENTICATION")
 		details := fmt.Sprintf("expires_in=%v", entry["expires_in"])
-		printStep("PASS", "Client Authentication", details)
+		printStepWithTime("PASS", "Client Authentication", details, timestamp)
 		s.passes++
 
 	// Happy Path Execution
 	case "HealthCheck successful":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("status=%v, version=%v", entry["status"], entry["version"])
-		printStep("PASS", "Health Check", details)
+		printStepWithTime("PASS", "Health Check", details, timestamp)
 		s.passes++
 	case "CreateKey successful":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyId=%v", entry["keyId"])
-		printStep("PASS", "CreateKey", details)
+		printStepWithTime("PASS", "CreateKey", details, timestamp)
 		s.passes++
 	case "GetKey successful (pre-rotation)":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyId=%v, version=%v", entry["keyId"], entry["version"])
-		printStep("PASS", "GetKey (pre-rotation)", details)
+		printStepWithTime("PASS", "GetKey (pre-rotation)", details, timestamp)
 		s.passes++
 	case "RotateKey successful":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyId=%v, newVersion=%v", entry["keyId"], entry["newVersion"])
-		printStep("PASS", "RotateKey", details)
+		printStepWithTime("PASS", "RotateKey", details, timestamp)
 		s.passes++
 	case "GetKey successful (post-rotation)":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyId=%v, version=%v", entry["keyId"], entry["version"])
-		printStep("PASS", "GetKey (post-rotation)", details)
+		printStepWithTime("PASS", "GetKey (post-rotation)", details, timestamp)
 		s.passes++
 	case "ListKeys successful":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("count=%v", entry["count"])
-		printStep("PASS", "ListKeys", details)
+		printStepWithTime("PASS", "ListKeys", details, timestamp)
 		s.passes++
 	case "Starting key rotation validation":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		printStep("PASS", "Key Rotation Validation Started", "")
+		printStepWithTime("PASS", "Key Rotation Validation Started", "", timestamp)
 		s.passes++
 	case "Key ID preserved after rotation":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyId=%v", entry["keyId"])
-		printStep("PASS", "Key ID Preserved", details)
+		printStepWithTime("PASS", "Key ID Preserved", details, timestamp)
 		s.passes++
 	case "Key ID changed after rotation":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("originalKeyId=%v, rotatedKeyId=%v", entry["originalKeyId"], entry["rotatedKeyId"])
-		printStep("FAIL", "Key ID Changed Unexpectedly", details)
+		printStepWithTime("FAIL", "Key ID Changed Unexpectedly", details, timestamp)
 		s.failures = append(s.failures, fmt.Sprintf("Key ID Changed Unexpectedly: %s", details))
 	case "Key version incremented correctly":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("originalVersion=%v, rotatedVersion=%v", entry["originalVersion"], entry["rotatedVersion"])
-		printStep("PASS", "Key Version Incremented", details)
+		printStepWithTime("PASS", "Key Version Incremented", details, timestamp)
 		s.passes++
 	case "Key version not incremented properly":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("originalVersion=%v, rotatedVersion=%v", entry["originalVersion"], entry["rotatedVersion"])
-		printStep("FAIL", "Key Version Not Incremented Properly", details)
+		printStepWithTime("FAIL", "Key Version Not Incremented Properly", details, timestamp)
 		s.failures = append(s.failures, fmt.Sprintf("Key Version Not Incremented Properly: %s", details))
 	case "Key material successfully rotated":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		printStep("PASS", "Key Material Rotated", "")
+		printStepWithTime("PASS", "Key Material Rotated", "", timestamp)
 		s.passes++
 	case "Key material unchanged after rotation":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		printStep("FAIL", "Key Material Unchanged", "")
+		printStepWithTime("FAIL", "Key Material Unchanged", "", timestamp)
 		s.failures = append(s.failures, "Key Material Unchanged")
 	case "Key type preserved":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyType=%v", entry["keyType"])
-		printStep("PASS", "Key Type Preserved", details)
+		printStepWithTime("PASS", "Key Type Preserved", details, timestamp)
 		s.passes++
 	case "Key type changed unexpectedly":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("originalKeyType=%v, rotatedKeyType=%v", entry["originalKeyType"], entry["rotatedKeyType"])
-		printStep("FAIL", "Key Type Changed Unexpectedly", details)
+		printStepWithTime("FAIL", "Key Type Changed Unexpectedly", details, timestamp)
 		s.failures = append(s.failures, fmt.Sprintf("Key Type Changed Unexpectedly: %s", details))
 	case "Key rotation validation completed":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		printStep("PASS", "Key Rotation Validation Completed", "")
+		printStepWithTime("PASS", "Key Rotation Validation Completed", "", timestamp)
 		s.passes++
 
 	// Error Condition Tests
 	case "Unauthenticated access test passed":
 		printSuiteHeader(&s.currentSuite, "ERROR CONDITIONS")
 		details := fmt.Sprintf("gRPC_code=%v", entry["code"])
-		printStep("PASS", "Rejects request with no token", details)
+		printStepWithTime("PASS", "Rejects request with no token", details, timestamp)
 		s.passes++
 	case "Invalid token test passed":
 		printSuiteHeader(&s.currentSuite, "ERROR CONDITIONS")
 		details := fmt.Sprintf("gRPC_code=%v", entry["code"])
-		printStep("PASS", "Rejects request with invalid token", details)
+		printStepWithTime("PASS", "Rejects request with invalid token", details, timestamp)
 		s.passes++
 
 	case "Exists check for created key passed":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("keyId=%v", entry["keyId"])
-		printStep("PASS", "Exists check for created key", details)
+		printStepWithTime("PASS", "Exists check for created key", details, timestamp)
 		s.passes++
 	case "Exists check for non-existent key passed":
 		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
 		details := fmt.Sprintf("gRPC_code=%v", entry["code"])
-		printStep("PASS", "Exists check for non-existent key", details)
+		printStepWithTime("PASS", "Exists check for non-existent key", details, timestamp)
 		s.passes++
 
 	// Failure cases
@@ -195,7 +202,7 @@ func processAppLogEntry(entry LogEntry, s *state) {
 		"Exists check for created key failed", "Exists check for non-existent key failed":
 		printSuiteHeader(&s.currentSuite, "ERROR")
 		details := fmt.Sprintf("%v", entry["error"])
-		printStep("FAIL", msg, details)
+		printStepWithTime("FAIL", msg, details, timestamp)
 		s.failures = append(s.failures, fmt.Sprintf("%s: %s", msg, details))
 	}
 }
@@ -204,6 +211,7 @@ func processGoTestEntry(entry LogEntry, s *state) {
 	action, _ := entry["Action"].(string)
 	testName, _ := entry["Test"].(string)
 	packageName, _ := entry["Package"].(string)
+	timestamp := extractTimestamp(entry, s.startTime)
 
 	if testName == "" {
 		return
@@ -213,18 +221,53 @@ func processGoTestEntry(entry LogEntry, s *state) {
 	case "run":
 		printSuiteHeader(&s.currentSuite, packageName)
 		s.tests[testName] = time.Now()
-		fmt.Printf("  %s %s%s%s\n", "○", ColorGray, testName, ColorReset)
+		if timestamp != "" {
+			fmt.Printf("  %s %s%s%s %s[%s]%s\n", "○", ColorGray, testName, ColorReset, ColorGreen, timestamp, ColorReset)
+		} else {
+			fmt.Printf("  %s %s%s%s\n", "○", ColorGray, testName, ColorReset)
+		}
 	case "pass":
 		duration := time.Since(s.tests[testName]).Round(time.Millisecond)
 		details := fmt.Sprintf("%v", duration)
-		printStep("PASS", testName, details)
+		printStepWithTime("PASS", testName, details, timestamp)
 		s.passes++
 	case "fail":
 		duration := time.Since(s.tests[testName]).Round(time.Millisecond)
 		details := fmt.Sprintf("%v", duration)
-		printStep("FAIL", testName, details)
+		printStepWithTime("FAIL", testName, details, timestamp)
 		s.failures = append(s.failures, testName)
 	}
+}
+
+func extractTimestamp(entry LogEntry, startTime time.Time) string {
+	entryTime := extractTimestampAsTime(entry)
+	if entryTime.IsZero() {
+		return ""
+	}
+	
+	duration := entryTime.Sub(startTime)
+	return fmt.Sprintf("%.2fms", float64(duration.Nanoseconds())/1e6)
+}
+
+func extractTimestampAsTime(entry LogEntry) time.Time {
+	// Try different timestamp field names that might be in the JSON
+	if ts, ok := entry["time"].(string); ok {
+		if parsedTime, err := time.Parse(time.RFC3339, ts); err == nil {
+			return parsedTime
+		}
+	}
+	if ts, ok := entry["timestamp"].(string); ok {
+		if parsedTime, err := time.Parse(time.RFC3339, ts); err == nil {
+			return parsedTime
+		}
+	}
+	if ts, ok := entry["ts"].(string); ok {
+		if parsedTime, err := time.Parse(time.RFC3339, ts); err == nil {
+			return parsedTime
+		}
+	}
+	
+	return time.Time{}
 }
 
 func printSuiteHeader(currentSuite *string, newSuite string) {
@@ -235,17 +278,23 @@ func printSuiteHeader(currentSuite *string, newSuite string) {
 	}
 }
 
-func printStep(status, message, details string) {
+func printStepWithTime(status, message, details, timestamp string) {
 	var color, symbol string
 	if status == "PASS" {
 		color, symbol = ColorGreen, "✓"
 	} else {
 		color, symbol = ColorRed, "✗"
 	}
+	
+	timeStr := ""
+	if timestamp != "" {
+		timeStr = fmt.Sprintf(" %s[%s]%s", ColorGreen, timestamp, ColorReset)
+	}
+	
 	if details != "" {
-		fmt.Printf("  %s%s%s %s %s(%s)%s\n", color, symbol, ColorReset, message, ColorGray, details, ColorReset)
+		fmt.Printf("  %s%s%s %s %s(%s)%s%s\n", color, symbol, ColorReset, message, ColorGray, details, ColorReset, timeStr)
 	} else {
-		fmt.Printf("  %s%s%s %s\n", color, symbol, ColorReset, message)
+		fmt.Printf("  %s%s%s %s%s\n", color, symbol, ColorReset, message, timeStr)
 	}
 }
 

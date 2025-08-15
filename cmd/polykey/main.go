@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"os"
@@ -15,9 +16,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/wiring"
 )
 
-const (
-	defaultTokenTTL = 1 * time.Hour
-)
+const defaultTokenTTL = 1 * time.Hour
 
 func main() {
 	cfg, err := infra_config.Load(os.Getenv("POLYKEY_CONFIG_PATH"))
@@ -25,19 +24,27 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	kmsProviders, keyRepo, auditRepo, clientStore, tokenManager, err := wiring.ProvideDependencies(cfg)
+	container := wiring.NewContainer(cfg, slog.Default())
+	defer func() {
+		if err := container.Close(); err != nil {
+			slog.Error("failed to close container", "error", err)
+		}
+	}()
+
+	deps, err := container.GetDependencies(context.Background())
 	if err != nil {
-		log.Fatalf("failed to provide dependencies: %v", err)
+		log.Fatalf("failed to get dependencies: %v", err)
 	}
 
-	errorClassifier := app_errors.NewErrorClassifier(slog.Default())
+	logger := slog.Default()
+	errorClassifier := app_errors.NewErrorClassifier(logger)
 
-	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default(), errorClassifier)
-	authService := service.NewAuthService(clientStore, tokenManager, defaultTokenTTL)
-	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo)
-	auditLogger := audit.NewAuditLogger(slog.Default(), auditRepo)
+	keyService := service.NewKeyService(cfg, deps.KeyRepo, deps.KMSProviders, logger, errorClassifier)
+	authService := service.NewAuthService(deps.ClientStore, deps.TokenManager, defaultTokenTTL)
+	authorizer := auth.NewAuthorizer(cfg.Authorization, deps.KeyRepo)
+	auditLogger := audit.NewAuditLogger(logger, deps.AuditRepo)
 
-	srv, port, err := grpc.New(cfg, keyService, authService, authorizer, auditLogger, slog.Default(), errorClassifier)
+	srv, port, err := grpc.New(cfg, keyService, authService, authorizer, auditLogger, logger, errorClassifier)
 	if err != nil {
 		slog.Error("failed to create server", "error", err)
 		os.Exit(1)

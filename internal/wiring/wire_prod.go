@@ -17,105 +17,276 @@ import (
 	"github.com/spounge-ai/polykey/internal/kms"
 )
 
-var (
-	pgxPoolOnce sync.Once
-	pgxPool     *pgxpool.Pool
-)
+// Container holds all application dependencies
+type Container struct {
+	config       *infra_config.Config
+	logger       *slog.Logger
+	
+	// Singletons
+	pgxPool      *pgxpool.Pool
+	pgxPoolOnce  sync.Once
+	
+	// Dependencies
+	kmsProviders map[string]kms.KMSProvider
+	keyRepo      domain.KeyRepository
+	auditRepo    domain.AuditRepository
+	clientStore  domain.ClientStore
+	tokenManager *infra_auth.TokenManager
+}
 
-// providePgxPool creates a new database connection pool.
-func providePgxPool(cfg *infra_config.Config) (*pgxpool.Pool, error) {
+// NewContainer creates a new dependency injection container
+func NewContainer(cfg *infra_config.Config, logger *slog.Logger) *Container {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	
+	return &Container{
+		config: cfg,
+		logger: logger,
+	}
+}
+
+// Dependencies represents all core application dependencies
+type Dependencies struct {
+	KMSProviders map[string]kms.KMSProvider
+	KeyRepo      domain.KeyRepository
+	AuditRepo    domain.AuditRepository
+	ClientStore  domain.ClientStore
+	TokenManager *infra_auth.TokenManager
+}
+
+// GetDependencies returns all initialized dependencies
+func (c *Container) GetDependencies(ctx context.Context) (*Dependencies, error) {
+	// Initialize all dependencies with proper error handling
+	if err := c.initializeAll(ctx); err != nil {
+		return nil, fmt.Errorf("failed to initialize dependencies: %w", err)
+	}
+	
+	return &Dependencies{
+		KMSProviders: c.kmsProviders,
+		KeyRepo:      c.keyRepo,
+		AuditRepo:    c.auditRepo,
+		ClientStore:  c.clientStore,
+		TokenManager: c.tokenManager,
+	}, nil
+}
+
+// initializeAll initializes all dependencies in the correct order
+func (c *Container) initializeAll(ctx context.Context) error {
 	var err error
-	pgxPoolOnce.Do(func() {
+	
+	// Initialize database pool first (required by repositories)
+	if err = c.initPgxPool(ctx); err != nil {
+		return fmt.Errorf("failed to initialize database pool: %w", err)
+	}
+	
+	// Initialize all other dependencies
+	if err = c.initKMSProviders(ctx); err != nil {
+		return fmt.Errorf("failed to initialize KMS providers: %w", err)
+	}
+	
+	if err = c.initKeyRepository(); err != nil {
+		return fmt.Errorf("failed to initialize key repository: %w", err)
+	}
+	
+	if err = c.initAuditRepository(); err != nil {
+		return fmt.Errorf("failed to initialize audit repository: %w", err)
+	}
+	
+	if err = c.initClientStore(); err != nil {
+		return fmt.Errorf("failed to initialize client store: %w", err)
+	}
+	
+	if err = c.initTokenManager(); err != nil {
+		return fmt.Errorf("failed to initialize token manager: %w", err)
+	}
+	
+	return nil
+}
+
+// GetPgxPool returns the database connection pool (singleton)
+func (c *Container) GetPgxPool(ctx context.Context) (*pgxpool.Pool, error) {
+	if err := c.initPgxPool(ctx); err != nil {
+		return nil, err
+	}
+	return c.pgxPool, nil
+}
+
+// initPgxPool initializes the database connection pool (thread-safe singleton)
+func (c *Container) initPgxPool(ctx context.Context) error {
+	var err error
+	c.pgxPoolOnce.Do(func() {
 		dbConfig := infra_config.NeonDBConfig{
-			URL: cfg.BootstrapSecrets.NeonDBURLDevelopment,
+			URL: c.config.BootstrapSecrets.NeonDBURLDevelopment,
 		}
-		pgxPool, err = persistence.NewSecureConnectionPool(context.Background(), dbConfig, cfg.Server, cfg.Persistence)
+		c.pgxPool, err = persistence.NewSecureConnectionPool(ctx, dbConfig, c.config.Server, c.config.Persistence)
+		if err != nil {
+			c.logger.Error("failed to create database connection pool", "error", err)
+		}
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new pgxpool: %w", err)
-	}
-	return pgxPool, nil
+	return err
 }
 
-// ProvideDependencies constructs all the main dependencies for the application.
+// initKMSProviders initializes KMS providers based on configuration
+func (c *Container) initKMSProviders(ctx context.Context) error {
+	if c.kmsProviders != nil {
+		return nil // Already initialized
+	}
+	
+	c.kmsProviders = make(map[string]kms.KMSProvider)
+	
+	// Initialize local KMS provider if configured
+	if c.config.BootstrapSecrets.PolykeyMasterKey != "" {
+		localProvider, err := kms.NewLocalKMSProvider(c.config.BootstrapSecrets.PolykeyMasterKey)
+		if err != nil {
+			return fmt.Errorf("failed to create local KMS provider: %w", err)
+		}
+		c.kmsProviders["local"] = localProvider
+		c.logger.Debug("initialized local KMS provider")
+	}
+	
+	// Initialize AWS KMS provider if enabled
+	if c.config.AWS.Enabled {
+		awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(c.config.AWS.Region))
+		if err != nil {
+			return fmt.Errorf("failed to load AWS config: %w", err)
+		}
+		
+		awsProvider := kms.NewAWSKMSProvider(awsCfg, c.config.AWS.KMSKeyARN)
+		c.kmsProviders["aws"] = awsProvider
+		c.logger.Debug("initialized AWS KMS provider", "region", c.config.AWS.Region)
+	}
+	
+	if len(c.kmsProviders) == 0 {
+		return fmt.Errorf("no KMS providers configured")
+	}
+	
+	return nil
+}
+
+// initKeyRepository initializes the key repository
+func (c *Container) initKeyRepository() error {
+	if c.keyRepo != nil {
+		return nil // Already initialized
+	}
+	
+	if c.pgxPool == nil {
+		return fmt.Errorf("database pool not initialized")
+	}
+	
+	var err error
+	c.keyRepo, err = persistence.NewNeonDBStorage(c.pgxPool, c.logger)
+	if err != nil {
+		return fmt.Errorf("failed to create key repository: %w", err)
+	}
+	
+	c.logger.Debug("initialized key repository")
+	return nil
+}
+
+// initAuditRepository initializes the audit repository
+func (c *Container) initAuditRepository() error {
+	if c.auditRepo != nil {
+		return nil // Already initialized
+	}
+	
+	if c.pgxPool == nil {
+		return fmt.Errorf("database pool not initialized")
+	}
+	
+	var err error
+	c.auditRepo, err = persistence.NewAuditRepository(c.pgxPool)
+	if err != nil {
+		return fmt.Errorf("failed to create audit repository: %w", err)
+	}
+	
+	c.logger.Debug("initialized audit repository")
+	return nil
+}
+
+// initClientStore initializes the client store
+func (c *Container) initClientStore() error {
+	if c.clientStore != nil {
+		return nil // Already initialized
+	}
+	
+	var err error
+	c.clientStore, err = infra_auth.NewFileClientStore(c.config.ClientCredentialsPath)
+	if err != nil {
+		return fmt.Errorf("failed to create client store: %w", err)
+	}
+	
+	c.logger.Debug("initialized client store", "path", c.config.ClientCredentialsPath)
+	return nil
+}
+
+// initTokenManager initializes the token manager
+func (c *Container) initTokenManager() error {
+	if c.tokenManager != nil {
+		return nil // Already initialized
+	}
+	
+	var err error
+	c.tokenManager, err = infra_auth.NewTokenManager(c.config.BootstrapSecrets.JWTRSAPrivateKey)
+	if err != nil {
+		return fmt.Errorf("failed to create token manager: %w", err)
+	}
+	
+	c.logger.Debug("initialized token manager")
+	return nil
+}
+
+// Close gracefully shuts down all resources
+func (c *Container) Close() error {
+	var errs []error
+	
+	if c.pgxPool != nil {
+		c.pgxPool.Close()
+		c.logger.Debug("closed database connection pool")
+	}
+	
+	// Close KMS providers if they implement io.Closer
+	for name, provider := range c.kmsProviders {
+		if closer, ok := provider.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("failed to close KMS provider %s: %w", name, err))
+			}
+		}
+	}
+	
+	if len(errs) > 0 {
+		return fmt.Errorf("errors during cleanup: %v", errs)
+	}
+	
+	return nil
+}
+
+// Alternative S3 storage provider (kept for compatibility)
+func (c *Container) GetS3KeyRepository(ctx context.Context) (domain.KeyRepository, error) {
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(c.config.AWS.Region))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+	}
+	return persistence.NewS3Storage(awsCfg, c.config.AWS.S3Bucket, c.logger)
+}
+
+// Legacy compatibility functions
+// These maintain backward compatibility while encouraging migration to the new Container approach
+
+// ProvideDependencies maintains backward compatibility but is deprecated
+// Deprecated: Use Container.GetDependencies instead
 func ProvideDependencies(cfg *infra_config.Config) (map[string]kms.KMSProvider, domain.KeyRepository, domain.AuditRepository, domain.ClientStore, *infra_auth.TokenManager, error) {
-	kmsProviders, err := provideKMSProviders(cfg)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-
-	dbpool, err := providePgxPool(cfg)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-
-	keyRepo, err := provideKeyRepository(dbpool)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-
-	auditRepo, err := provideAuditRepository(dbpool)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-
-	clientStore, err := provideClientStore(cfg.ClientCredentialsPath)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-
-	tokenManager, err := provideTokenManager(cfg)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-
-	return kmsProviders, keyRepo, auditRepo, clientStore, tokenManager, nil
-}
-
-func provideKMSProviders(cfg *infra_config.Config) (map[string]kms.KMSProvider, error) {
-	providers := make(map[string]kms.KMSProvider)
-
-	if cfg.BootstrapSecrets.PolykeyMasterKey != "" {
-		localProvider, err := kms.NewLocalKMSProvider(cfg.BootstrapSecrets.PolykeyMasterKey)
-		if err != nil {
-			return nil, err
+	container := NewContainer(cfg, slog.Default())
+	defer func() {
+		if err := container.Close(); err != nil {
+			slog.Error("failed to close container during legacy call", "error", err)
 		}
-		providers["local"] = localProvider
-	}
-
-	if cfg.AWS.Enabled {
-		awsCfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(cfg.AWS.Region))
-		if err != nil {
-			return nil, fmt.Errorf("failed to load aws config: %w", err)
-		}
-		awsProvider := kms.NewAWSKMSProvider(awsCfg, cfg.AWS.KMSKeyARN)
-		providers["aws"] = awsProvider
-	}
-
-	return providers, nil
-}
-
-func provideKeyRepository(dbpool *pgxpool.Pool) (domain.KeyRepository, error) {
-	return persistence.NewNeonDBStorage(dbpool, slog.Default())
-}
-
-func provideClientStore(path string) (domain.ClientStore, error) {
-	return infra_auth.NewFileClientStore(path)
-}
-
-func provideTokenManager(cfg *infra_config.Config) (*infra_auth.TokenManager, error) {
-	return infra_auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
-}
-
-//nolint:unused
-func provideS3Storage(cfg *infra_config.Config) (domain.KeyRepository, error) {
-	awsCfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(cfg.AWS.Region))
+	}()
+	
+	deps, err := container.GetDependencies(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load aws config: %w", err)
+		return nil, nil, nil, nil, nil, err
 	}
-	return persistence.NewS3Storage(awsCfg, cfg.AWS.S3Bucket, slog.Default())
-}
-
-func provideAuditRepository(dbpool *pgxpool.Pool) (domain.AuditRepository, error) {
-	return persistence.NewAuditRepository(dbpool)
+	
+	return deps.KMSProviders, deps.KeyRepo, deps.AuditRepo, deps.ClientStore, deps.TokenManager, nil
 }
