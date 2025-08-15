@@ -29,7 +29,7 @@ type ClassifiedError struct {
 	ClientMessage string
 	OperationName string
 	KeyID         string // Store but never expose
-	Metadata      map[string]interface{}
+	Metadata      map[string]any
 }
 
 type ErrorClassifier struct {
@@ -48,73 +48,82 @@ var errorPool = sync.Pool{
 	},
 }
 
+var classificationRules = []struct {
+	targetErr     error
+	class         ErrorClass
+	clientMessage string
+}{
+	{ErrKeyNotFound, ClassNotFound, "The requested resource was not found"},
+	{ErrInvalidInput, ClassValidation, "The request contains invalid parameters"},
+	{ErrKMSFailure, ClassInternal, "An internal error occurred. Please try again later"},
+	{ErrAuthentication, ClassAuthentication, "Authentication failed"},
+	{ErrAuthorization, ClassAuthorization, "Permission denied"},
+	{ErrConflict, ClassConflict, "A conflict occurred"},
+	{ErrRateLimit, ClassRateLimit, "You have exceeded the rate limit"},
+	{ErrExternal, ClassExternal, "External service temporarily unavailable"},
+}
+
 func (ec *ErrorClassifier) Classify(err error, operation string) *ClassifiedError {
-	// Get a pooled error object
+	if err == nil {
+		return nil
+	}
+
 	classified := errorPool.Get().(*ClassifiedError)
 	classified.InternalError = err
 	classified.OperationName = operation
 
-	switch {
-	case errors.Is(err, ErrKeyNotFound):
-		classified.Class = ClassNotFound
-		classified.ClientMessage = "The requested resource was not found"
-	case errors.Is(err, ErrInvalidInput):
-		classified.Class = ClassValidation
-		classified.ClientMessage = "The request contains invalid parameters"
-	case errors.Is(err, ErrKMSFailure):
-		classified.Class = ClassInternal
-		classified.ClientMessage = "An internal error occurred. Please try again later"
-	case errors.Is(err, ErrAuthentication):
-		classified.Class = ClassAuthentication
-		classified.ClientMessage = "Authentication failed"
-	case errors.Is(err, ErrAuthorization):
-		classified.Class = ClassAuthorization
-		classified.ClientMessage = "Permission denied"
-	case errors.Is(err, ErrConflict):
-		classified.Class = ClassConflict
-		classified.ClientMessage = "A conflict occurred"
-	case errors.Is(err, ErrRateLimit):
-		classified.Class = ClassRateLimit
-		classified.ClientMessage = "You have exceeded the rate limit"
-	default:
-		classified.Class = ClassInternal
-		classified.ClientMessage = "An unexpected internal error occurred"
+	for _, rule := range classificationRules {
+		if errors.Is(err, rule.targetErr) {
+			classified.Class = rule.class
+			classified.ClientMessage = rule.clientMessage
+			return classified
+		}
 	}
 
+	classified.Class = ClassInternal
+	classified.ClientMessage = "An unexpected internal error occurred"
 	return classified
 }
 
 func (ec *ErrorClassifier) LogAndSanitize(ctx context.Context, classified *ClassifiedError) error {
-	defer ec.putError(classified) // Return the object to the pool
+	if classified == nil {
+		return nil
+	}
 
-	ec.logger.ErrorContext(ctx, "operation failed",
-		"operation", classified.OperationName,
-		"error_class", classified.Class,
-		"internal_error", classified.InternalError.Error(),
-		"key_id", classified.KeyID, // Log internally only
-		"metadata", classified.Metadata,
-	)
+	defer ec.putError(classified) 
+
+	attrs := []slog.Attr{
+		slog.String("operation", classified.OperationName),
+		slog.Int("error_class", int(classified.Class)),
+		slog.String("internal_error", classified.InternalError.Error()),
+	}
+
+	if classified.KeyID != "" {
+		attrs = append(attrs, slog.String("key_id", classified.KeyID))
+	}
+	if len(classified.Metadata) > 0 {
+		attrs = append(attrs, slog.Any("metadata", classified.Metadata))
+	}
+
+	ec.logger.LogAttrs(ctx, slog.LevelError, "operation failed", attrs...)
 
 	return ec.toGRPCError(classified)
 }
 
-func (ec *ErrorClassifier) toGRPCError(classified *ClassifiedError) error {
-	var code codes.Code
+var grpcCodeMap = map[ErrorClass]codes.Code{
+	ClassNotFound:       codes.NotFound,
+	ClassValidation:     codes.InvalidArgument,
+	ClassAuthentication: codes.Unauthenticated,
+	ClassAuthorization:  codes.PermissionDenied,
+	ClassRateLimit:      codes.ResourceExhausted,
+	ClassConflict:       codes.AlreadyExists,
+	ClassExternal:       codes.Unavailable,
+	ClassInternal:       codes.Internal, 
+}
 
-	switch classified.Class {
-	case ClassNotFound:
-		code = codes.NotFound
-	case ClassValidation:
-		code = codes.InvalidArgument
-	case ClassAuthentication:
-		code = codes.Unauthenticated
-	case ClassAuthorization:
-		code = codes.PermissionDenied
-	case ClassRateLimit:
-		code = codes.ResourceExhausted
-	case ClassConflict:
-		code = codes.AlreadyExists
-	default:
+func (ec *ErrorClassifier) toGRPCError(classified *ClassifiedError) error {
+	code, exists := grpcCodeMap[classified.Class]
+	if !exists {
 		code = codes.Internal
 	}
 
@@ -122,12 +131,16 @@ func (ec *ErrorClassifier) toGRPCError(classified *ClassifiedError) error {
 }
 
 func (ec *ErrorClassifier) putError(err *ClassifiedError) {
-	// Clear sensitive data before pooling
 	err.KeyID = ""
 	err.InternalError = nil
+	
 	for k := range err.Metadata {
 		delete(err.Metadata, k)
 	}
+	
 	err.OperationName = ""
+	err.ClientMessage = ""
+	err.Class = 0
+	
 	errorPool.Put(err)
 }

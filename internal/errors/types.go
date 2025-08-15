@@ -2,7 +2,6 @@ package errors
 
 import "errors"
 
-// Standard application errors.
 var (
 	ErrKeyNotFound    = errors.New("key not found")
 	ErrInvalidInput   = errors.New("invalid input")
