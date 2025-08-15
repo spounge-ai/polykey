@@ -28,6 +28,20 @@ func UnaryValidationInterceptor(errorClassifier *app_errors.ErrorClassifier) grp
 			validationErr = requestValidator.ValidateUpdateKeyMetadataRequest(ctx, r)
 		case *pk.ListKeysRequest:
 			validationErr = queryValidator.ValidateListKeysRequest(r)
+		case *pk.GetKeyRequest:
+			validationErr = requestValidator.ValidateGetKeyRequest(ctx, r)
+		case *pk.RotateKeyRequest:
+			validationErr = requestValidator.ValidateRotateKeyRequest(ctx, r)
+		case *pk.RevokeKeyRequest:
+			validationErr = requestValidator.ValidateRevokeKeyRequest(ctx, r)
+		case *pk.GetKeyMetadataRequest:
+			validationErr = requestValidator.ValidateGetKeyMetadataRequest(ctx, r)
+		case *pk.AuthenticateRequest:
+			validationErr = requestValidator.ValidateAuthenticateRequest(ctx, r)
+		case *pk.RefreshTokenRequest:
+			validationErr = requestValidator.ValidateRefreshTokenRequest(ctx, r)
+		case *pk.RevokeTokenRequest:
+			validationErr = requestValidator.ValidateRevokeTokenRequest(ctx, r)
 		}
 
 		if validationErr != nil {

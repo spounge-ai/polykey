@@ -215,3 +215,82 @@ func (rv *RequestValidator) validateDataClassification(classification string) er
 	return nil
 }
 
+func (rv *RequestValidator) ValidateGetKeyRequest(ctx context.Context, req *pk.GetKeyRequest) error {
+	if req.GetKeyId() == "" {
+		return fmt.Errorf("key_id is required")
+	}
+	if !rv.uuidRegex.MatchString(req.GetKeyId()) {
+		return fmt.Errorf("invalid key_id format: must be a UUID")
+	}
+	if req.GetRequesterContext() == nil {
+		return fmt.Errorf("requester_context is required")
+	}
+	return nil
+}
+
+func (rv *RequestValidator) ValidateRotateKeyRequest(ctx context.Context, req *pk.RotateKeyRequest) error {
+	if req.GetKeyId() == "" {
+		return fmt.Errorf("key_id is required")
+	}
+	if !rv.uuidRegex.MatchString(req.GetKeyId()) {
+		return fmt.Errorf("invalid key_id format: must be a UUID")
+	}
+	if req.GetRequesterContext() == nil {
+		return fmt.Errorf("requester_context is required")
+	}
+	return nil
+}
+
+func (rv *RequestValidator) ValidateRevokeKeyRequest(ctx context.Context, req *pk.RevokeKeyRequest) error {
+	if req.GetKeyId() == "" {
+		return fmt.Errorf("key_id is required")
+	}
+	if !rv.uuidRegex.MatchString(req.GetKeyId()) {
+		return fmt.Errorf("invalid key_id format: must be a UUID")
+	}
+	if req.GetRequesterContext() == nil {
+		return fmt.Errorf("requester_context is required")
+	}
+	return nil
+}
+
+func (rv *RequestValidator) ValidateGetKeyMetadataRequest(ctx context.Context, req *pk.GetKeyMetadataRequest) error {
+	if req.GetKeyId() == "" {
+		return fmt.Errorf("key_id is required")
+	}
+	if !rv.uuidRegex.MatchString(req.GetKeyId()) {
+		return fmt.Errorf("invalid key_id format: must be a UUID")
+	}
+	if req.GetRequesterContext() == nil {
+		return fmt.Errorf("requester_context is required")
+	}
+	return nil
+}
+
+func (rv *RequestValidator) ValidateAuthenticateRequest(ctx context.Context, req *pk.AuthenticateRequest) error {
+	if req.GetClientId() == "" {
+		return fmt.Errorf("client_id is required")
+	}
+	if req.GetApiKey() == "" {
+		return fmt.Errorf("api_key is required")
+	}
+	return nil
+}
+
+func (rv *RequestValidator) ValidateRefreshTokenRequest(ctx context.Context, req *pk.RefreshTokenRequest) error {
+	if req.GetRefreshToken() == "" {
+		return fmt.Errorf("refresh_token is required")
+	}
+	return nil
+}
+
+func (rv *RequestValidator) ValidateRevokeTokenRequest(ctx context.Context, req *pk.RevokeTokenRequest) error {
+	if req.GetAccessToken() == "" {
+		return fmt.Errorf("access_token is required")
+	}
+	if req.GetClientId() == "" {
+		return fmt.Errorf("client_id is required")
+	}
+	return nil
+}
+

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/infra/config"
@@ -19,7 +18,11 @@ func NewSecureConnectionPool(ctx context.Context, dbConfig config.NeonDBConfig, 
 
 	// Apply secure settings from a new SecureConnectionConfig struct if it were defined
 	// For now, we will use the existing config structs to apply some settings.
-	if serverConfig.TLS.Enabled {
+	if serverConfig.Mode == "production" && !persistenceConfig.Database.TLS.Enabled {
+		return nil, fmt.Errorf("database connection must use TLS in production mode")
+	}
+
+	if persistenceConfig.Database.TLS.Enabled {
 		poolConfig.ConnConfig.TLSConfig = &tls.Config{
 			ServerName:         poolConfig.ConnConfig.Host,
 			InsecureSkipVerify: false, // Always false in production
@@ -27,13 +30,11 @@ func NewSecureConnectionPool(ctx context.Context, dbConfig config.NeonDBConfig, 
 		}
 	}
 
-	// Example of setting connection pool settings from config
-	// These would ideally be in a more specific persistence config struct
-	poolConfig.MaxConns = 25
-	poolConfig.MinConns = 5
-	poolConfig.MaxConnLifetime = time.Hour
-	poolConfig.MaxConnIdleTime = 5 * time.Minute
-	poolConfig.HealthCheckPeriod = 1 * time.Minute
+	poolConfig.MaxConns = persistenceConfig.Database.Connection.MaxConns
+	poolConfig.MinConns = persistenceConfig.Database.Connection.MinConns
+	poolConfig.MaxConnLifetime = persistenceConfig.Database.Connection.MaxConnLifetime
+	poolConfig.MaxConnIdleTime = persistenceConfig.Database.Connection.MaxConnIdleTime
+	poolConfig.HealthCheckPeriod = persistenceConfig.Database.Connection.HealthCheckPeriod
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
