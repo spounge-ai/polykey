@@ -2,11 +2,13 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/service"
 	cmn "github.com/spounge-ai/spounge-proto/gen/go/common/v2"
@@ -21,12 +23,13 @@ import (
 // It acts as the transport layer, delegating business logic to various services.
 type PolykeyService struct {
 	pk.UnimplementedPolykeyServiceServer
-	cfg         *config.Config
-	keyService  service.KeyService
-	authService service.AuthService
-	authorizer  domain.Authorizer
-	audit       domain.AuditLogger
-	logger      *slog.Logger
+	cfg             *config.Config
+	keyService      service.KeyService
+	authService     service.AuthService
+	authorizer      domain.Authorizer
+	audit           domain.AuditLogger
+	logger          *slog.Logger
+	errorClassifier *app_errors.ErrorClassifier
 }
 
 // NewPolykeyService creates a new gRPC service implementation.
@@ -37,14 +40,16 @@ func NewPolykeyService(
 	authorizer domain.Authorizer,
 	audit domain.AuditLogger,
 	logger *slog.Logger,
+	errorClassifier *app_errors.ErrorClassifier,
 ) (pk.PolykeyServiceServer, error) {
 	return &PolykeyService{
-		cfg:         cfg,
-		keyService:  keyService,
-		authService: authService,
-		authorizer:  authorizer,
-		audit:       audit,
-		logger:      logger,
+		cfg:             cfg,
+		keyService:      keyService,
+		authService:     authService,
+		authorizer:      authorizer,
+		audit:           audit,
+		logger:          logger,
+		errorClassifier: errorClassifier,
 	}, nil
 }
 
@@ -74,45 +79,40 @@ func (s *PolykeyService) Authenticate(ctx context.Context, req *pk.AuthenticateR
 func (s *PolykeyService) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
 	keyID, err := domain.KeyIDFromString(req.GetKeyId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "GetKey"))
 	}
 
 	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:read", keyID); !ok {
-		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason), "GetKey"))
 	}
 
 	resp, err := s.keyService.GetKey(ctx, req)
 	if err != nil {
-		// Preserve the original gRPC status code from the service layer
-		if statusErr, ok := status.FromError(err); ok {
-			return nil, statusErr.Err()
-		}
-		// Only wrap as Internal if it's not already a gRPC status error
-		return nil, status.Errorf(codes.Internal, "failed to get key: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "GetKey"))
 	}
 	return resp, nil
 }
 
 func (s *PolykeyService) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
 	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:create", domain.KeyID{}); !ok {
-		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason), "CreateKey"))
 	}
 
 	resp, err := s.keyService.CreateKey(ctx, req)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to create key: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "CreateKey"))
 	}
 	return resp, nil
 }
 
 func (s *PolykeyService) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
 	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:list", domain.KeyID{}); !ok {
-		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason), "ListKeys"))
 	}
 
 	resp, err := s.keyService.ListKeys(ctx, req)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to list keys: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "ListKeys"))
 	}
 	return resp, nil
 }
@@ -120,16 +120,16 @@ func (s *PolykeyService) ListKeys(ctx context.Context, req *pk.ListKeysRequest) 
 func (s *PolykeyService) RotateKey(ctx context.Context, req *pk.RotateKeyRequest) (*pk.RotateKeyResponse, error) {
 	keyID, err := domain.KeyIDFromString(req.GetKeyId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "RotateKey"))
 	}
 
 	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:rotate", keyID); !ok {
-		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason), "RotateKey"))
 	}
 
 	resp, err := s.keyService.RotateKey(ctx, req)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to rotate key: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "RotateKey"))
 	}
 	return resp, nil
 }
@@ -137,15 +137,15 @@ func (s *PolykeyService) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 func (s *PolykeyService) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) (*emptypb.Empty, error) {
 	keyID, err := domain.KeyIDFromString(req.GetKeyId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "RevokeKey"))
 	}
 
 	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:revoke", keyID); !ok {
-		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason), "RevokeKey"))
 	}
 
 	if err := s.keyService.RevokeKey(ctx, req); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to revoke key: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "RevokeKey"))
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -153,15 +153,15 @@ func (s *PolykeyService) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest
 func (s *PolykeyService) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) (*emptypb.Empty, error) {
 	keyID, err := domain.KeyIDFromString(req.GetKeyId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "UpdateKeyMetadata"))
 	}
 
 	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:update", keyID); !ok {
-		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason), "UpdateKeyMetadata"))
 	}
 
 	if err := s.keyService.UpdateKeyMetadata(ctx, req); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update key metadata: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "UpdateKeyMetadata"))
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -169,16 +169,17 @@ func (s *PolykeyService) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKe
 func (s *PolykeyService) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error) {
 	keyID, err := domain.KeyIDFromString(req.GetKeyId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid key id: %v", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "GetKeyMetadata"))
 	}
 
 	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, "keys:read", keyID); !ok {
-		return nil, status.Errorf(codes.PermissionDenied, "authorization failed: %s", reason)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason), "GetKeyMetadata"))
 	}
 
 	resp, err := s.keyService.GetKeyMetadata(ctx, req)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get key metadata: %v", err)
+		s.logger.ErrorContext(ctx, "[polykey_impl.go:GetKeyMetadata] Error from keyService", "error", err)
+		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "GetKeyMetadata"))
 	}
 	return resp, nil
 }

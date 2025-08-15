@@ -59,14 +59,14 @@ func New(
 	}
 
 	opts = append(opts, grpc.ChainUnaryInterceptor(
-		interceptors.UnaryLoggingInterceptor(),
+		interceptors.UnaryLoggingInterceptor(logger),
 		interceptors.AuthenticationInterceptor(tokenManager),
 		interceptors.UnaryValidationInterceptor(errorClassifier),
 	))
 
 	grpcServer := grpc.NewServer(opts...)
 
-	polykeyService, err := NewPolykeyService(cfg, keyService, authService, authorizer, auditLogger, logger)
+	polykeyService, err := NewPolykeyService(cfg, keyService, authService, authorizer, auditLogger, logger, errorClassifier)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create polykey service: %w", err)
 	}

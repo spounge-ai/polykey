@@ -2,22 +2,20 @@ package service
 
 import (
 	"context"
-	"fmt"
 
-	
+	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *keyServiceImpl) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
 	if req == nil {
-		return nil, fmt.Errorf("%w: request is nil", ErrInvalidRequest)
+		return nil, app_errors.ErrInvalidInput
 	}
 
 	keys, err := s.keyRepo.ListKeys(ctx)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to list keys", "error", err)
-		return nil, fmt.Errorf("failed to list keys: %w", err)
+		return nil, err // The error from the repository is a standard Go error.
 	}
 
 	metadataKeys := make([]*pk.KeyMetadata, len(keys))

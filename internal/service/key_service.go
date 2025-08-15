@@ -84,6 +84,7 @@ func (s *keyServiceImpl) getKeyByRequest(ctx context.Context, keyID domain.KeyID
 	}
 
 	if err != nil {
+		s.logger.ErrorContext(ctx, "[key_service.go:getKeyByRequest] Error from keyRepo", "error", err)
 		if errors.Is(err, persistence.ErrKeyNotFound) {
 			return nil, app_errors.ErrKeyNotFound
 		}

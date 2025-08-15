@@ -113,6 +113,7 @@ func (s *NeonDBStorage) GetKey(ctx context.Context, id domain.KeyID) (*domain.Ke
 		&key.Version, &metadataRaw, &key.EncryptedDEK, 
 		&key.Status, &key.CreatedAt, &key.UpdatedAt, &key.RevokedAt)
 	if err != nil {
+		s.logger.ErrorContext(ctx, "[neondb_storage.go:GetKey] Error from QueryRow", "error", err)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrKeyNotFound
 		}

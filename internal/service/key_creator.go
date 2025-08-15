@@ -7,44 +7,41 @@ import (
 	"time"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
 	if req == nil || req.RequesterContext == nil || req.RequesterContext.GetClientIdentity() == "" {
-		return nil, fmt.Errorf("%w: requester context required", ErrInvalidRequest)
+		return nil, app_errors.ErrInvalidInput
 	}
 
 	authenticatedUser, ok := domain.UserFromContext(ctx)
 	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "user identity not found in context")
+		return nil, app_errors.ErrAuthentication
 	}
 
 	if err := validateTier(authenticatedUser.Tier, req.GetDataClassification()); err != nil {
-		return nil, status.Errorf(codes.PermissionDenied, "tier validation failed: %v", err)
+		return nil, fmt.Errorf("%w: %w", app_errors.ErrAuthorization, err)
 	}
 
 	description, err := domain.NewDescription(req.GetDescription())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
 	}
 
 	dekSize, algorithm, err := getCryptoDetails(req.GetKeyType())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
 	}
 
 	// Generate the DEK and ensure it is securely zeroed after use.
 	dek := make([]byte, dekSize)
 	if _, err := rand.Read(dek); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
+		return nil, fmt.Errorf("%w: %w", ErrKeyGenerationFail, err)
 	}
 	defer secureZeroBytes(dek)
-
-	
 
 	// Generate a unique KeyID, retrying up to 10 times in the unlikely event of a collision.
 	var keyID domain.KeyID
