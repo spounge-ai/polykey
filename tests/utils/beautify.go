@@ -1,5 +1,8 @@
 package utils
 
+
+// need to fix ops timer orignal logging verus jest log time is off
+
 import (
 	"encoding/json"
 	"fmt"
@@ -18,7 +21,7 @@ const (
 	ColorBgRed   = "\033[41;37m"
 )
 
-type LogEntry map[string]interface{}
+type LogEntry map[string]any
 
 type state struct {
 	currentSuite string
