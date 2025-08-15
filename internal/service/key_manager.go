@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/pkg/crypto"
+	"github.com/spounge-ai/polykey/pkg/memory"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -28,13 +30,13 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 	}
 
 	// Determine DEK size from the current key's type
-	dekSize, _, err := getCryptoDetails(currentKey.Metadata.GetKeyType())
+	dekSize, _, err := crypto.GetCryptoDetails(currentKey.Metadata.GetKeyType())
 	if err != nil {
 		return nil, fmt.Errorf("could not get crypto details for key rotation: %w", err)
 	}
 
 	newDEK := make([]byte, dekSize)
-	defer secureZeroBytes(newDEK)
+	defer memory.SecureZeroBytes(newDEK)
 	if _, err := rand.Read(newDEK); err != nil {
 		s.logger.ErrorContext(ctx, "failed to generate new DEK", "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)

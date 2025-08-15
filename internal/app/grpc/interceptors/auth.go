@@ -12,30 +12,40 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var unprotectedMethods = map[string]bool{
-	"/polykey.v2.PolykeyService/HealthCheck":   true,
-	"/polykey.v2.PolykeyService/Authenticate": true,
+var unprotectedMethods = map[string]struct{}{
+	"/polykey.v2.PolykeyService/HealthCheck":   {},
+	"/polykey.v2.PolykeyService/Authenticate": {},
 }
 
 // AuthenticationInterceptor validates the JWT token from the request metadata
 // for all RPCs except for a predefined list of unprotected methods.
 func AuthenticationInterceptor(tokenManager *auth.TokenManager) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		if unprotectedMethods[info.FullMethod] {
+		if _, isUnprotected := unprotectedMethods[info.FullMethod]; isUnprotected {
 			return handler(ctx, req)
 		}
 
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
-			return nil, status.Errorf(codes.Unauthenticated, "metadata is not provided")
+			return nil, status.Error(codes.Unauthenticated, "metadata is not provided")
 		}
 
-		authHeader := md.Get("authorization")
-		if len(authHeader) == 0 {
-			return nil, status.Errorf(codes.Unauthenticated, "authorization token is not provided")
+		authHeaders := md.Get("authorization")
+		if len(authHeaders) == 0 {
+			return nil, status.Error(codes.Unauthenticated, "authorization token is not provided")
 		}
 
-		token := strings.TrimPrefix(authHeader[0], "Bearer ")
+		authHeader := authHeaders[0]
+		const bearerPrefix = "Bearer "
+		if !strings.HasPrefix(authHeader, bearerPrefix) {
+			return nil, status.Error(codes.Unauthenticated, "authorization header must use Bearer scheme")
+		}
+
+		token := authHeader[len(bearerPrefix):]
+		if token == "" {
+			return nil, status.Error(codes.Unauthenticated, "bearer token is empty")
+		}
+
 		claims, err := tokenManager.ValidateToken(token)
 		if err != nil {
 			return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)

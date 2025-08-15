@@ -8,6 +8,8 @@ import (
 
 	"github.com/spounge-ai/polykey/internal/domain"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
+	"github.com/spounge-ai/polykey/pkg/crypto"
+	"github.com/spounge-ai/polykey/pkg/memory"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -31,7 +33,7 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
 	}
 
-	dekSize, algorithm, err := getCryptoDetails(req.GetKeyType())
+	dekSize, algorithm, err := crypto.GetCryptoDetails(req.GetKeyType())
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
 	}
@@ -41,7 +43,7 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	if _, err := rand.Read(dek); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrKeyGenerationFail, err)
 	}
-	defer secureZeroBytes(dek)
+	defer memory.SecureZeroBytes(dek)
 
 	// Generate a unique KeyID, retrying up to 10 times in the unlikely event of a collision.
 	var keyID domain.KeyID

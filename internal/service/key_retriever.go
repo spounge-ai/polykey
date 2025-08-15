@@ -8,6 +8,8 @@ import (
 
 	"github.com/spounge-ai/polykey/internal/domain"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
+	"github.com/spounge-ai/polykey/pkg/crypto"
+	"github.com/spounge-ai/polykey/pkg/memory"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -39,9 +41,9 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", app_errors.ErrKMSFailure, err)
 	}
-	defer secureZeroBytes(decryptedDEK)
+	defer memory.SecureZeroBytes(decryptedDEK)
 
-	_, algorithm, err := getCryptoDetails(key.Metadata.GetKeyType())
+	_, algorithm, err := crypto.GetCryptoDetails(key.Metadata.GetKeyType())
 	if err != nil {
 		return nil, err
 	}

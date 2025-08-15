@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 func UnaryLoggingInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
@@ -13,12 +14,34 @@ func UnaryLoggingInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
 		start := time.Now()
 
 		h, err := handler(ctx, req)
+		duration := time.Since(start)
 
-		logger.InfoContext(ctx, "gRPC request",
-			"method", info.FullMethod,
-			"duration", time.Since(start),
-			"error", err,
-		)
+		// Extract gRPC status code
+		var statusCode string
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				statusCode = st.Code().String()
+			} else {
+				statusCode = "UNKNOWN"
+			}
+		} else {
+			statusCode = "OK"
+		}
+
+		if err != nil {
+			logger.WarnContext(ctx, "gRPC request failed",
+				"method", info.FullMethod,
+				"duration", duration,
+				"status_code", statusCode,
+				"error", err.Error(),
+			)
+		} else {
+			logger.InfoContext(ctx, "gRPC request",
+				"method", info.FullMethod,
+				"duration", duration,
+				"status_code", statusCode,
+			)
+		}
 
 		return h, err
 	}

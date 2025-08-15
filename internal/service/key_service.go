@@ -64,14 +64,7 @@ func (s *keyServiceImpl) getKMSProvider(dataClassification string) (kms.KMSProvi
 	return provider, nil
 }
 
-func getCryptoDetails(keyType pk.KeyType) (int, string, error) {
-	switch keyType {
-	case pk.KeyType_KEY_TYPE_AES_256:
-		return 32, "AES-256-GCM", nil
-	default:
-		return 0, "", fmt.Errorf("%w: %s", ErrInvalidKeyType, keyType.String())
-	}
-}
+
 
 func (s *keyServiceImpl) getKeyByRequest(ctx context.Context, keyID domain.KeyID, version int32) (*domain.Key, error) {
 	var key *domain.Key
