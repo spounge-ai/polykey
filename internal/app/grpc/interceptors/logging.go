@@ -16,7 +16,6 @@ func UnaryLoggingInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
 		h, err := handler(ctx, req)
 		duration := time.Since(start)
 
-		// Extract gRPC status code
 		var statusCode string
 		if err != nil {
 			if st, ok := status.FromError(err); ok {
