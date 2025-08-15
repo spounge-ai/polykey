@@ -66,11 +66,17 @@ func New(
 
 	grpcServer := grpc.NewServer(opts...)
 
-	polykeyService, err := NewPolykeyService(cfg, keyService, authService, authorizer, auditLogger, logger, errorClassifier)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create polykey service: %w", err)
+	deps := PolykeyDeps{
+		Config:          cfg,
+		KeyService:      keyService,
+		AuthService:     authService,
+		Authorizer:      authorizer,
+		Audit:           auditLogger,
+		Logger:          logger,
+		ErrorClassifier: errorClassifier,
 	}
 
+	polykeyService := NewPolykeyService(deps)
 	pk.RegisterPolykeyServiceServer(grpcServer, polykeyService)
 
 	healthSrv := health.NewServer()
