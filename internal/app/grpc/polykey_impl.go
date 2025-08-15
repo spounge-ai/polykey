@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	cts "github.com/spounge-ai/polykey/internal/constants"
 	"github.com/spounge-ai/polykey/internal/domain"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/config"
@@ -19,8 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// PolykeyService is the gRPC implementation of the pk.PolykeyServiceServer interface.
-// It acts as the transport layer, delegating business logic to various services.
+// PolykeyService implements pk.PolykeyServiceServer.
 type PolykeyService struct {
 	pk.UnimplementedPolykeyServiceServer
 	cfg             *config.Config
@@ -32,7 +32,6 @@ type PolykeyService struct {
 	errorClassifier *app_errors.ErrorClassifier
 }
 
-// NewPolykeyService creates a new gRPC service implementation.
 func NewPolykeyService(
 	cfg *config.Config,
 	keyService service.KeyService,
@@ -53,7 +52,56 @@ func NewPolykeyService(
 	}, nil
 }
 
-// --- Authentication Methods ---
+// --- Generic Helpers ---
+
+func execWithAuth[T any](
+	s *PolykeyService,
+	ctx context.Context,
+	methodName, authOp, keyIDStr string,
+	fn func(context.Context, domain.KeyID) (T, error),
+) (T, error) {
+	var zero T
+
+	keyID, err := domain.KeyIDFromString(keyIDStr)
+	if err != nil {
+		return zero, s.sanitizeError(ctx, methodName, err)
+	}
+
+	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, authOp, keyID); !ok {
+		return zero, s.sanitizeError(ctx, methodName, fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason))
+	}
+
+	res, err := fn(ctx, keyID)
+	if err != nil {
+		return zero, s.sanitizeError(ctx, methodName, err)
+	}
+	return res, nil
+}
+
+func execWithoutKey[T any](
+	s *PolykeyService,
+	ctx context.Context,
+	methodName, authOp string,
+	fn func(context.Context) (T, error),
+) (T, error) {
+	var zero T
+
+	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, authOp, domain.KeyID{}); !ok {
+		return zero, s.sanitizeError(ctx, methodName, fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason))
+	}
+
+	res, err := fn(ctx)
+	if err != nil {
+		return zero, s.sanitizeError(ctx, methodName, err)
+	}
+	return res, nil
+}
+
+func (s *PolykeyService) sanitizeError(ctx context.Context, method string, err error) error {
+	return s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, method))
+}
+
+// --- gRPC Methods ---
 
 func (s *PolykeyService) Authenticate(ctx context.Context, req *pk.AuthenticateRequest) (*pk.AuthenticateResponse, error) {
 	if req.GetClientId() == "" || req.GetApiKey() == "" {
@@ -74,88 +122,79 @@ func (s *PolykeyService) Authenticate(ctx context.Context, req *pk.AuthenticateR
 	}, nil
 }
 
-// --- Key Management Methods ---
-
 func (s *PolykeyService) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk.GetKeyResponse, error) {
-	if _, err := s.authorizeWithKeyID(ctx, "GetKey", "keys:read", req.GetKeyId()); err != nil {
-		return nil, err
-	}
-
-	resp, err := s.keyService.GetKey(ctx, req)
-	if err != nil {
-		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "GetKey"))
-	}
-	return resp, nil
+	return execWithAuth(s, ctx,
+		cts.MethodGetKey,
+		cts.MethodScopes[cts.MethodGetKey],
+		req.GetKeyId(),
+		func(ctx context.Context, keyID domain.KeyID) (*pk.GetKeyResponse, error) {
+			return s.keyService.GetKey(ctx, req)
+		},
+	)
 }
 
 func (s *PolykeyService) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
-	if err := s.authorize(ctx, "CreateKey", "keys:create"); err != nil {
-		return nil, err
-	}
-
-	resp, err := s.keyService.CreateKey(ctx, req)
-	if err != nil {
-		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "CreateKey"))
-	}
-	return resp, nil
+	return execWithoutKey(s, ctx,
+		cts.MethodCreateKey,
+		cts.MethodScopes[cts.MethodCreateKey],
+		func(ctx context.Context) (*pk.CreateKeyResponse, error) {
+			return s.keyService.CreateKey(ctx, req)
+		},
+	)
 }
 
 func (s *PolykeyService) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
-	if err := s.authorize(ctx, "ListKeys", "keys:list"); err != nil {
-		return nil, err
-	}
-
-	resp, err := s.keyService.ListKeys(ctx, req)
-	if err != nil {
-		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "ListKeys"))
-	}
-	return resp, nil
+	return execWithoutKey(s, ctx,
+		cts.MethodListKeys,
+		cts.MethodScopes[cts.MethodListKeys],
+		func(ctx context.Context) (*pk.ListKeysResponse, error) {
+			return s.keyService.ListKeys(ctx, req)
+		},
+	)
 }
 
 func (s *PolykeyService) RotateKey(ctx context.Context, req *pk.RotateKeyRequest) (*pk.RotateKeyResponse, error) {
-	if _, err := s.authorizeWithKeyID(ctx, "RotateKey", "keys:rotate", req.GetKeyId()); err != nil {
-		return nil, err
-	}
-
-	resp, err := s.keyService.RotateKey(ctx, req)
-	if err != nil {
-		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "RotateKey"))
-	}
-	return resp, nil
+	return execWithAuth(s, ctx,
+		cts.MethodRotateKey,
+		cts.MethodScopes[cts.MethodRotateKey],
+		req.GetKeyId(),
+		func(ctx context.Context, keyID domain.KeyID) (*pk.RotateKeyResponse, error) {
+			return s.keyService.RotateKey(ctx, req)
+		},
+	)
 }
 
 func (s *PolykeyService) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) (*emptypb.Empty, error) {
-	if _, err := s.authorizeWithKeyID(ctx, "RevokeKey", "keys:revoke", req.GetKeyId()); err != nil {
-		return nil, err
-	}
-
-	if err := s.keyService.RevokeKey(ctx, req); err != nil {
-		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "RevokeKey"))
-	}
-	return &emptypb.Empty{}, nil
+	return execWithAuth(s, ctx,
+		cts.MethodRevokeKey,
+		cts.MethodScopes[cts.MethodRevokeKey],
+		req.GetKeyId(),
+		func(ctx context.Context, keyID domain.KeyID) (*emptypb.Empty, error) {
+			return &emptypb.Empty{}, s.keyService.RevokeKey(ctx, req)
+		},
+	)
 }
 
 func (s *PolykeyService) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) (*emptypb.Empty, error) {
-	if _, err := s.authorizeWithKeyID(ctx, "UpdateKeyMetadata", "keys:update", req.GetKeyId()); err != nil {
-		return nil, err
-	}
-
-	if err := s.keyService.UpdateKeyMetadata(ctx, req); err != nil {
-		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "UpdateKeyMetadata"))
-	}
-	return &emptypb.Empty{}, nil
+	return execWithAuth(s, ctx,
+		cts.MethodUpdateKeyMetadata,
+		cts.MethodScopes[cts.MethodUpdateKeyMetadata],
+		req.GetKeyId(),
+		func(ctx context.Context, keyID domain.KeyID) (*emptypb.Empty, error) {
+			return &emptypb.Empty{}, s.keyService.UpdateKeyMetadata(ctx, req)
+		},
+	)
 }
 
 func (s *PolykeyService) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error) {
-	if _, err := s.authorizeWithKeyID(ctx, "GetKeyMetadata", "keys:read", req.GetKeyId()); err != nil {
-		return nil, err
-	}
-
-	resp, err := s.keyService.GetKeyMetadata(ctx, req)
-	if err != nil {
-		return nil, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, "GetKeyMetadata"))
-	}
-	return resp, nil
+	return execWithAuth(s, ctx,
+		cts.MethodGetKeyMetadata,
+		cts.MethodScopes[cts.MethodGetKeyMetadata],
+		req.GetKeyId(),
+		func(ctx context.Context, keyID domain.KeyID) (*pk.GetKeyMetadataResponse, error) {
+			return s.keyService.GetKeyMetadata(ctx, req)
+		},
+	)
 }
 
 func (s *PolykeyService) HealthCheck(ctx context.Context, req *emptypb.Empty) (*pk.HealthCheckResponse, error) {
@@ -168,25 +207,4 @@ func (s *PolykeyService) HealthCheck(ctx context.Context, req *emptypb.Empty) (*
 			UptimeSince: timestamppb.New(time.Now().Add(-24 * time.Hour)), // Mock uptime
 		},
 	}, nil
-}
-
-// --- Helper Functions ---
-
-func (s *PolykeyService) authorize(ctx context.Context, methodName, authOperation string) error {
-	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, authOperation, domain.KeyID{}); !ok {
-		return s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason), methodName))
-	}
-	return nil
-}
-
-func (s *PolykeyService) authorizeWithKeyID(ctx context.Context, methodName, authOperation, keyIdStr string) (domain.KeyID, error) {
-	keyID, err := domain.KeyIDFromString(keyIdStr)
-	if err != nil {
-		return domain.KeyID{}, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(err, methodName))
-	}
-
-	if ok, reason := s.authorizer.Authorize(ctx, nil, nil, authOperation, keyID); !ok {
-		return domain.KeyID{}, s.errorClassifier.LogAndSanitize(ctx, s.errorClassifier.Classify(fmt.Errorf("%w: %s", app_errors.ErrAuthorization, reason), methodName))
-	}
-	return keyID, nil
 }
