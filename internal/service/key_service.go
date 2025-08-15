@@ -9,6 +9,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/domain"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/config"
+	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	"github.com/spounge-ai/polykey/internal/kms"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
@@ -73,9 +74,20 @@ func getCryptoDetails(keyType pk.KeyType) (int, string, error) {
 }
 
 func (s *keyServiceImpl) getKeyByRequest(ctx context.Context, keyID domain.KeyID, version int32) (*domain.Key, error) {
+	var key *domain.Key
+	var err error
+
 	if version > 0 {
-		return s.keyRepo.GetKeyByVersion(ctx, keyID, version)
+		key, err = s.keyRepo.GetKeyByVersion(ctx, keyID, version)
+	} else {
+		key, err = s.keyRepo.GetKey(ctx, keyID)
 	}
-	return s.keyRepo.GetKey(ctx, keyID)
-	// Don't wrap the error here - let the caller handle it properly
+
+	if err != nil {
+		if errors.Is(err, persistence.ErrKeyNotFound) {
+			return nil, app_errors.ErrKeyNotFound
+		}
+		return nil, err
+	}
+	return key, nil
 }
