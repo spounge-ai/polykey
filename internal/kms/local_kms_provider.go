@@ -27,60 +27,83 @@ func NewLocalKMSProvider(masterKey string) (*LocalKMSProvider, error) {
 	return &LocalKMSProvider{masterKey: key}, nil
 }
 
-// EncryptDEK encrypts the given plaintext DEK and returns the encrypted DEK.
+// EncryptDEK encrypts the given plaintext DEK using a derived key.
 func (p *LocalKMSProvider) EncryptDEK(ctx context.Context, plaintextDEK []byte, key *domain.Key) ([]byte, error) {
 	return execution.WithTimeout(ctx, localKmsTimeout, func(ctx context.Context) ([]byte, error) {
-		// Encrypt the DEK with our master key
-		block, err := aes.NewCipher(p.masterKey)
+		info := []byte(key.ID.String())
+		salt := []byte("polykey-salt:" + key.ID.String())
+		derivedKey, err := DeriveKey(p.masterKey, salt, info, 32)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create cipher: %w", err)
+			return nil, fmt.Errorf("failed to derive key: %w", err)
 		}
 
-		gcm, err := cipher.NewGCM(block)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create GCM: %w", err)
-		}
-
-		nonce := make([]byte, gcm.NonceSize())
-		if _, err := rand.Read(nonce); err != nil {
-			return nil, fmt.Errorf("failed to generate nonce: %w", err)
-		}
-
-		encryptedDEK := gcm.Seal(nonce, nonce, plaintextDEK, nil)
-		return encryptedDEK, nil
+		return p.encryptWithKey(derivedKey, plaintextDEK)
 	})
 }
 
-// DecryptDEK takes the encrypted DEK from the key and returns the plaintext DEK
+// DecryptDEK decrypts the DEK using a derived key, with a fallback to the master key for backward compatibility.
 func (p *LocalKMSProvider) DecryptDEK(ctx context.Context, key *domain.Key) ([]byte, error) {
 	return execution.WithTimeout(ctx, localKmsTimeout, func(ctx context.Context) ([]byte, error) {
-		if len(key.EncryptedDEK) == 0 {
-			return nil, fmt.Errorf("no encrypted DEK found in key")
-		}
-
-		block, err := aes.NewCipher(p.masterKey)
+		// First, try decrypting with the derived key (the new method).
+		info := []byte(key.ID.String())
+		salt := []byte("polykey-salt:" + key.ID.String())
+		derivedKey, err := DeriveKey(p.masterKey, salt, info, 32)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create cipher: %w", err)
+			return nil, fmt.Errorf("failed to derive key for decryption: %w", err)
 		}
 
-		gcm, err := cipher.NewGCM(block)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create GCM: %w", err)
+		plaintextDEK, err := p.decryptWithKey(derivedKey, key.EncryptedDEK)
+		if err == nil {
+			return plaintextDEK, nil // Success with the new method
 		}
 
-		nonceSize := gcm.NonceSize()
-		if len(key.EncryptedDEK) < nonceSize {
-			return nil, fmt.Errorf("encrypted DEK too short")
-		}
-
-		nonce, ciphertext := key.EncryptedDEK[:nonceSize], key.EncryptedDEK[nonceSize:]
-		plaintextDEK, err := gcm.Open(nil, nonce, ciphertext, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decrypt DEK: %w", err)
-		}
-
-		return plaintextDEK, nil
+		// If decryption with the derived key fails, fall back to the old method (master key).
+		// This provides backward compatibility for keys encrypted before the KDF was introduced.
+		return p.decryptWithKey(p.masterKey, key.EncryptedDEK)
 	})
+}
+
+func (p *LocalKMSProvider) encryptWithKey(key, plaintext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+func (p *LocalKMSProvider) decryptWithKey(key, ciphertext []byte) ([]byte, error) {
+	if len(ciphertext) == 0 {
+		return nil, fmt.Errorf("no encrypted DEK found in key")
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, fmt.Errorf("encrypted DEK too short")
+	}
+
+	nonce, actualCiphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	return gcm.Open(nil, nonce, actualCiphertext, nil)
 }
 
 func (p *LocalKMSProvider) HealthCheck(ctx context.Context) error {

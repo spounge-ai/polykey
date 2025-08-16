@@ -73,23 +73,13 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, err
 	}
 
-	// Create a temporary key object to pass to the KMS provider if needed.
-	tempKeyForKMS := &domain.Key{}
-
-	// Immediate encryption pattern: Encrypt the DEK right after generation.
-	encryptedDEK, err := kmsProvider.EncryptDEK(ctx, dek, tempKeyForKMS)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
-	}
-
-	// Now, populate the final domain object with the encrypted DEK for storage.
+	// Create the final key object first, so we have the ID for the KDF.
 	finalKey := &domain.Key{
-		ID:           keyID,
-		Version:      1,
-		EncryptedDEK: encryptedDEK,
-		Status:       domain.KeyStatusActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:        keyID,
+		Version:   1,
+		Status:    domain.KeyStatusActive,
+		CreatedAt: now,
+		UpdatedAt: now,
 		Metadata: &pk.KeyMetadata{
 			KeyId:              keyID.String(),
 			KeyType:            req.GetKeyType(),
@@ -107,6 +97,15 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 			AccessCount:        0,
 		},
 	}
+
+	// Immediate encryption pattern: Encrypt the DEK right after generation.
+	encryptedDEK, err := kmsProvider.EncryptDEK(ctx, dek, finalKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
+	}
+
+	// Now, populate the final domain object with the encrypted DEK for storage.
+	finalKey.EncryptedDEK = encryptedDEK
 
 	// The key's tier is now based on the validated data classification.
 	isPremium := req.GetDataClassification() == string(domain.TierPro) || req.GetDataClassification() == string(domain.TierEnterprise)

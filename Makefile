@@ -132,6 +132,14 @@ test-cockroachdb: ## Run CockroachDB persistence tests
 	@echo "$(CYAN)Running CockroachDB persistence tests...$(RESET)"
 	@POLYKEY_CONFIG_PATH=../../configs/config.minimal.yaml go test -v ./tests/integration/persistence_cockroachdb_test.go
 
+vuln-check: ## Run vulnerability check
+	@echo "$(CYAN)Running vulnerability check...$(RESET)"
+	@./scripts/vulncheck.sh
+
+sbom: ## Generate SBOM
+	@echo "$(CYAN)Generating SBOM...$(RESET)"
+	@./scripts/generate_sbom.sh
+
 # ============================================================================ 
 # Cleanup Targets
 # ============================================================================ 
