@@ -24,3 +24,8 @@ func (m *MockKMSAdapter) EncryptDEK(ctx context.Context, plaintextDEK []byte, ke
 func (m *MockKMSAdapter) DecryptDEK(ctx context.Context, key *domain.Key) ([]byte, error) {
 	return []byte("mock_plaintext_dek"), nil
 }
+
+// HealthCheck is a mock implementation of the HealthCheck method.
+func (m *MockKMSAdapter) HealthCheck(ctx context.Context) error {
+	return nil
+}

@@ -82,3 +82,7 @@ func (p *LocalKMSProvider) DecryptDEK(ctx context.Context, key *domain.Key) ([]b
 		return plaintextDEK, nil
 	})
 }
+
+func (p *LocalKMSProvider) HealthCheck(ctx context.Context) error {
+	return nil
+}

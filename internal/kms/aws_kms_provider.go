@@ -64,3 +64,12 @@ func (p *AWSKMSProvider) DecryptDEK(ctx context.Context, key *domain.Key) ([]byt
 		})
 	})
 }
+
+func (p *AWSKMSProvider) HealthCheck(ctx context.Context) error {
+	_, err := execution.WithRetry(ctx, maxRetries, initialBackoff, maxBackoff, func(ctx context.Context) (any, error) {
+		return execution.WithTimeout(ctx, awsKmsTimeout, func(ctx context.Context) (*kms.ListKeysOutput, error) {
+			return p.client.ListKeys(ctx, &kms.ListKeysInput{Limit: aws.Int32(1)})
+		})
+	})
+	return err
+}
