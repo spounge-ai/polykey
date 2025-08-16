@@ -83,7 +83,7 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey, tokenStore)
 	require.NoError(t, err)
 
-	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default(), app_errors.NewErrorClassifier(slog.Default()))
+	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default(), app_errors.NewErrorClassifier(slog.Default()), nil)
 	authService := service.NewAuthService(clientStore, tokenManager, 1*time.Hour)
 
 	// --- Server Setup ---

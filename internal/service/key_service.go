@@ -41,9 +41,10 @@ type keyServiceImpl struct {
 	cfg             *config.Config
 	errorClassifier *app_errors.ErrorClassifier
 	dekPools        map[pk.KeyType]*memory.BufferPool
+	auditLogger     domain.AuditLogger
 }
 
-func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProviders map[string]kms.KMSProvider, logger *slog.Logger, errorClassifier *app_errors.ErrorClassifier) KeyService {
+func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProviders map[string]kms.KMSProvider, logger *slog.Logger, errorClassifier *app_errors.ErrorClassifier, auditLogger domain.AuditLogger) KeyService {
 	dekPools := make(map[pk.KeyType]*memory.BufferPool)
 	if size, _, err := crypto.GetCryptoDetails(pk.KeyType_KEY_TYPE_AES_256); err == nil {
 		dekPools[pk.KeyType_KEY_TYPE_AES_256] = memory.NewBufferPool(size)
@@ -56,6 +57,7 @@ func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProvider
 		logger:          logger,
 		errorClassifier: errorClassifier,
 		dekPools:        dekPools,
+		auditLogger:     auditLogger,
 	}
 }
 
