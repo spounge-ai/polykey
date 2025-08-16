@@ -30,6 +30,7 @@ type Config struct {
 	AWS              *AWSConfig           `mapstructure:"aws"`
 	Authorization        AuthorizationConfig  `mapstructure:"authorization"`
 	ClientCredentialsPath string               `mapstructure:"client_credentials_path"`
+	DefaultKMSProvider    string               `mapstructure:"default_kms_provider"`
 	StorageBackend       string               `mapstructure:"storage_backend"`
 	ServiceVersion   string
 	BuildCommit      string
@@ -53,6 +54,7 @@ func Load(path string) (*Config, error) {
 	vip.SetDefault("server.port", 50053)
 	vip.SetDefault("aws.cache_ttl", "5m")
 	vip.SetDefault("storage_backend", "neondb")
+	vip.SetDefault("default_kms_provider", "local")
 
 	if err := vip.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

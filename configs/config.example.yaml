@@ -30,6 +30,9 @@ aws:
 # Path to the file containing client credentials (ID, hashed secret, permissions).
 client_credentials_path: "configs/dev_client/config.client.dev.yaml"
 
+# Default KMS provider to use for operations that don't have a specific tier-based provider.
+default_kms_provider: "local" # Options: local, aws
+
 authorization:
   roles:
     admin:

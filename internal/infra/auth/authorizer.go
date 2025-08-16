@@ -57,6 +57,11 @@ func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.Requester
 	}
 	span.SetAttributes(attribute.String("auth.user_id", user.ID))
 
+	// Verify that the identity in the token matches the identity in the request context.
+	if reqContext != nil && reqContext.GetClientIdentity() != "" && reqContext.GetClientIdentity() != user.ID {
+		return false, fmt.Sprintf("mismatched_requester_identity_token=%s_requester=%s", user.ID, reqContext.GetClientIdentity())
+	}
+
 	// Zero-Trust: Verify transport-level identity matches application-level identity.
 	if a.cfg.ZeroTrust.EnforceMTLSIdentityMatch {
 		if ok, reason := a.checkIdentityMatch(ctx, user); !ok {

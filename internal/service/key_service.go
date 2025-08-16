@@ -62,7 +62,7 @@ func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProvider
 }
 
 func (s *keyServiceImpl) getKMSProvider(dataClassification string) (kms.KMSProvider, error) {
-	providerName := "local"
+	providerName := s.cfg.DefaultKMSProvider
 	if dataClassification == string(domain.TierPro) || dataClassification == string(domain.TierEnterprise) {
 		providerName = "aws"
 	}

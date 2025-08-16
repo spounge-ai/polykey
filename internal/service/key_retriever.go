@@ -32,14 +32,6 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 
 	span.SetAttributes(attribute.String("key.id", keyID.String()))
 
-	authenticatedUser, ok := domain.UserFromContext(ctx)
-	if !ok {
-		return nil, app_errors.ErrAuthentication
-	}
-	if authenticatedUser.ID != req.GetRequesterContext().GetClientIdentity() {
-		return nil, fmt.Errorf("%w: requester identity does not match authenticated user", app_errors.ErrAuthorization)
-	}
-
 	key, err := s.getKeyByRequest(ctx, keyID, req.GetVersion())
 	if err != nil {
 		return nil, err
@@ -100,14 +92,6 @@ func (s *keyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetad
 	}
 
 	span.SetAttributes(attribute.String("key.id", keyID.String()))
-
-	authenticatedUser, ok := domain.UserFromContext(ctx)
-	if !ok {
-		return nil, app_errors.ErrAuthentication
-	}
-	if authenticatedUser.ID != req.GetRequesterContext().GetClientIdentity() {
-		return nil, fmt.Errorf("%w: requester identity does not match authenticated user", app_errors.ErrAuthorization)
-	}
 
 	key, err := s.getKeyByRequest(ctx, keyID, req.GetVersion())
 	if err != nil {
