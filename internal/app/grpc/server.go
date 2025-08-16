@@ -56,7 +56,7 @@ func New(
 	}
 
 	tokenStore := auth.NewInMemoryTokenStore()
-	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey, tokenStore)
+	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey, tokenStore, auditLogger)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create token manager for interceptor: %w", err)
 	}

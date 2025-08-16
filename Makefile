@@ -29,7 +29,13 @@ RESET := \033[0m
 # ============================================================================ 
 # Phony Targets
 # ============================================================================ 
-.PHONY: all build build-test clean test test-race test-integration coverage lint server server-test server-prod server-minimal client client-debug migrate kill help
+.PHONY: all build build-test clean test test-race test-integration coverage lint server server-test server-prod server-minimal client client-debug migrate kill help init
+
+init: ## Initialize the project and make scripts executable
+	@echo "$(CYAN)Initializing project...$(RESET)"
+	@find scripts -type f -name "*.sh" -exec chmod +x {} \;
+	@find scripts -type f -name "*.go" -exec chmod +x {} \;
+	@echo "$(GREEN)Project initialized!$(RESET)"
 
 all: build
 

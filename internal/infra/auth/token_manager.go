@@ -16,10 +16,11 @@ type TokenManager struct {
 	privateKey *rsa.PrivateKey
 	publicKey  *rsa.PublicKey
 	tokenStore TokenStore
+	auditLogger domain.AuditLogger
 }
 
 // NewTokenManager creates a new TokenManager from a PEM-encoded RSA private key.
-func NewTokenManager(privateKeyPEM string, tokenStore TokenStore) (*TokenManager, error) {
+func NewTokenManager(privateKeyPEM string, tokenStore TokenStore, auditLogger domain.AuditLogger) (*TokenManager, error) {
 	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(privateKeyPEM))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse RSA private key: %w", err)
@@ -29,6 +30,7 @@ func NewTokenManager(privateKeyPEM string, tokenStore TokenStore) (*TokenManager
 		privateKey: privateKey,
 		publicKey:  &privateKey.PublicKey,
 		tokenStore: tokenStore,
+		auditLogger: auditLogger,
 	}, nil
 }
 
@@ -104,5 +106,6 @@ func (tm *TokenManager) Revoke(ctx context.Context, tokenString string) error {
 	}
 
 	tm.tokenStore.Revoke(ctx, claims.ID, ttl)
+	tm.auditLogger.AuditLog(ctx, claims.UserID, "RevokeToken", claims.ID, "", true, nil)
 	return nil
 }

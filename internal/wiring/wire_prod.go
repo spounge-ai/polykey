@@ -1,5 +1,3 @@
-//go:build !local_mocks
-
 package wiring
 
 import (
@@ -11,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/domain"
+	infra_audit "github.com/spounge-ai/polykey/internal/infra/audit"
 	infra_auth "github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
@@ -28,6 +27,7 @@ type Container struct {
 	clientStore  domain.ClientStore
 	tokenManager *infra_auth.TokenManager
 	tokenStore   infra_auth.TokenStore
+	auditLogger  domain.AuditLogger
 }
 
 func NewContainer(cfg *infra_config.Config, logger *slog.Logger) *Container {
@@ -65,6 +65,7 @@ func (c *Container) initializeAll(ctx context.Context) error {
 		func(context.Context) error { return c.initTokenStore() },
 		func(context.Context) error { return c.initKeyRepository() },
 		func(context.Context) error { return c.initAuditRepository() },
+		func(context.Context) error { return c.initAuditLogger() },
 		func(context.Context) error { return c.initClientStore() },
 		func(context.Context) error { return c.initTokenManager() },
 	}
@@ -73,6 +74,18 @@ func (c *Container) initializeAll(ctx context.Context) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func (c *Container) initAuditLogger() error {
+	if c.auditLogger != nil {
+		return nil
+	}
+	if c.auditRepo == nil {
+		return fmt.Errorf("audit repository not initialized")
+	}
+	c.auditLogger = infra_audit.NewAuditLogger(c.logger, c.auditRepo)
+	c.logger.Debug("initialized audit logger")
 	return nil
 }
 
@@ -184,7 +197,7 @@ func (c *Container) initTokenManager() error {
 		return fmt.Errorf("token store not initialized")
 	}
 	var err error
-	c.tokenManager, err = infra_auth.NewTokenManager(c.config.BootstrapSecrets.JWTRSAPrivateKey, c.tokenStore)
+	c.tokenManager, err = infra_auth.NewTokenManager(c.config.BootstrapSecrets.JWTRSAPrivateKey, c.tokenStore, c.auditLogger)
 	if err == nil {
 		c.logger.Debug("initialized token manager")
 	}

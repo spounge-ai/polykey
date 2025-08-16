@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/spounge-ai/polykey/internal/app/grpc/interceptors"
 	"github.com/spounge-ai/polykey/internal/domain"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
@@ -46,6 +47,7 @@ func (l *Logger) AuditLog(ctx context.Context, clientIdentity, operation, keyID,
 	// Log to structured logger
 	logAttrs := []slog.Attr{
 		slog.String("audit_id", event.ID),
+		slog.String("correlation_id", interceptors.CorrelationIDFromContext(ctx)),
 		slog.String("client_identity", clientIdentity),
 		slog.String("operation", operation),
 		slog.String("key_id", keyID),
