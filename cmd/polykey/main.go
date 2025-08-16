@@ -36,7 +36,7 @@ func main() {
 		log.Fatalf("failed to get dependencies: %v", err)
 	}
 
-	logger := slog.Default()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	errorClassifier := app_errors.NewErrorClassifier(logger)
 
 	keyService := service.NewKeyService(cfg, deps.KeyRepo, deps.KMSProviders, logger, errorClassifier)

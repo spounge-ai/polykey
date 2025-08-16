@@ -46,7 +46,7 @@ func AuthenticationInterceptor(tokenManager *auth.TokenManager) grpc.UnaryServer
 			return nil, status.Error(codes.Unauthenticated, "bearer token is empty")
 		}
 
-		claims, err := tokenManager.ValidateToken(token)
+		claims, err := tokenManager.ValidateToken(ctx, token)
 		if err != nil {
 			return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
 		}

@@ -50,6 +50,7 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 
 	hash := sha256.Sum256(decryptedDEK)
 	checksum := hex.EncodeToString(hash[:])
+ 
 
 	resp := &pk.GetKeyResponse{
 		KeyMaterial: &pk.KeyMaterial{

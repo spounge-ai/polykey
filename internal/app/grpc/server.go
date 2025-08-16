@@ -53,7 +53,8 @@ func New(
 		opts = append(opts, grpc.Creds(creds))
 	}
 
-	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
+	tokenStore := auth.NewInMemoryTokenStore()
+	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey, tokenStore)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create token manager for interceptor: %w", err)
 	}

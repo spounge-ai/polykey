@@ -27,6 +27,7 @@ type Container struct {
 	auditRepo    domain.AuditRepository
 	clientStore  domain.ClientStore
 	tokenManager *infra_auth.TokenManager
+	tokenStore   infra_auth.TokenStore
 }
 
 func NewContainer(cfg *infra_config.Config, logger *slog.Logger) *Container {
@@ -61,6 +62,7 @@ func (c *Container) initializeAll(ctx context.Context) error {
 	initializers := []func(context.Context) error{
 		c.initPgxPool,
 		c.initKMSProviders,
+		func(context.Context) error { return c.initTokenStore() },
 		func(context.Context) error { return c.initKeyRepository() },
 		func(context.Context) error { return c.initAuditRepository() },
 		func(context.Context) error { return c.initClientStore() },
@@ -165,12 +167,24 @@ func (c *Container) initClientStore() error {
 	return err
 }
 
+func (c *Container) initTokenStore() error {
+	if c.tokenStore != nil {
+		return nil
+	}
+	c.tokenStore = infra_auth.NewInMemoryTokenStore()
+	c.logger.Debug("initialized in-memory token store")
+	return nil
+}
+
 func (c *Container) initTokenManager() error {
 	if c.tokenManager != nil {
 		return nil
 	}
+	if c.tokenStore == nil {
+		return fmt.Errorf("token store not initialized")
+	}
 	var err error
-	c.tokenManager, err = infra_auth.NewTokenManager(c.config.BootstrapSecrets.JWTRSAPrivateKey)
+	c.tokenManager, err = infra_auth.NewTokenManager(c.config.BootstrapSecrets.JWTRSAPrivateKey, c.tokenStore)
 	if err == nil {
 		c.logger.Debug("initialized token manager")
 	}

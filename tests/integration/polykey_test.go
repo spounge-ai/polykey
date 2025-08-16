@@ -79,7 +79,8 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	clientStore, err := auth.NewFileClientStore("../../configs/config.client.dev.yaml")
 	require.NoError(t, err)
 
-	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey)
+	tokenStore := auth.NewInMemoryTokenStore()
+	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey, tokenStore)
 	require.NoError(t, err)
 
 	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default(), app_errors.NewErrorClassifier(slog.Default()))
