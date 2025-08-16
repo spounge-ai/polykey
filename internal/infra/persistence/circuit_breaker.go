@@ -52,20 +52,21 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() error) error {
 
 func (cb *CircuitBreaker) canExecute() bool {
 	currentState := State(cb.state.Load())
-	now := time.Now().UnixNano()
 
 	switch currentState {
 	case StateClosed:
 		return true
 	case StateOpen:
+		now := time.Now().UnixNano()
 		lastFailure := cb.lastFailureTime.Load()
 		if now > lastFailure+cb.resetTimeout.Nanoseconds() {
-			// LOG: info, "circuit breaker state changing to half-open"
-			// METRIC: Increment half-open event count
+			// Attempt to move to half-open state
 			if cb.state.CompareAndSwap(int32(StateOpen), int32(StateHalfOpen)) {
+				// TODO: Add logging and metrics for state change to half-open
 				cb.successCount.Store(0)
 			}
-			return true // Allow the request
+			// Allow the request that triggers the state change
+			return true
 		}
 		return false
 	case StateHalfOpen:
@@ -77,31 +78,34 @@ func (cb *CircuitBreaker) canExecute() bool {
 
 func (cb *CircuitBreaker) recordResult(err error) {
 	now := time.Now().UnixNano()
-	currentState := State(cb.state.Load())
 
 	if err != nil {
 		// METRIC: Increment failure count
-		cb.failures.Add(1)
+		newFailures := cb.failures.Add(1)
 		cb.lastFailureTime.Store(now)
 
-		if currentState == StateHalfOpen || cb.failures.Load() >= cb.maxFailures {
+		currentState := State(cb.state.Load())
+		if currentState == StateHalfOpen || (currentState == StateClosed && newFailures >= cb.maxFailures) {
+			// Trip the circuit breaker
 			if cb.state.CompareAndSwap(int32(currentState), int32(StateOpen)) {
-				// LOG: warn, "circuit breaker state changing to open"
-				// METRIC: Increment open event count
+				// TODO: Add logging and metrics for state change to open
+				_ = "noop"
 			}
 		}
 	} else {
 		// METRIC: Increment success count
+		currentState := State(cb.state.Load())
 		if currentState == StateHalfOpen {
 			newSuccesses := cb.successCount.Add(1)
 			if newSuccesses >= cb.halfOpenRequests {
+				// Close the circuit breaker
 				if cb.state.CompareAndSwap(int32(StateHalfOpen), int32(StateClosed)) {
-					// LOG: info, "circuit breaker state changing to closed"
-					// METRIC: Increment close event count
+					// TODO: Add logging and metrics for state change to closed
 					cb.failures.Store(0)
 				}
 			}
 		} else {
+			// Reset failures on success in closed state
 			cb.failures.Store(0)
 		}
 	}
