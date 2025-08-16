@@ -41,7 +41,7 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 		return nil, ErrMissingMetadata
 	}
 
-	kmsProvider, err := s.getKMSProvider(key.Metadata.GetDataClassification())
+	kmsProvider, err := s.getKMSProvider(key.Metadata.GetStorageType())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get KMS provider: %w", err)
 	}

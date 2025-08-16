@@ -114,24 +114,27 @@ func (c *Container) initKMSProviders(ctx context.Context) error {
 	}
 	c.kmsProviders = make(map[string]kms.KMSProvider)
 
-	switch {
-	case c.config.BootstrapSecrets.PolykeyMasterKey != "":
+	// Initialize local provider if configured
+	if c.config.BootstrapSecrets.PolykeyMasterKey != "" {
 		localProvider, err := kms.NewLocalKMSProvider(c.config.BootstrapSecrets.PolykeyMasterKey)
 		if err != nil {
 			return fmt.Errorf("failed to create local KMS provider: %w", err)
 		}
 		c.kmsProviders["local"] = localProvider
 		c.logger.Debug("initialized local KMS provider")
+	}
 
-	case c.config.AWS.Enabled:
+	// Initialize AWS provider if configured
+	if c.config.AWS.Enabled {
 		awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(c.config.AWS.Region))
 		if err != nil {
 			return fmt.Errorf("failed to load AWS config: %w", err)
 		}
 		c.kmsProviders["aws"] = kms.NewAWSKMSProvider(awsCfg, c.config.AWS.KMSKeyARN)
 		c.logger.Debug("initialized AWS KMS provider", "region", c.config.AWS.Region)
+	}
 
-	default:
+	if len(c.kmsProviders) == 0 {
 		return fmt.Errorf("no KMS provider configured")
 	}
 

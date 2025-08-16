@@ -3,136 +3,6 @@ syntax = "proto3";
 package polykey.v2;
 
 import "google/protobuf/timestamp.proto";
-option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
-
-enum HealthStatus {
-  HEALTH_STATUS_UNSPECIFIED = 0;
-  HEALTH_STATUS_HEALTHY = 1;
-  HEALTH_STATUS_DEGRADED = 2;
-  HEALTH_STATUS_UNHEALTHY = 3;
-}
-
-message ServiceMetrics {
-  double average_response_time_ms = 1;
-  int64 requests_per_second = 2;
-  double error_rate_percent = 3;
-  double cpu_usage_percent = 4;
-  double memory_usage_percent = 5;
-  int64 active_keys_count = 6;
-  int64 total_requests_handled = 7;
-  google.protobuf.Timestamp uptime_since = 8;
-}
-
-message HealthCheckResponse {
-  HealthStatus status = 1;
-  google.protobuf.Timestamp timestamp = 2;
-  ServiceMetrics metrics = 3;
-  string service_version = 4;
-  string build_commit = 5;
-}
-syntax = "proto3";
-
-package polykey.v2;
-
-import "google/protobuf/timestamp.proto";
-import "polykey/v2/key_types.proto";
-import "common/v2/common.proto";
-option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
-
-
-
-message RequesterContext {
-  string client_identity = 1;
-  string certificate_fingerprint = 2;
-  string application_id = 3;
-  string correlation_id = 4;
-  common.v2.ClientTier client_tier = 5;
-}
-
-message AccessAttributes {
-  string environment = 1;
-  string network_zone = 2;
-  string geographic_region = 3;
-  google.protobuf.Timestamp request_time = 4;
-  string time_window = 5; // e.g., "business-hours", "after-hours".
-  repeated string roles = 6;
-  repeated string permissions = 7;
-  map<string, string> custom_attributes = 8;
-}
-
-message KeyMetadata {
-  string key_id = 1;
-  KeyType key_type = 2;
-  KeyStatus status = 3;
-  int32 version = 4;
-  google.protobuf.Timestamp created_at = 5;
-  google.protobuf.Timestamp updated_at = 6;
-  google.protobuf.Timestamp expires_at = 7;
-  google.protobuf.Timestamp last_accessed_at = 8;
-  string creator_identity = 9;
-  repeated string authorized_contexts = 10;
-  map<string, string> access_policies = 11;
-  string description = 12;
-  map<string, string> tags = 13;
-  string data_classification = 14;
-  string metadata_checksum = 15;
-  int64 access_count = 16;
-}
-
-message KeyMaterial {
-  bytes encrypted_key_data = 1;
-  string encryption_algorithm = 2;    
-  string key_derivation_params = 3;
-  string key_checksum = 4;
-}
-
-message AccessHistoryEntry {
-  google.protobuf.Timestamp timestamp = 1;
-  string client_identity = 2;
-  string operation = 3;
-  bool success = 4;
-  string correlation_id = 5;
-}
-
-message PolicyDetail {
-  string policy_id = 1;
-  string policy_type = 2; // e.g., "RBAC", "ABAC", "TimeBased".
-  map<string, string> policy_params = 3;
-  google.protobuf.Timestamp effective_from = 4;
-  google.protobuf.Timestamp effective_until = 5;
-}
-syntax = "proto3";
-
-package polykey.v2;
-option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
-
-enum KeyType {
-  KEY_TYPE_UNSPECIFIED = 0;
-  KEY_TYPE_API_KEY = 1;
-  KEY_TYPE_AES_256 = 2;
-  KEY_TYPE_RSA_4096 = 3;
-  KEY_TYPE_ECDSA_P384 = 4;
-}
-
-enum KeyStatus {
-  KEY_STATUS_UNSPECIFIED = 0;
-  KEY_STATUS_ACTIVE = 1;
-  KEY_STATUS_ROTATING = 2;
-  KEY_STATUS_DEPRECATED = 3;
-  KEY_STATUS_REVOKED = 4;
-}
-
-enum RotationStrategy {
-  ROTATION_STRATEGY_UNSPECIFIED = 0;
-  ROTATION_STRATEGY_HOT = 1;
-  ROTATION_STRATEGY_STAGED = 2;
-  ROTATION_STRATEGY_SCHEDULED = 3;
-}
-syntax = "proto3";
-
-package polykey.v2;
-
-import "google/protobuf/timestamp.proto";
 import "common/v2/common.proto";
 option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
 
@@ -185,6 +55,142 @@ message ClientInfo {
   google.protobuf.Timestamp last_used_at = 6;
   common.v2.ClientTier client_tier = 7;
 }syntax = "proto3";
+
+package polykey.v2;
+
+import "google/protobuf/timestamp.proto";
+import "polykey/v2/key_types.proto";
+import "common/v2/common.proto";
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
+
+
+message RequesterContext {
+  string client_identity = 1;
+  string certificate_fingerprint = 2;
+  string application_id = 3;
+  string correlation_id = 4;
+  common.v2.ClientTier client_tier = 5;
+}
+
+message AccessAttributes {
+  string environment = 1;
+  string network_zone = 2;
+  string geographic_region = 3;
+  google.protobuf.Timestamp request_time = 4;
+  string time_window = 5; // e.g., "business-hours", "after-hours".
+  repeated string roles = 6;
+  repeated string permissions = 7;
+  map<string, string> custom_attributes = 8;
+}
+
+message KeyMetadata {
+  string key_id = 1;
+  KeyType key_type = 2;
+  KeyStatus status = 3;
+  int32 version = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  google.protobuf.Timestamp expires_at = 7;
+  google.protobuf.Timestamp last_accessed_at = 8;
+  string creator_identity = 9;
+  repeated string authorized_contexts = 10;
+  map<string, string> access_policies = 11;
+  string description = 12;
+  map<string, string> tags = 13;
+  string data_classification = 14;
+  string metadata_checksum = 15;
+  int64 access_count = 16;
+  StorageProfile storage_type = 17;
+}
+
+message KeyMaterial {
+  bytes encrypted_key_data = 1;
+  string encryption_algorithm = 2;    
+  string key_derivation_params = 3;
+  string key_checksum = 4;
+}
+
+message AccessHistoryEntry {
+  google.protobuf.Timestamp timestamp = 1;
+  string client_identity = 2;
+  string operation = 3;
+  bool success = 4;
+  string correlation_id = 5;
+}
+
+message PolicyDetail {
+  string policy_id = 1;
+  string policy_type = 2; // e.g., "RBAC", "ABAC", "TimeBased".
+  map<string, string> policy_params = 3;
+  google.protobuf.Timestamp effective_from = 4;
+  google.protobuf.Timestamp effective_until = 5;
+}
+syntax = "proto3";
+
+package polykey.v2;
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
+enum KeyType {
+  KEY_TYPE_UNSPECIFIED = 0;
+  KEY_TYPE_API_KEY = 1;
+  KEY_TYPE_AES_256 = 2;
+  KEY_TYPE_RSA_4096 = 3;
+  KEY_TYPE_ECDSA_P384 = 4;
+}
+
+enum KeyStatus {
+  KEY_STATUS_UNSPECIFIED = 0;
+  KEY_STATUS_ACTIVE = 1;
+  KEY_STATUS_ROTATING = 2;
+  KEY_STATUS_DEPRECATED = 3;
+  KEY_STATUS_REVOKED = 4;
+}
+
+enum RotationStrategy {
+  ROTATION_STRATEGY_UNSPECIFIED = 0;
+  ROTATION_STRATEGY_HOT = 1;
+  ROTATION_STRATEGY_STAGED = 2;
+  ROTATION_STRATEGY_SCHEDULED = 3;
+}
+
+enum StorageProfile {
+  STORAGE_PROFILE_UNSPECIFIED = 0;
+  STORAGE_PROFILE_STANDARD = 1; // polykey master key
+  STORAGE_PROFILE_HARDENED = 2; // Enhanced security profile (e.g., uses HSM).
+}syntax = "proto3";
+
+package polykey.v2;
+
+import "google/protobuf/timestamp.proto";
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  HEALTH_STATUS_HEALTHY = 1;
+  HEALTH_STATUS_DEGRADED = 2;
+  HEALTH_STATUS_UNHEALTHY = 3;
+}
+
+message ServiceMetrics {
+  double average_response_time_ms = 1;
+  int64 requests_per_second = 2;
+  double error_rate_percent = 3;
+  double cpu_usage_percent = 4;
+  double memory_usage_percent = 5;
+  int64 active_keys_count = 6;
+  int64 total_requests_handled = 7;
+  google.protobuf.Timestamp uptime_since = 8;
+}
+
+message HealthCheckResponse {
+  HealthStatus status = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  ServiceMetrics metrics = 3;
+  string service_version = 4;
+  string build_commit = 5;
+}
+syntax = "proto3";
 
 package polykey.v2;
 

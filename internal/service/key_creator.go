@@ -25,8 +25,9 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, app_errors.ErrAuthentication
 	}
 
-	if err := validateTier(authenticatedUser.Tier, req.GetDataClassification()); err != nil {
-		return nil, fmt.Errorf("%w: %w", app_errors.ErrAuthorization, err)
+	storageProfile := pk.StorageProfile_STORAGE_PROFILE_STANDARD
+	if authenticatedUser.Tier == domain.TierPro || authenticatedUser.Tier == domain.TierEnterprise {
+		storageProfile = pk.StorageProfile_STORAGE_PROFILE_HARDENED
 	}
 
 	description, err := domain.NewDescription(req.GetDescription())
@@ -70,7 +71,7 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 
 	now := time.Now()
 
-	kmsProvider, err := s.getKMSProvider(req.GetDataClassification())
+	kmsProvider, err := s.getKMSProvider(storageProfile)
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +97,7 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 			Description:        description.String(),
 			Tags:               req.GetTags(),
 			DataClassification: req.GetDataClassification(),
+			StorageType:        storageProfile,
 			AccessCount:        0,
 		},
 	}
@@ -109,9 +111,7 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	// Now, populate the final domain object with the encrypted DEK for storage.
 	finalKey.EncryptedDEK = encryptedDEK
 
-	// The key's tier is now based on the validated data classification.
-	isPremium := req.GetDataClassification() == string(domain.TierPro) || req.GetDataClassification() == string(domain.TierEnterprise)
-	if err := s.keyRepo.CreateKey(ctx, finalKey, isPremium); err != nil {
+	if err := s.keyRepo.CreateKey(ctx, finalKey); err != nil {
 		return nil, fmt.Errorf("failed to create key: %w", err)
 	}
 
@@ -129,28 +129,6 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	}, nil
 }
 
-func validateTier(clientTier domain.KeyTier, requestedClassification string) error {
-	switch clientTier {
-	case domain.TierEnterprise:
-		// Enterprise clients can create keys of any classification.
-		return nil
-	case domain.TierPro:
-		if requestedClassification == string(domain.TierEnterprise) {
-			return fmt.Errorf("pro tier clients cannot create enterprise classification keys")
-		}
-		return nil
-	case domain.TierFree:
-		if requestedClassification == string(domain.TierEnterprise) || requestedClassification == string(domain.TierPro) {
-			return fmt.Errorf("free tier clients can only create free classification keys")
-		}
-		return nil
-	default:
-		// Default to free tier behavior if client tier is unknown or not set.
-		if requestedClassification == string(domain.TierEnterprise) || requestedClassification == string(domain.TierPro) {
-			return fmt.Errorf("clients with no tier can only create free classification keys")
-		}
-		return nil
-	}
-}
+
 
 

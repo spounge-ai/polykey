@@ -40,7 +40,7 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
 
-	kmsProvider, err := s.getKMSProvider(currentKey.Metadata.GetDataClassification())
+	kmsProvider, err := s.getKMSProvider(currentKey.Metadata.GetStorageType())
 	if err != nil {
 		return nil, err
 	}

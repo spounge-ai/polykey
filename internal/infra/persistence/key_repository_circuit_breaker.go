@@ -43,9 +43,9 @@ func (cb *KeyRepositoryCircuitBreaker) GetKeyByVersion(ctx context.Context, id d
 	return res.(*domain.Key), nil
 }
 
-func (cb *KeyRepositoryCircuitBreaker) CreateKey(ctx context.Context, key *domain.Key, isPremium bool) error {
+func (cb *KeyRepositoryCircuitBreaker) CreateKey(ctx context.Context, key *domain.Key) error {
 	_, err := cb.breaker.Execute(ctx, func(ctx context.Context) (any, error) {
-		return nil, cb.repo.CreateKey(ctx, key, isPremium)
+		return nil, cb.repo.CreateKey(ctx, key)
 	})
 	return err
 }

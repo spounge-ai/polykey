@@ -61,9 +61,9 @@ func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProvider
 	}
 }
 
-func (s *keyServiceImpl) getKMSProvider(dataClassification string) (kms.KMSProvider, error) {
+func (s *keyServiceImpl) getKMSProvider(profile pk.StorageProfile) (kms.KMSProvider, error) {
 	providerName := s.cfg.DefaultKMSProvider
-	if dataClassification == string(domain.TierPro) || dataClassification == string(domain.TierEnterprise) {
+	if profile == pk.StorageProfile_STORAGE_PROFILE_HARDENED {
 		providerName = "aws"
 	}
 

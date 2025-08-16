@@ -133,6 +133,12 @@ func (a *realAuthorizer) checkAuthorization(ctx context.Context, user *domain.Au
 		if !slices.Contains(key.Metadata.AuthorizedContexts, user.ID) {
 			return false, "insufficient_key_permissions"
 		}
+
+		// Check if the user's current tier is sufficient for the key's storage profile.
+		storageProfile := key.Metadata.GetStorageType()
+		if storageProfile == pk.StorageProfile_STORAGE_PROFILE_HARDENED && user.Tier == domain.TierFree {
+			return false, "client tier is insufficient to access this key"
+		}
 	}
 
 	return true, "authorized"

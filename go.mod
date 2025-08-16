@@ -4,7 +4,7 @@ go 1.24.5
 
 require (
 	github.com/spf13/viper v1.20.1
-	github.com/spounge-ai/spounge-proto/gen/go v1.2.5
+	github.com/spounge-ai/spounge-proto/gen/go v1.2.7
 	google.golang.org/grpc v1.74.2
 	google.golang.org/protobuf v1.36.7
 )
