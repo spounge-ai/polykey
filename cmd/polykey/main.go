@@ -24,6 +24,11 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	tlsConfig, err := wiring.ConfigureTLS(cfg.Server.TLS)
+	if err != nil {
+		log.Fatalf("failed to configure TLS: %v", err)
+	}
+
 	container := wiring.NewContainer(cfg, slog.Default())
 	defer func() {
 		if err := container.Close(); err != nil {
@@ -44,7 +49,7 @@ func main() {
 	keyService := service.NewKeyService(cfg, deps.KeyRepo, deps.KMSProviders, logger, errorClassifier, auditLogger)
 	authService := service.NewAuthService(deps.ClientStore, deps.TokenManager, defaultTokenTTL)
 
-	srv, port, err := grpc.New(cfg, keyService, authService, authorizer, auditLogger, logger, errorClassifier)
+	srv, port, err := grpc.New(cfg, keyService, authService, authorizer, auditLogger, logger, errorClassifier, tlsConfig)
 	if err != nil {
 		slog.Error("failed to create server", "error", err)
 		os.Exit(1)

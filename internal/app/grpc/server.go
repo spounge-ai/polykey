@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -38,6 +39,7 @@ func New(
 	auditLogger domain.AuditLogger,
 	logger *slog.Logger,
 	errorClassifier *app_errors.ErrorClassifier,
+	tlsConfig *tls.Config,
 ) (*Server, int, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.Port))
 	if err != nil {
@@ -47,12 +49,8 @@ func New(
 	port := lis.Addr().(*net.TCPAddr).Port
 
 	var opts []grpc.ServerOption
-	if cfg.Server.TLS.Enabled {
-		creds, err := credentials.NewServerTLSFromFile(cfg.Server.TLS.CertFile, cfg.Server.TLS.KeyFile)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to load TLS credentials: %w", err)
-		}
-		opts = append(opts, grpc.Creds(creds))
+	if tlsConfig != nil {
+		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
 
 	tokenStore := auth.NewInMemoryTokenStore()

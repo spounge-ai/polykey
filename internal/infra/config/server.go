@@ -9,7 +9,9 @@ type ServerConfig struct {
 
 // TLS represents the TLS configuration.
 type TLS struct {
-	Enabled  bool   `mapstructure:"enabled"`
-	CertFile string `mapstructure:"cert_file"`
-	KeyFile  string `mapstructure:"key_file"`
+	Enabled      bool   `mapstructure:"enabled"`
+	CertFile     string `mapstructure:"cert_file"`
+	KeyFile      string `mapstructure:"key_file"`
+	ClientCAFile string `mapstructure:"client_ca_file"`
+	ClientAuth   string `mapstructure:"client_auth"`
 }

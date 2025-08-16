@@ -87,7 +87,7 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	authService := service.NewAuthService(clientStore, tokenManager, 1*time.Hour)
 
 	// --- Server Setup ---
-	srv, port, err := app_grpc.New(cfg, keyService, authService, authorizer, nil, slog.Default(), app_errors.NewErrorClassifier(slog.Default())) // nil for audit logger for now
+	srv, port, err := app_grpc.New(cfg, keyService, authService, authorizer, nil, slog.Default(), app_errors.NewErrorClassifier(slog.Default()), nil) // nil for audit logger and tls.Config for now
 	require.NoError(t, err)
 
 	go func() {
