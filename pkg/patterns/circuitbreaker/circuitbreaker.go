@@ -1,4 +1,4 @@
-package persistence
+package circuitbreaker
 
 import (
 	"context"
@@ -15,9 +15,10 @@ const (
 	StateHalfOpen
 )
 
-var ErrCircuitBreakerOpen = errors.New("circuit breaker is open")
+var ErrOpen = errors.New("circuit breaker is open")
 
-type CircuitBreaker struct {
+// Breaker is a generic, thread-safe circuit breaker.
+type Breaker[T any] struct {
 	maxFailures      int64
 	resetTimeout     time.Duration
 	halfOpenRequests int64
@@ -28,29 +29,31 @@ type CircuitBreaker struct {
 	successCount    atomic.Int64
 }
 
-func NewCircuitBreaker(maxFailures int, resetTimeout time.Duration) *CircuitBreaker {
-	cb := &CircuitBreaker{
+// New creates a new generic Circuit Breaker.
+func New[T any](maxFailures int, resetTimeout time.Duration) *Breaker[T] {
+	cb := &Breaker[T]{
 		maxFailures:      int64(maxFailures),
 		resetTimeout:     resetTimeout,
-		halfOpenRequests: int64(maxFailures) / 2,
+		halfOpenRequests: 1, // Allow one successful request in half-open state to close the circuit
 	}
 	cb.state.Store(int32(StateClosed))
 	return cb
 }
 
-func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() error) error {
+// Execute wraps a function call with the circuit breaker logic.
+func (cb *Breaker[T]) Execute(ctx context.Context, fn func(ctx context.Context) (T, error)) (T, error) {
 	if !cb.canExecute() {
-		// METRIC: Increment count of rejected requests
-		return ErrCircuitBreakerOpen
+		var zero T
+		return zero, ErrOpen
 	}
 
-	err := fn()
+	result, err := fn(ctx)
 	cb.recordResult(err)
 
-	return err
+	return result, err
 }
 
-func (cb *CircuitBreaker) canExecute() bool {
+func (cb *Breaker[T]) canExecute() bool {
 	currentState := State(cb.state.Load())
 
 	switch currentState {
@@ -62,10 +65,8 @@ func (cb *CircuitBreaker) canExecute() bool {
 		if now > lastFailure+cb.resetTimeout.Nanoseconds() {
 			// Attempt to move to half-open state
 			if cb.state.CompareAndSwap(int32(StateOpen), int32(StateHalfOpen)) {
-				// TODO: Add logging and metrics for state change to half-open
 				cb.successCount.Store(0)
 			}
-			// Allow the request that triggers the state change
 			return true
 		}
 		return false
@@ -76,36 +77,28 @@ func (cb *CircuitBreaker) canExecute() bool {
 	}
 }
 
-func (cb *CircuitBreaker) recordResult(err error) {
+func (cb *Breaker[T]) recordResult(err error) {
 	now := time.Now().UnixNano()
 
 	if err != nil {
-		// METRIC: Increment failure count
 		newFailures := cb.failures.Add(1)
 		cb.lastFailureTime.Store(now)
 
 		currentState := State(cb.state.Load())
 		if currentState == StateHalfOpen || (currentState == StateClosed && newFailures >= cb.maxFailures) {
-			// Trip the circuit breaker
-			if cb.state.CompareAndSwap(int32(currentState), int32(StateOpen)) {
-				// TODO: Add logging and metrics for state change to open
-				_ = "noop"
-			}
+			cb.state.CompareAndSwap(int32(currentState), int32(StateOpen))
+			// TODO: Add logging and metrics for state change to open
 		}
 	} else {
-		// METRIC: Increment success count
 		currentState := State(cb.state.Load())
 		if currentState == StateHalfOpen {
 			newSuccesses := cb.successCount.Add(1)
 			if newSuccesses >= cb.halfOpenRequests {
-				// Close the circuit breaker
 				if cb.state.CompareAndSwap(int32(StateHalfOpen), int32(StateClosed)) {
-					// TODO: Add logging and metrics for state change to closed
 					cb.failures.Store(0)
 				}
 			}
 		} else {
-			// Reset failures on success in closed state
 			cb.failures.Store(0)
 		}
 	}

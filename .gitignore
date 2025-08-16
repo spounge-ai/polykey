@@ -43,7 +43,7 @@ go.work.sum
 configs/*
 !configs/config.example.yaml
 
-certs/*.pem
+certs/
 !certs/*_example.pem
 !certs/public.pem
 
