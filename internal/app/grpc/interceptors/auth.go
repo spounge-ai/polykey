@@ -6,6 +6,7 @@ import (
 
 	"github.com/spounge-ai/polykey/internal/domain"
 	auth "github.com/spounge-ai/polykey/internal/infra/auth"
+	"github.com/spounge-ai/polykey/internal/infra/ratelimit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -17,9 +18,8 @@ var unprotectedMethods = map[string]struct{}{
 	"/polykey.v2.PolykeyService/Authenticate": {},
 }
 
-// AuthenticationInterceptor validates the JWT token from the request metadata
-// for all RPCs except for a predefined list of unprotected methods.
-func AuthenticationInterceptor(tokenManager *auth.TokenManager) grpc.UnaryServerInterceptor {
+// AuthenticationInterceptor validates the JWT token and applies rate limiting.
+func AuthenticationInterceptor(tokenManager *auth.TokenManager, limiter ratelimit.Limiter) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		if _, isUnprotected := unprotectedMethods[info.FullMethod]; isUnprotected {
 			return handler(ctx, req)
@@ -49,6 +49,11 @@ func AuthenticationInterceptor(tokenManager *auth.TokenManager) grpc.UnaryServer
 		claims, err := tokenManager.ValidateToken(ctx, token)
 		if err != nil {
 			return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
+		}
+
+		// Apply rate limiting based on the client ID from the token.
+		if !limiter.Allow(claims.UserID) {
+			return nil, status.Errorf(codes.ResourceExhausted, "rate limit exceeded for client %s", claims.UserID)
 		}
 
 		user := &domain.AuthenticatedUser{

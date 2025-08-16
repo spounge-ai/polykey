@@ -10,7 +10,9 @@ import (
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/auth"
 	"github.com/spounge-ai/polykey/internal/infra/config"
+	"github.com/spounge-ai/polykey/internal/infra/ratelimit"
 	"github.com/spounge-ai/polykey/internal/service"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
@@ -59,9 +61,13 @@ func New(
 		return nil, 0, fmt.Errorf("failed to create token manager for interceptor: %w", err)
 	}
 
+	// Create a rate limiter for the authentication interceptor.
+	// Allow 10 requests per second with a burst of 20.
+	rateLimiter := ratelimit.NewInMemoryRateLimiter(rate.Limit(10), 20)
+
 	opts = append(opts, grpc.ChainUnaryInterceptor(
 		interceptors.UnaryLoggingInterceptor(logger),
-		interceptors.AuthenticationInterceptor(tokenManager),
+		interceptors.AuthenticationInterceptor(tokenManager, rateLimiter),
 		interceptors.UnaryValidationInterceptor(errorClassifier),
 	))
 
