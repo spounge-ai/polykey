@@ -2,18 +2,33 @@ server:
   port: 50053
   mode: "development"
   tls:
-    enabled: true
-    cert_file: "certs/cert_example.pem"
-    key_file: "certs/key_example.pem"
+    enabled: false
+    cert_file: "<path-to-your-server-cert.pem>"
+    key_file: "<path-to-your-server-key.pem>"
+    client_ca_file: "<path-to-your-ca-cert.pem>"
+    client_auth: "" # Options: NoClientCert, RequestClientCert, RequireAnyClientCert, VerifyClientCertIfGiven, RequireAndVerifyClientCert
 
 persistence:
-  type: "neondb"
+  type: "neondb" # Supported types: neondb, cockroachdb, s3
+  database:
+    connection:
+      max_conns: 25
+      min_conns: 5
+      max_conn_lifetime: 1h
+      max_conn_idle_time: 5m
+      health_check_period: 1m
+    tls:
+      enabled: false
+      ssl_mode: "disable" # e.g., disable, require, verify-ca, verify-full
 
 aws:
-  enabled: true
+  enabled: false # Set to true to use AWS services (S3, KMS)
   region: "us-east-1"
   s3_bucket: "<your-s3-bucket-for-s3-persistence>"
   kms_key_arn: "<your-kms-key-arn-for-aws-kms-provider>"
+
+# Path to the file containing client credentials (ID, hashed secret, permissions).
+client_credentials_path: "configs/dev_client/config.client.dev.yaml"
 
 authorization:
   roles:
@@ -29,3 +44,5 @@ authorization:
       allowed_operations:
         - "create_key"
         - "get_key"
+  zero_trust:
+    enforce_mtls_identity_match: true

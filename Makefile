@@ -91,9 +91,15 @@ server-minimal: kill build ## Run server with minimal config
 	@echo "$(GREEN)Starting server with minimal config on port $(PORT)...$(RESET)"
 	@POLYKEY_CONFIG_PATH=$(CONFIG_MINIMAL) POLYKEY_GRPC_PORT=$(PORT) $(SERVER_BINARY) &
 
-# ============================================================================ 
+# ============================================================================
 # Client Target
-# ============================================================================ 
+# ============================================================================
+
+client-setup: ## Setup the development client
+	@echo "$(CYAN)Setting up development client...$(RESET)"
+	@chmod +x scripts/setup-dev-client.sh
+	@./scripts/setup-dev-client.sh
+	@echo "$(GREEN)Client setup complete!$(RESET)"
 
 client: build ## Run client
 	@if ! nc -z localhost $(PORT) 2>/dev/null; then \

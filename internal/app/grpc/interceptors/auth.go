@@ -9,7 +9,9 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/ratelimit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -18,11 +20,21 @@ var unprotectedMethods = map[string]struct{}{
 	"/polykey.v2.PolykeyService/Authenticate": {},
 }
 
-// AuthenticationInterceptor validates the JWT token and applies rate limiting.
+// AuthenticationInterceptor validates the JWT token, extracts peer TLS info, and applies rate limiting.
 func AuthenticationInterceptor(tokenManager *auth.TokenManager, limiter ratelimit.Limiter) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		if _, isUnprotected := unprotectedMethods[info.FullMethod]; isUnprotected {
 			return handler(ctx, req)
+		}
+
+		// Extract peer certificate information for zero-trust validation.
+		if p, ok := peer.FromContext(ctx); ok {
+			if tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo); ok {
+				if len(tlsInfo.State.PeerCertificates) > 0 {
+					// Add the leaf certificate to the context for the authorizer to use.
+					ctx = domain.NewContextWithPeerCert(ctx, tlsInfo.State.PeerCertificates[0])
+				}
+			}
 		}
 
 		md, ok := metadata.FromIncomingContext(ctx)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/spounge-ai/polykey/internal/wiring"
 	"github.com/spounge-ai/polykey/tests/utils"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/grpc"
@@ -20,8 +21,8 @@ import (
 
 const (
 	defaultPort      = "50053"
-	certPath         = "certs/cert.pem"
 	secretConfigPath = "configs/dev_client/secret.dev.yaml"
+	tlsConfigPath    = "configs/dev_client/tls.yaml"
 	defaultTimeout   = 30 * time.Second
 	authHeader       = "authorization"
 	bearerPrefix     = "Bearer "
@@ -371,11 +372,13 @@ func loadCredentials(path string, logger *slog.Logger) (*clientSecretConfig, err
 }
 
 func establishConnection(port string, logger *slog.Logger) (*grpc.ClientConn, error) {
-	creds, err := credentials.NewClientTLSFromFile(certPath, "")
+	tlsConfig, err := wiring.ConfigureClientTLS(tlsConfigPath)
 	if err != nil {
-		logger.Error("failed to load TLS credentials", "error", err)
+		logger.Error("failed to configure client TLS", "error", err)
 		return nil, err
 	}
+
+	creds := credentials.NewTLS(tlsConfig)
 
 	conn, err := grpc.NewClient("localhost:"+port, grpc.WithTransportCredentials(creds))
 	if err != nil {

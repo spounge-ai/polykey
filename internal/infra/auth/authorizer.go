@@ -57,6 +57,14 @@ func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.Requester
 	}
 	span.SetAttributes(attribute.String("auth.user_id", user.ID))
 
+	// Zero-Trust: Verify transport-level identity matches application-level identity.
+	if a.cfg.ZeroTrust.EnforceMTLSIdentityMatch {
+		if ok, reason := a.checkIdentityMatch(ctx, user); !ok {
+			span.SetAttributes(attribute.Bool("auth.authorized", false), attribute.String("auth.reason", reason))
+			return false, reason
+		}
+	}
+
 	cacheKey := a.getCacheKey(user.ID, operation, keyID)
 	if authorized, found := a.policyCache.Get(ctx, cacheKey);
  found {
@@ -78,6 +86,19 @@ func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.Requester
 	}
 
 	return authorized, reason
+}
+
+func (a *realAuthorizer) checkIdentityMatch(ctx context.Context, user *domain.AuthenticatedUser) (bool, string) {
+	cert, ok := domain.PeerCertFromContext(ctx)
+	if !ok {
+		return false, "missing_peer_certificate_for_identity_check"
+	}
+
+	if cert.Subject.CommonName != user.ID {
+		return false, fmt.Sprintf("mismatched_identity_cn=%s_user=%s", cert.Subject.CommonName, user.ID)
+	}
+
+	return true, "identity_match_ok"
 }
 
 func (a *realAuthorizer) checkAuthorization(ctx context.Context, user *domain.AuthenticatedUser, operation string, keyID domain.KeyID) (bool, string) {
