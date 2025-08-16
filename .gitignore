@@ -46,3 +46,5 @@ configs/*
 certs/*.pem
 !certs/*_example.pem
 !certs/public.pem
+
+sbom.xml
