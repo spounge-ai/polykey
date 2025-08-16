@@ -97,6 +97,10 @@ client: build ## Run client
 	@echo "$(CYAN)Starting client...$(RESET)"
 	@POLYKEY_GRPC_PORT=$(PORT) $(CLIENT_BINARY)
 
+client-server: ## lint, run server-minimal, then client
+	$(MAKE) lint
+	$(MAKE) server-minimal
+	$(MAKE) client
 
 # ============================================================================ 
 # Test Targets

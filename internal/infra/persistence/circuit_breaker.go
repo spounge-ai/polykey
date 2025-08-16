@@ -3,11 +3,11 @@ package persistence
 import (
 	"context"
 	"errors"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
-type State int
+type State int32
 
 const (
 	StateClosed State = iota
@@ -18,28 +18,29 @@ const (
 var ErrCircuitBreakerOpen = errors.New("circuit breaker is open")
 
 type CircuitBreaker struct {
-	maxFailures      int
+	maxFailures      int64
 	resetTimeout     time.Duration
-	halfOpenRequests int
+	halfOpenRequests int64
 
-	mu              sync.Mutex
-	state           State
-	failures        int
-	lastFailureTime time.Time
-	successCount    int
+	state           atomic.Int32
+	failures        atomic.Int64
+	lastFailureTime atomic.Int64 // Unix nano
+	successCount    atomic.Int64
 }
 
 func NewCircuitBreaker(maxFailures int, resetTimeout time.Duration) *CircuitBreaker {
-	return &CircuitBreaker{
-		maxFailures:      maxFailures,
+	cb := &CircuitBreaker{
+		maxFailures:      int64(maxFailures),
 		resetTimeout:     resetTimeout,
-		halfOpenRequests: maxFailures / 2,
-		state:            StateClosed,
+		halfOpenRequests: int64(maxFailures) / 2,
 	}
+	cb.state.Store(int32(StateClosed))
+	return cb
 }
 
 func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() error) error {
 	if !cb.canExecute() {
+		// METRIC: Increment count of rejected requests
 		return ErrCircuitBreakerOpen
 	}
 
@@ -50,52 +51,58 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() error) error {
 }
 
 func (cb *CircuitBreaker) canExecute() bool {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+	currentState := State(cb.state.Load())
+	now := time.Now().UnixNano()
 
-	now := time.Now()
-
-	switch cb.state {
+	switch currentState {
 	case StateClosed:
 		return true
-
 	case StateOpen:
-		if now.After(cb.lastFailureTime.Add(cb.resetTimeout)) {
-			cb.state = StateHalfOpen
-			cb.successCount = 0
-			return true
+		lastFailure := cb.lastFailureTime.Load()
+		if now > lastFailure+cb.resetTimeout.Nanoseconds() {
+			// LOG: info, "circuit breaker state changing to half-open"
+			// METRIC: Increment half-open event count
+			if cb.state.CompareAndSwap(int32(StateOpen), int32(StateHalfOpen)) {
+				cb.successCount.Store(0)
+			}
+			return true // Allow the request
 		}
 		return false
-
 	case StateHalfOpen:
-		return cb.successCount < cb.halfOpenRequests
-
+		return cb.successCount.Load() < cb.halfOpenRequests
 	default:
 		return false
 	}
 }
 
 func (cb *CircuitBreaker) recordResult(err error) {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+	now := time.Now().UnixNano()
+	currentState := State(cb.state.Load())
 
 	if err != nil {
-		cb.failures++
-		cb.lastFailureTime = time.Now()
+		// METRIC: Increment failure count
+		cb.failures.Add(1)
+		cb.lastFailureTime.Store(now)
 
-		if cb.state == StateHalfOpen || cb.failures >= cb.maxFailures {
-			cb.state = StateOpen
+		if currentState == StateHalfOpen || cb.failures.Load() >= cb.maxFailures {
+			if cb.state.CompareAndSwap(int32(currentState), int32(StateOpen)) {
+				// LOG: warn, "circuit breaker state changing to open"
+				// METRIC: Increment open event count
+			}
 		}
 	} else {
-		switch cb.state {
-		case StateHalfOpen:
-			cb.successCount++
-			if cb.successCount >= cb.halfOpenRequests {
-				cb.state = StateClosed
-				cb.failures = 0
+		// METRIC: Increment success count
+		if currentState == StateHalfOpen {
+			newSuccesses := cb.successCount.Add(1)
+			if newSuccesses >= cb.halfOpenRequests {
+				if cb.state.CompareAndSwap(int32(StateHalfOpen), int32(StateClosed)) {
+					// LOG: info, "circuit breaker state changing to closed"
+					// METRIC: Increment close event count
+					cb.failures.Store(0)
+				}
 			}
-		case StateClosed:
-			cb.failures = 0
+		} else {
+			cb.failures.Store(0)
 		}
 	}
 }
