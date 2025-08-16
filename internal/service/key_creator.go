@@ -9,9 +9,8 @@ import (
 	"github.com/spounge-ai/polykey/internal/domain"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/pkg/crypto"
-	"github.com/spounge-ai/polykey/pkg/memory"
-	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2" 
 )
 
 func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
@@ -33,21 +32,27 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
 	}
 
-	dekSize, algorithm, err := crypto.GetCryptoDetails(req.GetKeyType())
+	_, algorithm, err := crypto.GetCryptoDetails(req.GetKeyType())
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
 	}
 
-	// Generate the DEK and ensure it is securely zeroed after use.
-	dek := make([]byte, dekSize)
+	dekPool, ok := s.dekPools[req.GetKeyType()]
+	if !ok {
+		return nil, fmt.Errorf("%w: unsupported key type for pooling", ErrInvalidKeyType)
+	}
+
+	// Generate the DEK from a secure pool and ensure it is returned.
+	dek := dekPool.Get()
+	defer dekPool.Put(dek)
+
 	if _, err := rand.Read(dek); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrKeyGenerationFail, err)
 	}
-	defer memory.SecureZeroBytes(dek)
 
 	// Generate a unique KeyID, retrying up to 10 times in the unlikely event of a collision.
 	var keyID domain.KeyID
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		keyID = domain.NewKeyID()
 		exists, err := s.keyRepo.Exists(ctx, keyID)
 		if err != nil {

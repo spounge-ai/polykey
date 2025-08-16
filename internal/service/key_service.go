@@ -11,6 +11,8 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	"github.com/spounge-ai/polykey/internal/kms"
+	"github.com/spounge-ai/polykey/pkg/crypto"
+	"github.com/spounge-ai/polykey/pkg/memory"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
@@ -38,20 +40,26 @@ type keyServiceImpl struct {
 	logger          *slog.Logger
 	cfg             *config.Config
 	errorClassifier *app_errors.ErrorClassifier
+	dekPools        map[pk.KeyType]*memory.BufferPool
 }
 
 func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProviders map[string]kms.KMSProvider, logger *slog.Logger, errorClassifier *app_errors.ErrorClassifier) KeyService {
+	dekPools := make(map[pk.KeyType]*memory.BufferPool)
+	if size, _, err := crypto.GetCryptoDetails(pk.KeyType_KEY_TYPE_AES_256); err == nil {
+		dekPools[pk.KeyType_KEY_TYPE_AES_256] = memory.NewBufferPool(size)
+	}
+
 	return &keyServiceImpl{
 		cfg:             cfg,
 		keyRepo:         keyRepo,
 		kmsProviders:    kmsProviders,
 		logger:          logger,
 		errorClassifier: errorClassifier,
+		dekPools:        dekPools,
 	}
 }
 
 func (s *keyServiceImpl) getKMSProvider(dataClassification string) (kms.KMSProvider, error) {
-	// Determine provider based on the data classification (tier) of the key itself.
 	providerName := "local"
 	if dataClassification == string(domain.TierPro) || dataClassification == string(domain.TierEnterprise) {
 		providerName = "aws"
