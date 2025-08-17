@@ -30,3 +30,13 @@ CREATE INDEX idx_keys_status_created_at ON keys(status, created_at DESC);
 -- 5. Keep existing for other operations
 CREATE INDEX idx_keys_status ON keys(status);
 CREATE INDEX idx_keys_storage_type ON keys(storage_type);
+
+-- Add partial index for active keys only (most common case)
+CREATE INDEX CONCURRENTLY idx_keys_active_only ON keys(id, version DESC) 
+WHERE status = 'active';
+
+-- Composite index for metadata queries if you filter by metadata fields
+CREATE INDEX CONCURRENTLY idx_keys_metadata_gin ON keys USING gin(metadata);
+
+-- Consider partitioning if you have high volume
+-- Partition by created_at for time-based queries

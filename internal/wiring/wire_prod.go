@@ -174,16 +174,19 @@ func (c *Container) initKeyRepository() error {
 		return err
 	}
 
+	// Wrap it with the cache decorator
+	cachedRepo := persistence.NewCachedRepository(baseRepo, c.logger)
+
 	// Check if the circuit breaker is enabled
 	if c.config.Persistence.CircuitBreaker.Enabled {
 		c.logger.Debug("wrapping key repository with circuit breaker")
 		c.keyRepo = persistence.NewKeyRepositoryCircuitBreaker(
-			baseRepo,
+			cachedRepo,
 			c.config.Persistence.CircuitBreaker.MaxFailures,
 			c.config.Persistence.CircuitBreaker.ResetTimeout,
 		)
 	} else {
-		c.keyRepo = baseRepo
+		c.keyRepo = cachedRepo
 	}
 
 	c.logger.Debug("initialized key repository")

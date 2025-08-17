@@ -2,12 +2,17 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"hash/fnv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/spounge-ai/polykey/internal/domain"
+)
+
+var (
+	ErrKeyNotFound      = errors.New("key not found")
+	ErrInvalidVersion   = errors.New("invalid version")
+	ErrKeyAlreadyExists = errors.New("key already exists")
 )
 
 // Client is a PostgreSQL client with connection pooling and prepared statements.
@@ -36,13 +41,6 @@ func (c *Client) PrepareStatements(ctx context.Context, statements map[string]st
 	}
 
 	return nil
-}
-
-// GetLockID generates a unique int64 lock ID from a KeyID for use with advisory locks.
-func (c *Client) GetLockID(id domain.KeyID) int64 {
-	h := fnv.New64a()
-	h.Write([]byte(id.String()))
-	return int64(h.Sum64())
 }
 
 // TryAcquireLock attempts to acquire a transaction-scoped advisory lock.
