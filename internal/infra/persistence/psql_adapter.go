@@ -23,14 +23,14 @@ const (
 	versionsCapacity    = 10
 )
 
-type NeonDBAdapter struct {
+type PSQLAdapter struct {
 	*PostgresBase
 	optimizer *QueryOptimizer
 	txManager *TransactionManager[*domain.Key]
 }
 
-func NewNeonDBAdapter(db *pgxpool.Pool, logger *slog.Logger) (*NeonDBAdapter, error) {
-	a := &NeonDBAdapter{
+func NewPSQLAdapter(db *pgxpool.Pool, logger *slog.Logger) (*PSQLAdapter, error) {
+	a := &PSQLAdapter{
 		PostgresBase: NewPostgresBase(db, logger),
 		optimizer:    NewQueryOptimizer(),
 		txManager:    NewTransactionManager[*domain.Key](logger),
@@ -43,7 +43,9 @@ func NewNeonDBAdapter(db *pgxpool.Pool, logger *slog.Logger) (*NeonDBAdapter, er
 	return a, nil
 }
 
-func (a *NeonDBAdapter) GetKey(ctx context.Context, id domain.KeyID) (*domain.Key, error) {
+func (a *PSQLAdapter) GetKey(ctx context.Context, id domain.KeyID) (*domain.Key, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	row := a.DB.QueryRow(ctx, consts.StmtGetLatestKey, id.String())
 	key, err := ScanKeyRow(row)
 	if err != nil {
@@ -57,10 +59,12 @@ func (a *NeonDBAdapter) GetKey(ctx context.Context, id domain.KeyID) (*domain.Ke
 	return key, nil
 }
 
-func (a *NeonDBAdapter) GetKeyByVersion(ctx context.Context, id domain.KeyID, version int32) (*domain.Key, error) {
+func (a *PSQLAdapter) GetKeyByVersion(ctx context.Context, id domain.KeyID, version int32) (*domain.Key, error) {
 	if version <= 0 {
 		return nil, psql.ErrInvalidVersion
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
 	row := a.DB.QueryRow(ctx, consts.StmtGetKeyByVersion, id.String(), version)
 	key, err := ScanKeyRow(row)
@@ -76,7 +80,7 @@ func (a *NeonDBAdapter) GetKeyByVersion(ctx context.Context, id domain.KeyID, ve
 	return key, nil
 }
 
-func (a *NeonDBAdapter) CreateKey(ctx context.Context, key *domain.Key) error {
+func (a *PSQLAdapter) CreateKey(ctx context.Context, key *domain.Key) error {
 	if key == nil {
 		return errors.New("key cannot be nil")
 	}
@@ -102,6 +106,8 @@ func (a *NeonDBAdapter) CreateKey(ctx context.Context, key *domain.Key) error {
 
 	storageType := getStorageTypeOptimized(key.Metadata.GetStorageType())
 
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	_, err = a.DB.Exec(ctx, consts.StmtCreateKey,
 		key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK,
 		key.Status, storageType, key.CreatedAt, key.UpdatedAt)
@@ -113,7 +119,39 @@ func (a *NeonDBAdapter) CreateKey(ctx context.Context, key *domain.Key) error {
 	return nil
 }
 
-func (a *NeonDBAdapter) ListKeys(ctx context.Context) ([]*domain.Key, error) {
+func (a *PSQLAdapter) CreateKeys(ctx context.Context, keys []*domain.Key) error {
+	batch := &pgx.Batch{}
+	for _, key := range keys {
+		metadataRaw, err := a.optimizer.MarshalWithBuffer(key.Metadata)
+		if err != nil {
+			return fmt.Errorf("failed to marshal metadata for key %s: %w", key.ID.String(), err)
+		}
+		storageType := getStorageTypeOptimized(key.Metadata.GetStorageType())
+		batch.Queue(consts.StmtCreateKey, key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK, key.Status, storageType, key.CreatedAt, key.UpdatedAt)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	br := a.DB.SendBatch(ctx, batch)
+	defer func() {
+		if err := br.Close(); err != nil {
+			a.logger.Error("failed to close batch", "error", err)
+		}
+	}()
+
+	for i := 0; i < len(keys); i++ {
+		_, err := br.Exec()
+		if err != nil {
+			return fmt.Errorf("failed to create key in batch: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (a *PSQLAdapter) ListKeys(ctx context.Context) ([]*domain.Key, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	rows, err := a.DB.Query(ctx, consts.StmtListKeys)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query keys: %w", err)
@@ -137,7 +175,7 @@ func (a *NeonDBAdapter) ListKeys(ctx context.Context) ([]*domain.Key, error) {
 	return keys, nil
 }
 
-func (a *NeonDBAdapter) UpdateKeyMetadata(ctx context.Context, id domain.KeyID, metadata *pk.KeyMetadata) error {
+func (a *PSQLAdapter) UpdateKeyMetadata(ctx context.Context, id domain.KeyID, metadata *pk.KeyMetadata) error {
 	if metadata == nil {
 		return errors.New("metadata cannot be nil")
 	}
@@ -147,6 +185,8 @@ func (a *NeonDBAdapter) UpdateKeyMetadata(ctx context.Context, id domain.KeyID, 
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	result, err := a.DB.Exec(ctx, consts.StmtUpdateMetadata, metadataRaw, time.Now(), id.String())
 	if err != nil {
 		return fmt.Errorf("failed to update key metadata %s: %w", id.String(), err)
@@ -159,17 +199,20 @@ func (a *NeonDBAdapter) UpdateKeyMetadata(ctx context.Context, id domain.KeyID, 
 	return nil
 }
 
-func (a *NeonDBAdapter) RotateKey(ctx context.Context, id domain.KeyID, newEncryptedDEK []byte) (*domain.Key, error) {
+func (a *PSQLAdapter) RotateKey(ctx context.Context, id domain.KeyID, newEncryptedDEK []byte) (*domain.Key, error) {
 	if len(newEncryptedDEK) == 0 {
 		return nil, errors.New("new encrypted DEK cannot be empty")
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
 	return a.txManager.ExecuteInTransaction(ctx, a.DB, func(ctx context.Context, tx pgx.Tx) (*domain.Key, error) {
 		return a.rotateKeyInTx(ctx, tx, id, newEncryptedDEK)
 	})
 }
 
-func (a *NeonDBAdapter) rotateKeyInTx(ctx context.Context, tx pgx.Tx, id domain.KeyID, newEncryptedDEK []byte) (*domain.Key, error) {
+func (a *PSQLAdapter) rotateKeyInTx(ctx context.Context, tx pgx.Tx, id domain.KeyID, newEncryptedDEK []byte) (*domain.Key, error) {
 	lockID := a.GetLockID(id)
 	locked, err := a.TryAcquireLock(ctx, tx, lockID)
 	if err != nil {
@@ -236,7 +279,9 @@ func (a *NeonDBAdapter) rotateKeyInTx(ctx context.Context, tx pgx.Tx, id domain.
 	}, nil
 }
 
-func (a *NeonDBAdapter) RevokeKey(ctx context.Context, id domain.KeyID) error {
+func (a *PSQLAdapter) RevokeKey(ctx context.Context, id domain.KeyID) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	result, err := a.DB.Exec(ctx, consts.StmtRevokeKey, domain.KeyStatusRevoked, time.Now(), id.String())
 	if err != nil {
 		return fmt.Errorf("failed to revoke key %s: %w", id.String(), err)
@@ -249,7 +294,9 @@ func (a *NeonDBAdapter) RevokeKey(ctx context.Context, id domain.KeyID) error {
 	return nil
 }
 
-func (a *NeonDBAdapter) GetKeyVersions(ctx context.Context, id domain.KeyID) ([]*domain.Key, error) {
+func (a *PSQLAdapter) GetKeyVersions(ctx context.Context, id domain.KeyID) ([]*domain.Key, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	rows, err := a.DB.Query(ctx, consts.StmtGetVersions, id.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to query key versions: %w", err)
@@ -274,7 +321,9 @@ func (a *NeonDBAdapter) GetKeyVersions(ctx context.Context, id domain.KeyID) ([]
 	return keys, nil
 }
 
-func (a *NeonDBAdapter) Exists(ctx context.Context, id domain.KeyID) (bool, error) {
+func (a *PSQLAdapter) Exists(ctx context.Context, id domain.KeyID) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	var exists bool
 	err := a.DB.QueryRow(ctx, consts.StmtCheckExists, id.String()).Scan(&exists)
 	if err != nil {
@@ -284,7 +333,7 @@ func (a *NeonDBAdapter) Exists(ctx context.Context, id domain.KeyID) (bool, erro
 	return exists, nil
 }
 
-func (a *NeonDBAdapter) Close() error {
+func (a *PSQLAdapter) Close() error {
 	a.DB.Close()
 	return nil
 }

@@ -57,6 +57,15 @@ func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key) error {
 	return s.putKey(ctx, key)
 }
 
+func (s *S3Storage) CreateKeys(ctx context.Context, keys []*domain.Key) error {
+	for _, key := range keys {
+		if err := s.putKey(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *S3Storage) getKeyFromPath(ctx context.Context, path string) (*domain.Key, error) {
 	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &s.bucketName,

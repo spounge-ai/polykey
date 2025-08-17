@@ -101,6 +101,16 @@ func (cr *CachedRepository) CreateKey(ctx context.Context, key *domain.Key) erro
 	return err
 }
 
+func (cr *CachedRepository) CreateKeys(ctx context.Context, keys []*domain.Key) error {
+	err := cr.repo.CreateKeys(ctx, keys)
+	if err == nil {
+		for _, key := range keys {
+			cr.invalidateCache(key.ID)
+		}
+	}
+	return err
+}
+
 func (cr *CachedRepository) ListKeys(ctx context.Context) ([]*domain.Key, error) {
 	// Caching for ListKeys is complex and often not beneficial without proper invalidation strategies.
 	// For now, we bypass the cache for this operation.

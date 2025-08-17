@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB(t *testing.T) (*persistence.NeonDBAdapter, func()) {
+func setupTestDB(t *testing.T) (*persistence.PSQLAdapter, func()) {
 	cfgPath := os.Getenv("POLYKEY_CONFIG_PATH")
 	if cfgPath == "" {
 		t.Fatal("POLYKEY_CONFIG_PATH environment variable not set. No configuration file found.")
@@ -26,7 +26,7 @@ func setupTestDB(t *testing.T) (*persistence.NeonDBAdapter, func()) {
 	dbpool, err := pgxpool.New(context.Background(), cfg.BootstrapSecrets.NeonDBURLDevelopment)
 	require.NoError(t, err)
 
-	storage, err := persistence.NewNeonDBAdapter(dbpool, slog.Default())
+	storage, err := persistence.NewPSQLAdapter(dbpool, slog.Default())
 	require.NoError(t, err)
 
 	cleanup := func() {

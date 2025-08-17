@@ -169,7 +169,7 @@ func (c *Container) initKeyRepository() error {
 	}
 	var err error
 	// Create the base repository
-	baseRepo, err := persistence.NewNeonDBAdapter(c.pgxPool, c.logger)
+	baseRepo, err := persistence.NewPSQLAdapter(c.pgxPool, c.logger)
 	if err != nil {
 		return err
 	}

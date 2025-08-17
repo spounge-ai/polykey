@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-
+	"time"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/infra/config"
 )
@@ -32,8 +32,8 @@ func NewSecureConnectionPool(ctx context.Context, dbConfig config.NeonDBConfig, 
 
 	poolConfig.MaxConns = persistenceConfig.Database.Connection.MaxConns
 	poolConfig.MinConns = persistenceConfig.Database.Connection.MinConns
-	poolConfig.MaxConnLifetime = persistenceConfig.Database.Connection.MaxConnLifetime
-	poolConfig.MaxConnIdleTime = persistenceConfig.Database.Connection.MaxConnIdleTime
+	poolConfig.MaxConnIdleTime = 30 * time.Second
+	poolConfig.MaxConnLifetime = 5 * time.Minute
 	poolConfig.HealthCheckPeriod = persistenceConfig.Database.Connection.HealthCheckPeriod
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)

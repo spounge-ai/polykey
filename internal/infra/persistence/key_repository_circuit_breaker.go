@@ -66,6 +66,13 @@ func (cb *KeyRepositoryCircuitBreaker) CreateKey(ctx context.Context, key *domai
 	return err
 }
 
+func (cb *KeyRepositoryCircuitBreaker) CreateKeys(ctx context.Context, keys []*domain.Key) error {
+	_, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
+		return nil, cb.repo.CreateKeys(ctx, keys)
+	})
+	return err
+}
+
 func (cb *KeyRepositoryCircuitBreaker) ListKeys(ctx context.Context) ([]*domain.Key, error) {
 	return cb.listKeysBreaker.Execute(ctx, func(ctx context.Context) ([]*domain.Key, error) {
 		return cb.repo.ListKeys(ctx)
