@@ -11,6 +11,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	"github.com/spounge-ai/polykey/internal/kms"
+	"github.com/spounge-ai/polykey/internal/pipelines"
 	"github.com/spounge-ai/polykey/pkg/crypto"
 	"github.com/spounge-ai/polykey/pkg/memory"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
@@ -35,13 +36,14 @@ type KeyService interface {
 }
 
 type keyServiceImpl struct {
-	keyRepo         domain.KeyRepository
-	kmsProviders    map[string]kms.KMSProvider
-	logger          *slog.Logger
-	cfg             *config.Config
-	errorClassifier *app_errors.ErrorClassifier
-	dekPools        map[pk.KeyType]*memory.BufferPool
-	auditLogger     domain.AuditLogger
+	keyRepo             domain.KeyRepository
+	kmsProviders        map[string]kms.KMSProvider
+	logger              *slog.Logger
+	cfg                 *config.Config
+	errorClassifier     *app_errors.ErrorClassifier
+	dekPools            map[pk.KeyType]*memory.BufferPool
+	auditLogger         domain.AuditLogger
+	keyRotationPipeline *pipelines.KeyRotationPipeline
 }
 
 func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProviders map[string]kms.KMSProvider, logger *slog.Logger, errorClassifier *app_errors.ErrorClassifier, auditLogger domain.AuditLogger) KeyService {
@@ -50,14 +52,18 @@ func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProvider
 		dekPools[pk.KeyType_KEY_TYPE_AES_256] = memory.NewBufferPool(size)
 	}
 
+	rotationPipeline := pipelines.NewKeyRotationPipeline(keyRepo, logger, 5, 100) // 5 workers, 100 queue depth
+	rotationPipeline.Start(context.Background()) // Start the pipeline
+
 	return &keyServiceImpl{
-		cfg:             cfg,
-		keyRepo:         keyRepo,
-		kmsProviders:    kmsProviders,
-		logger:          logger,
-		errorClassifier: errorClassifier,
-		dekPools:        dekPools,
-		auditLogger:     auditLogger,
+		cfg:                 cfg,
+		keyRepo:             keyRepo,
+		kmsProviders:        kmsProviders,
+		logger:              logger,
+		errorClassifier:     errorClassifier,
+		dekPools:            dekPools,
+		auditLogger:         auditLogger,
+		keyRotationPipeline: rotationPipeline,
 	}
 }
 

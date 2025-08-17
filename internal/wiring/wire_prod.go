@@ -28,6 +28,7 @@ type Container struct {
 	tokenManager *infra_auth.TokenManager
 	tokenStore   infra_auth.TokenStore
 	auditLogger  domain.AuditLogger
+	authorizer   domain.Authorizer
 }
 
 func NewContainer(cfg *infra_config.Config, logger *slog.Logger) *Container {
@@ -43,6 +44,7 @@ type Dependencies struct {
 	AuditRepo    domain.AuditRepository
 	ClientStore  domain.ClientStore
 	TokenManager *infra_auth.TokenManager
+	Authorizer   domain.Authorizer
 }
 
 func (c *Container) GetDependencies(ctx context.Context) (*Dependencies, error) {
@@ -55,6 +57,7 @@ func (c *Container) GetDependencies(ctx context.Context) (*Dependencies, error) 
 		AuditRepo:    c.auditRepo,
 		ClientStore:  c.clientStore,
 		TokenManager: c.tokenManager,
+		Authorizer:   c.authorizer,
 	}, nil
 }
 
@@ -68,12 +71,28 @@ func (c *Container) initializeAll(ctx context.Context) error {
 		func(context.Context) error { return c.initAuditLogger() },
 		func(context.Context) error { return c.initClientStore() },
 		func(context.Context) error { return c.initTokenManager() },
+		func(context.Context) error { return c.initAuthorizer() },
 	}
 	for _, initFn := range initializers {
 		if err := initFn(ctx); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func (c *Container) initAuthorizer() error {
+	if c.authorizer != nil {
+		return nil
+	}
+	if c.keyRepo == nil {
+		return fmt.Errorf("key repository not initialized")
+	}
+	if c.auditLogger == nil {
+		return fmt.Errorf("audit logger not initialized")
+	}
+	c.authorizer = infra_auth.NewAuthorizer(c.config.Authorization, c.keyRepo, c.auditLogger)
+	c.logger.Debug("initialized authorizer")
 	return nil
 }
 
@@ -250,7 +269,7 @@ func (c *Container) GetS3KeyRepository(ctx context.Context) (domain.KeyRepositor
 }
 
 
-func ProvideDependencies(cfg *infra_config.Config) (map[string]kms.KMSProvider, domain.KeyRepository, domain.AuditRepository, domain.ClientStore, *infra_auth.TokenManager, error) {
+func ProvideDependencies(cfg *infra_config.Config) (map[string]kms.KMSProvider, domain.KeyRepository, domain.AuditRepository, domain.ClientStore, *infra_auth.TokenManager, domain.Authorizer, error) {
 	container := NewContainer(cfg, slog.Default())
 	defer func() {
 		if err := container.Close(); err != nil {
@@ -259,7 +278,7 @@ func ProvideDependencies(cfg *infra_config.Config) (map[string]kms.KMSProvider, 
 	}()
 	deps, err := container.GetDependencies(context.Background())
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
-	return deps.KMSProviders, deps.KeyRepo, deps.AuditRepo, deps.ClientStore, deps.TokenManager, nil
+	return deps.KMSProviders, deps.KeyRepo, deps.AuditRepo, deps.ClientStore, deps.TokenManager, deps.Authorizer, nil
 }

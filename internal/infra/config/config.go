@@ -99,6 +99,10 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	if err := validateSecurity(&cfg); err != nil {
+		return nil, err
+	}
+
 	cfg.ServiceVersion = getenv("POLYKEY_SERVICE_VERSION", "unknown")
 	cfg.BuildCommit = getenv("POLYKEY_BUILD_COMMIT", "unknown")
 
@@ -148,6 +152,32 @@ func validatePersistence(cfg *Config) error {
 	case "s3":
 		if cfg.AWS == nil {
 			return fmt.Errorf("persistence type is s3, but aws config is missing")
+		}
+	}
+	return nil
+}
+
+func validateSecurity(cfg *Config) error {
+	if cfg.DefaultKMSProvider == "local" && cfg.BootstrapSecrets.PolykeyMasterKey == "" {
+		return fmt.Errorf("security validation failed: polykey master key is required for local KMS provider")
+	}
+
+	if cfg.BootstrapSecrets.JWTRSAPrivateKey == "" {
+		return fmt.Errorf("security validation failed: JWT RSA private key is required")
+	}
+
+	if cfg.Server.TLS.Enabled {
+		if cfg.Server.TLS.CertFile == "" {
+			return fmt.Errorf("security validation failed: TLS cert file is required when TLS is enabled")
+		}
+		if _, err := os.Stat(cfg.Server.TLS.CertFile); os.IsNotExist(err) {
+			return fmt.Errorf("security validation failed: TLS cert file not found at %s", cfg.Server.TLS.CertFile)
+		}
+		if cfg.Server.TLS.KeyFile == "" {
+			return fmt.Errorf("security validation failed: TLS key file is required when TLS is enabled")
+		}
+		if _, err := os.Stat(cfg.Server.TLS.KeyFile); os.IsNotExist(err) {
+			return fmt.Errorf("security validation failed: TLS key file not found at %s", cfg.Server.TLS.KeyFile)
 		}
 	}
 	return nil

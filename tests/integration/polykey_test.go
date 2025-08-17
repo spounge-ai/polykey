@@ -15,6 +15,7 @@ import (
 	app_grpc "github.com/spounge-ai/polykey/internal/app/grpc"
 	"github.com/spounge-ai/polykey/internal/domain"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
+	infra_audit "github.com/spounge-ai/polykey/internal/infra/audit"
 	"github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
@@ -74,24 +75,28 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	keyRepo, err := persistence.NewNeonDBStorage(dbpool, slog.Default())
 	require.NoError(t, err)
 
-	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo)
+	auditRepo, err := persistence.NewAuditRepository(dbpool)
+	require.NoError(t, err)
+	auditLogger := infra_audit.NewAuditLogger(slog.Default(), auditRepo)
+
+	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo, auditLogger)
 
 	clientStore, err := auth.NewFileClientStore("../../configs/config.client.dev.yaml")
 	require.NoError(t, err)
 
 	tokenStore := auth.NewInMemoryTokenStore()
-	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey, tokenStore, nil)
+	tokenManager, err := auth.NewTokenManager(cfg.BootstrapSecrets.JWTRSAPrivateKey, tokenStore, auditLogger)
 	require.NoError(t, err)
 
-	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default(), app_errors.NewErrorClassifier(slog.Default()), nil)
+	keyService := service.NewKeyService(cfg, keyRepo, kmsProviders, slog.Default(), app_errors.NewErrorClassifier(slog.Default()), auditLogger)
 	authService := service.NewAuthService(clientStore, tokenManager, 1*time.Hour)
 
 	// --- Server Setup ---
-	srv, port, err := app_grpc.New(cfg, keyService, authService, authorizer, nil, slog.Default(), app_errors.NewErrorClassifier(slog.Default()), nil) // nil for audit logger and tls.Config for now
+	srv, port, err := app_grpc.New(cfg, keyService, authService, authorizer, auditLogger, slog.Default(), app_errors.NewErrorClassifier(slog.Default()), nil) // nil for audit logger and tls.Config for now
 	require.NoError(t, err)
 
 	go func() {
-		if err := srv.Start(); err != nil {
+		if err := srv.Start(context.Background()); err != nil {
 			log.Printf("Server exited with error: %v", err)
 		}
 	}()
@@ -117,7 +122,9 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 		if err := conn.Close(); err != nil {
 			t.Logf("failed to close connection: %v", err)
 		}
-		srv.Stop()
+		if err := srv.Stop(context.Background()); err != nil {
+			t.Logf("failed to stop server: %v", err)
+		}
 	}
 
 	return client, tokenManager, cleanup, ctx

@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/ratelimit"
 	"github.com/spounge-ai/polykey/internal/service"
+	"github.com/spounge-ai/polykey/pkg/patterns/lifecycle"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -97,18 +99,26 @@ func New(
 	}, port, nil
 }
 
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	s.logger.Info("gRPC server listening", "address", s.lis.Addr().String())
 	s.healthSrv.SetServingStatus("polykey.v2.PolykeyService", grpc_health_v1.HealthCheckResponse_SERVING)
 	return s.grpcServer.Serve(s.lis)
 }
 
-func (s *Server) Stop() {
+func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info("Stopping gRPC server...")
 	s.healthSrv.SetServingStatus("polykey.v2.PolykeyService", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 	s.grpcServer.GracefulStop()
 	if err := s.lis.Close(); err != nil {
 		s.logger.Error("failed to close listener", "error", err)
+		return err
 	}
 	s.logger.Info("gRPC server stopped.")
+	return nil
+}
+
+func (s *Server) Health(ctx context.Context) lifecycle.HealthStatus {
+	// The gRPC health server manages the status internally, so we just reflect that.
+	// A more sophisticated check could involve checking dependencies.
+	return lifecycle.HealthStatus{Ready: true, Message: "gRPC server is running"}
 }

@@ -2,13 +2,15 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"maps"
 	"time"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/internal/pipelines"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -21,23 +23,11 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		return nil, err
 	}
 
+	// Get the current key to determine the storage profile and DEK pool
 	currentKey, err := s.keyRepo.GetKey(ctx, keyID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get current key", "keyId", req.GetKeyId(), "error", err)
+		s.logger.ErrorContext(ctx, "failed to get current key for rotation", "keyId", req.GetKeyId(), "error", err)
 		return nil, fmt.Errorf("failed to get current key: %w", err)
-	}
-
-	dekPool, ok := s.dekPools[currentKey.Metadata.GetKeyType()]
-	if !ok {
-		return nil, fmt.Errorf("%w: unsupported key type for pooling", ErrInvalidKeyType)
-	}
-
-	newDEK := dekPool.Get()
-	defer dekPool.Put(newDEK)
-
-	if _, err := rand.Read(newDEK); err != nil {
-		s.logger.ErrorContext(ctx, "failed to generate new DEK", "error", err)
-		return nil, fmt.Errorf("%w: %v", ErrKeyGenerationFail, err)
 	}
 
 	kmsProvider, err := s.getKMSProvider(currentKey.Metadata.GetStorageType())
@@ -45,38 +35,51 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 		return nil, err
 	}
 
-	// Immediately encrypt the new DEK
-	encryptedNewDEK, err := kmsProvider.EncryptDEK(ctx, newDEK, currentKey)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to encrypt new DEK", "error", err)
-		return nil, fmt.Errorf("failed to encrypt new DEK: %w", err)
+	dekPool, ok := s.dekPools[currentKey.Metadata.GetKeyType()]
+	if !ok {
+		return nil, fmt.Errorf("%w: unsupported key type for pooling", ErrInvalidKeyType)
 	}
 
-	rotatedKey, err := s.keyRepo.RotateKey(ctx, keyID, encryptedNewDEK)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to rotate key", "keyId", req.GetKeyId(), "error", err)
-		return nil, fmt.Errorf("failed to rotate key: %w", err)
+	rotationReq := pipelines.KeyRotationRequest{
+		KeyID:       keyID,
+		KMSProvider: kmsProvider,
+		DEKPool:     dekPool,
 	}
 
-	gracePeriod := time.Duration(req.GetGracePeriodSeconds()) * time.Second
-	now := time.Now()
-
-	resp := &pk.RotateKeyResponse{
-		KeyId:           req.GetKeyId(),
-		NewVersion:      rotatedKey.Version,
-		PreviousVersion: currentKey.Version,
-		NewKeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    append([]byte(nil), encryptedNewDEK...),
-			EncryptionAlgorithm: "AES-256-GCM",
-			KeyChecksum:         "sha256",
-		},
-		Metadata:            rotatedKey.Metadata,
-		RotationTimestamp:   timestamppb.New(now),
-		OldVersionExpiresAt: timestamppb.New(now.Add(gracePeriod)),
+	if !s.keyRotationPipeline.Enqueue(rotationReq) {
+		return nil, status.Errorf(codes.ResourceExhausted, "key rotation queue is full, please try again later")
 	}
 
-	s.logger.InfoContext(ctx, "key rotated", "keyId", req.GetKeyId(), "previousVersion", currentKey.Version, "newVersion", rotatedKey.Version)
-	return resp, nil
+	// Wait for the result from the pipeline
+	select {
+	case result := <-s.keyRotationPipeline.Results():
+		if result.Error != nil {
+			return nil, result.Error
+		}
+
+		rotatedKey := result.RotatedKey
+		gracePeriod := time.Duration(req.GetGracePeriodSeconds()) * time.Second
+		now := time.Now()
+
+		resp := &pk.RotateKeyResponse{
+			KeyId:           req.GetKeyId(),
+			NewVersion:      rotatedKey.Version,
+			PreviousVersion: currentKey.Version,
+			NewKeyMaterial: &pk.KeyMaterial{
+				EncryptedKeyData:    append([]byte(nil), rotatedKey.EncryptedDEK...),
+				EncryptionAlgorithm: "AES-256-GCM", // This should be dynamic based on key type
+				KeyChecksum:         "sha256",
+			},
+			Metadata:            rotatedKey.Metadata,
+			RotationTimestamp:   timestamppb.New(now),
+			OldVersionExpiresAt: timestamppb.New(now.Add(gracePeriod)),
+		}
+
+		return resp, nil
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (s *keyServiceImpl) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) error {

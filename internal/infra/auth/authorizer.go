@@ -12,6 +12,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	"github.com/spounge-ai/polykey/pkg/cache"
+	pkg_auth "github.com/spounge-ai/polykey/pkg/authorization"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -21,11 +22,12 @@ import (
 var tracer = otel.Tracer("github.com/spounge-ai/polykey/internal/infra/auth")
 
 // NewAuthorizer creates a new authorizer.
-func NewAuthorizer(cfg config.AuthorizationConfig, keyRepo domain.KeyRepository) domain.Authorizer {
+func NewAuthorizer(cfg config.AuthorizationConfig, keyRepo domain.KeyRepository, auditLogger domain.AuditLogger) domain.Authorizer {
 	return &realAuthorizer{
-		cfg:     cfg,
-		keyRepo: keyRepo,
-		policyCache: cache.New[string, bool](
+		cfg:         cfg,
+		keyRepo:     keyRepo,
+		auditLogger: auditLogger,
+		policyCache: cache.New(
 			cache.WithDefaultTTL[string, bool](5*time.Minute),
 			cache.WithCleanupInterval[string, bool](10*time.Minute),
 		),
@@ -36,6 +38,7 @@ type realAuthorizer struct {
 	cfg         config.AuthorizationConfig
 	keyRepo     domain.KeyRepository
 	policyCache cache.Store[string, bool]
+	auditLogger domain.AuditLogger
 }
 
 func (a *realAuthorizer) getCacheKey(userID, operation string, keyID domain.KeyID) string {
@@ -53,30 +56,41 @@ func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.Requester
 	user, ok, reason := a.authenticateAndAuthorize(ctx, operation)
 	if !ok {
 		span.SetAttributes(attribute.Bool("auth.authorized", false), attribute.String("auth.reason", reason))
+		// Safely get user ID for logging, even if authentication fails.
+		var userID string
+		if user != nil {
+			userID = user.ID
+		}
+		a.auditLogger.AuditLog(ctx, userID, operation, keyID.String(), "", false, errors.New(reason))
 		return false, reason
 	}
 	span.SetAttributes(attribute.String("auth.user_id", user.ID))
 
 	// Verify that the identity in the token matches the identity in the request context.
 	if reqContext != nil && reqContext.GetClientIdentity() != "" && reqContext.GetClientIdentity() != user.ID {
-		return false, fmt.Sprintf("mismatched_requester_identity_token=%s_requester=%s", user.ID, reqContext.GetClientIdentity())
+		reason := fmt.Sprintf("mismatched_requester_identity_token=%s_requester=%s", user.ID, reqContext.GetClientIdentity())
+		a.auditLogger.AuditLog(ctx, user.ID, operation, keyID.String(), "", false, errors.New(reason))
+		return false, reason
 	}
 
 	// Zero-Trust: Verify transport-level identity matches application-level identity.
 	if a.cfg.ZeroTrust.EnforceMTLSIdentityMatch {
 		if ok, reason := a.checkIdentityMatch(ctx, user); !ok {
 			span.SetAttributes(attribute.Bool("auth.authorized", false), attribute.String("auth.reason", reason))
+			a.auditLogger.AuditLog(ctx, user.ID, operation, keyID.String(), "", false, errors.New(reason))
 			return false, reason
 		}
 	}
 
 	cacheKey := a.getCacheKey(user.ID, operation, keyID)
-	if authorized, found := a.policyCache.Get(ctx, cacheKey);
- found {
+	if authorized, found := a.policyCache.Get(ctx, cacheKey); found {
 		span.SetAttributes(attribute.Bool("auth.cache_hit", true))
 		if !authorized {
-			return false, "operation_not_allowed_by_cache"
+			reason = "operation_not_allowed_by_cache"
+			a.auditLogger.AuditLog(ctx, user.ID, operation, keyID.String(), "", false, errors.New(reason))
+			return false, reason
 		}
+		a.auditLogger.AuditLog(ctx, user.ID, operation, keyID.String(), "", true, nil)
 		return true, "authorized_by_cache"
 	}
 
@@ -86,8 +100,10 @@ func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.Requester
 	if authorized {
 		a.policyCache.Set(ctx, cacheKey, true, 0) // Use default TTL
 		span.SetAttributes(attribute.Bool("auth.authorized", true), attribute.String("auth.reason", reason))
+		a.auditLogger.AuditLog(ctx, user.ID, operation, keyID.String(), "", true, nil)
 	} else {
 		span.SetAttributes(attribute.Bool("auth.authorized", false), attribute.String("auth.reason", reason))
+		a.auditLogger.AuditLog(ctx, user.ID, operation, keyID.String(), "", false, errors.New(reason))
 	}
 
 	return authorized, reason
@@ -135,9 +151,8 @@ func (a *realAuthorizer) checkAuthorization(ctx context.Context, user *domain.Au
 		}
 
 		// Check if the user's current tier is sufficient for the key's storage profile.
-		storageProfile := key.Metadata.GetStorageType()
-		if storageProfile == pk.StorageProfile_STORAGE_PROFILE_HARDENED && user.Tier == domain.TierFree {
-			return false, "client tier is insufficient to access this key"
+		if err := pkg_auth.ValidateTierForProfile(user.Tier, key.Metadata.GetStorageType()); err != nil {
+			return false, err.Error()
 		}
 	}
 
