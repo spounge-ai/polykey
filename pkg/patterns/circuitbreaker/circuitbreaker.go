@@ -16,90 +16,180 @@ const (
 )
 
 var ErrOpen = errors.New("circuit breaker is open")
+var ErrTimeout = errors.New("circuit breaker operation timed out")
 
-// Breaker is a generic, thread-safe circuit breaker.
+// StateChangeCallback is a function that gets called when the circuit breaker's state changes.
+type StateChangeCallback func(from, to State)
+
+// Breaker is a generic, thread-safe, context-aware circuit breaker.
 type Breaker[T any] struct {
+	// Configuration
 	maxFailures      int64
 	resetTimeout     time.Duration
+	callTimeout      time.Duration
 	halfOpenRequests int64
+	onStateChange    StateChangeCallback
 
+	// Internal state
 	state           atomic.Int32
 	failures        atomic.Int64
 	lastFailureTime atomic.Int64 // Unix nano
 	successCount    atomic.Int64
 }
 
-// New creates a new generic Circuit Breaker.
-func New[T any](maxFailures int, resetTimeout time.Duration) *Breaker[T] {
-	cb := &Breaker[T]{
-		maxFailures:      int64(maxFailures),
-		resetTimeout:     resetTimeout,
-		halfOpenRequests: 1, // Allow one successful request in half-open state to close the circuit
+// Option configures a Breaker.
+type Option[T any] func(*Breaker[T])
+
+// WithResetTimeout sets the duration the breaker remains open before transitioning to half-open.
+func WithResetTimeout[T any](d time.Duration) Option[T] {
+	return func(b *Breaker[T]) {
+		b.resetTimeout = d
 	}
-	cb.state.Store(int32(StateClosed))
-	return cb
+}
+
+// WithCallTimeout sets the timeout for each individual call made through the breaker.
+func WithCallTimeout[T any](d time.Duration) Option[T] {
+	return func(b *Breaker[T]) {
+		b.callTimeout = d
+	}
+}
+
+// WithHalfOpenRequests sets the number of successful requests required in the half-open state to close the circuit.
+func WithHalfOpenRequests[T any](n int64) Option[T] {
+	return func(b *Breaker[T]) {
+		if n > 0 {
+			b.halfOpenRequests = n
+		}
+	}
+}
+
+// WithStateChangeCallback sets a callback function to be executed when the breaker's state changes.
+func WithStateChangeCallback[T any](cb StateChangeCallback) Option[T] {
+	return func(b *Breaker[T]) {
+		b.onStateChange = cb
+	}
+}
+
+// New creates a new generic Circuit Breaker.
+func New[T any](maxFailures int, opts ...Option[T]) *Breaker[T] {
+	b := &Breaker[T]{
+		maxFailures:      int64(maxFailures),
+		resetTimeout:     5 * time.Second, // Default reset timeout
+		callTimeout:      2 * time.Second, // Default call timeout
+		halfOpenRequests: 1,
+		onStateChange:    func(from, to State) {}, // No-op callback by default
+	}
+
+	for _, opt := range opts {
+		opt(b)
+	}
+
+	b.state.Store(int32(StateClosed))
+	return b
 }
 
 // Execute wraps a function call with the circuit breaker logic.
-func (cb *Breaker[T]) Execute(ctx context.Context, fn func(ctx context.Context) (T, error)) (T, error) {
-	if !cb.canExecute() {
-		var zero T
+func (b *Breaker[T]) Execute(ctx context.Context, fn func(ctx context.Context) (T, error)) (T, error) {
+	var zero T
+	if !b.canExecute() {
 		return zero, ErrOpen
 	}
 
-	result, err := fn(ctx)
-	cb.recordResult(err)
+	// If the parent context has a deadline shorter than our call timeout, respect it.
+	callCtx, cancel := context.WithTimeout(ctx, b.callTimeout)
+	defer cancel()
 
-	return result, err
+	resultChan := make(chan T, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		result, err := fn(callCtx)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		resultChan <- result
+	}()
+
+	select {
+	case result := <-resultChan:
+		b.recordResult(nil)
+		return result, nil
+	case err := <-errChan:
+		b.recordResult(err)
+		return zero, err
+	case <-callCtx.Done():
+		// Check if the cancellation came from our timeout or the parent context.
+		err := callCtx.Err()
+		if errors.Is(err, context.DeadlineExceeded) {
+			b.recordResult(ErrTimeout)
+			return zero, ErrTimeout
+		}
+		// If it was the parent context, just record a generic failure.
+		b.recordResult(err)
+		return zero, err
+	}
 }
 
-func (cb *Breaker[T]) canExecute() bool {
-	currentState := State(cb.state.Load())
+func (b *Breaker[T]) canExecute() bool {
+	currentState := State(b.state.Load())
 
 	switch currentState {
 	case StateClosed:
 		return true
 	case StateOpen:
-		now := time.Now().UnixNano()
-		lastFailure := cb.lastFailureTime.Load()
-		if now > lastFailure+cb.resetTimeout.Nanoseconds() {
-			// Attempt to move to half-open state
-			if cb.state.CompareAndSwap(int32(StateOpen), int32(StateHalfOpen)) {
-				cb.successCount.Store(0)
-			}
+		// Check if the reset timeout has passed.
+		if time.Now().UnixNano() > b.lastFailureTime.Load()+b.resetTimeout.Nanoseconds() {
+			b.transition(StateOpen, StateHalfOpen)
 			return true
 		}
 		return false
 	case StateHalfOpen:
-		return cb.successCount.Load() < cb.halfOpenRequests
+		// Allow a limited number of requests through.
+		return b.successCount.Load() < b.halfOpenRequests
 	default:
 		return false
 	}
 }
 
-func (cb *Breaker[T]) recordResult(err error) {
-	now := time.Now().UnixNano()
-
+func (b *Breaker[T]) recordResult(err error) {
 	if err != nil {
-		newFailures := cb.failures.Add(1)
-		cb.lastFailureTime.Store(now)
+		// Failure path
+		newFailures := b.failures.Add(1)
+		b.lastFailureTime.Store(time.Now().UnixNano())
 
-		currentState := State(cb.state.Load())
-		if currentState == StateHalfOpen || (currentState == StateClosed && newFailures >= cb.maxFailures) {
-			cb.state.CompareAndSwap(int32(currentState), int32(StateOpen))
-			// TODO: Add logging and metrics for state change to open
+		currentState := State(b.state.Load())
+		if currentState == StateHalfOpen || (currentState == StateClosed && newFailures >= b.maxFailures) {
+			b.transition(currentState, StateOpen)
 		}
 	} else {
-		currentState := State(cb.state.Load())
+		// Success path
+		currentState := State(b.state.Load())
 		if currentState == StateHalfOpen {
-			newSuccesses := cb.successCount.Add(1)
-			if newSuccesses >= cb.halfOpenRequests {
-				if cb.state.CompareAndSwap(int32(StateHalfOpen), int32(StateClosed)) {
-					cb.failures.Store(0)
-				}
+			if b.successCount.Add(1) >= b.halfOpenRequests {
+				b.transition(StateHalfOpen, StateClosed)
 			}
 		} else {
-			cb.failures.Store(0)
+			// Reset failures on any success in the closed state.
+			b.failures.Store(0)
 		}
+	}
+}
+
+func (b *Breaker[T]) transition(from, to State) {
+	if b.state.CompareAndSwap(int32(from), int32(to)) {
+		// Reset counters on state change.
+		switch to {
+		case StateOpen:
+			b.successCount.Store(0)
+		case StateHalfOpen:
+			b.successCount.Store(0)
+		case StateClosed:
+			b.failures.Store(0)
+			b.successCount.Store(0)
+		}
+
+		// Fire the callback.
+		b.onStateChange(from, to)
 	}
 }

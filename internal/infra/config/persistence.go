@@ -2,10 +2,18 @@ package config
 
 import "time"
 
+// CircuitBreakerConfig holds settings for the persistence circuit breaker.
+type CircuitBreakerConfig struct {
+	Enabled      bool          `mapstructure:"enabled"`
+	MaxFailures  int           `mapstructure:"max_failures"`
+	ResetTimeout time.Duration `mapstructure:"reset_timeout"`
+}
+
 // PersistenceConfig represents the persistence configuration.
 type PersistenceConfig struct {
-	Type     string         `mapstructure:"type" validate:"required,oneof=s3 neondb cockroachdb"`
-	Database DatabaseConfig `mapstructure:"database"`
+	Type           string               `mapstructure:"type" validate:"required,oneof=s3 neondb cockroachdb"`
+	Database       DatabaseConfig       `mapstructure:"database"`
+	CircuitBreaker CircuitBreakerConfig `mapstructure:"circuit_breaker"`
 }
 
 // DatabaseConfig represents the database configuration.

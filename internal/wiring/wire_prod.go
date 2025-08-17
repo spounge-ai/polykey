@@ -149,11 +149,26 @@ func (c *Container) initKeyRepository() error {
 		return fmt.Errorf("database pool not initialized")
 	}
 	var err error
-	c.keyRepo, err = persistence.NewNeonDBStorage(c.pgxPool, c.logger)
-	if err == nil {
-		c.logger.Debug("initialized key repository")
+	// Create the base repository
+	baseRepo, err := persistence.NewNeonDBStorage(c.pgxPool, c.logger)
+	if err != nil {
+		return err
 	}
-	return err
+
+	// Check if the circuit breaker is enabled
+	if c.config.Persistence.CircuitBreaker.Enabled {
+		c.logger.Debug("wrapping key repository with circuit breaker")
+		c.keyRepo = persistence.NewKeyRepositoryCircuitBreaker(
+			baseRepo,
+			c.config.Persistence.CircuitBreaker.MaxFailures,
+			c.config.Persistence.CircuitBreaker.ResetTimeout,
+		)
+	} else {
+		c.keyRepo = baseRepo
+	}
+
+	c.logger.Debug("initialized key repository")
+	return nil
 }
 
 func (c *Container) initAuditRepository() error {

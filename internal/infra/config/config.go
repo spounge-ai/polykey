@@ -56,6 +56,10 @@ func Load(path string) (*Config, error) {
 	vip.SetDefault("storage_backend", "neondb")
 	vip.SetDefault("default_kms_provider", "local")
 
+	vip.SetDefault("persistence.circuit_breaker.enabled", true)
+	vip.SetDefault("persistence.circuit_breaker.max_failures", 5)
+	vip.SetDefault("persistence.circuit_breaker.reset_timeout", "30s")
+
 	if err := vip.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
