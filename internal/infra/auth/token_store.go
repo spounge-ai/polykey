@@ -20,7 +20,7 @@ type TokenStore interface {
 // NewInMemoryTokenStore creates a new in-memory token store.
 func NewInMemoryTokenStore() TokenStore {
 	return &inMemoryTokenStore{
-		store: cache.New[string, struct{}](
+		store: cache.New(
 			cache.WithCleanupInterval[string, struct{}](10 * time.Minute),
 		),
 	}

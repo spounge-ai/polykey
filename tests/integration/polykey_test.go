@@ -61,7 +61,7 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 			},
 		},
 		BootstrapSecrets: infra_config.BootstrapSecrets{
-			PolykeyMasterKey: "/kH+AgL+tN2qrA8I+nXL7is4ORj23p2YVhpTjAz2YIs=",
+			PolykeyMasterKey: "/kH+AgL+tN2qrA8I+nXL7is4ORj23p2YVhpTjAz2YIs=", // generated for integration test
 			JWTRSAPrivateKey: string(privateKeyPEM),
 		},
 	}
@@ -72,7 +72,7 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 	require.NoError(t, err)
 	kmsProviders["local"] = localKMS
 
-	keyRepo, err := persistence.NewNeonDBStorage(dbpool, slog.Default())
+	keyRepo, err := persistence.NewNeonDBAdapter(dbpool, slog.Default())
 	require.NoError(t, err)
 
 	auditRepo, err := persistence.NewAuditRepository(dbpool)

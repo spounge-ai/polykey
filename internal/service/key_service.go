@@ -9,11 +9,11 @@ import (
 	"github.com/spounge-ai/polykey/internal/domain"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/internal/infra/config"
-	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	"github.com/spounge-ai/polykey/internal/kms"
 	"github.com/spounge-ai/polykey/internal/pipelines"
 	"github.com/spounge-ai/polykey/pkg/crypto"
 	"github.com/spounge-ai/polykey/pkg/memory"
+	"github.com/spounge-ai/polykey/pkg/postgres"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
@@ -94,7 +94,7 @@ func (s *keyServiceImpl) getKeyByRequest(ctx context.Context, keyID domain.KeyID
 
 	if err != nil {
 		s.logger.ErrorContext(ctx, "[key_service.go:getKeyByRequest] Error from keyRepo", "error", err)
-		if errors.Is(err, persistence.ErrKeyNotFound) {
+		if errors.Is(err, postgres.ErrKeyNotFound) {
 			return nil, app_errors.ErrKeyNotFound
 		}
 		return nil, err

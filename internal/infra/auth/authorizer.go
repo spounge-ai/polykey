@@ -10,7 +10,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/constants"
 	"github.com/spounge-ai/polykey/internal/domain"
 	"github.com/spounge-ai/polykey/internal/infra/config"
-	"github.com/spounge-ai/polykey/internal/infra/persistence"
+	"github.com/spounge-ai/polykey/pkg/postgres"
 	"github.com/spounge-ai/polykey/pkg/cache"
 	pkg_auth "github.com/spounge-ai/polykey/pkg/authorization"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
@@ -134,7 +134,7 @@ func (a *realAuthorizer) checkAuthorization(ctx context.Context, user *domain.Au
 	case constants.AuthKeysRead, constants.AuthKeysRotate, constants.AuthKeysRevoke, constants.AuthKeysUpdate:
 		key, err := a.keyRepo.GetKey(ctx, keyID)
 		if err != nil {
-			if errors.Is(err, persistence.ErrKeyNotFound) {
+			if errors.Is(err, postgres.ErrKeyNotFound) {
 				return false, "key_not_found"
 			}
 			// For other errors, it's better to not leak details.
