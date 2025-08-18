@@ -62,8 +62,10 @@ func New(
 	}
 
 	// Create a rate limiter for the authentication interceptor.
-	// Allow 10 requests per second with a burst of 20.
-	rateLimiter := ratelimit.NewInMemoryRateLimiter(rate.Limit(10), 20)
+	rateLimiter := ratelimit.NewInMemoryRateLimiter(
+		rate.Limit(cfg.Server.RateLimiter.Rate),
+		cfg.Server.RateLimiter.Burst,
+	)
 
 	opts = append(opts, grpc.ChainUnaryInterceptor(
 		interceptors.UnaryLoggingInterceptor(logger),

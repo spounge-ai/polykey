@@ -61,6 +61,10 @@ func Load(path string) (*Config, error) {
 	vip.SetDefault("persistence.circuit_breaker.max_failures", 5)
 	vip.SetDefault("persistence.circuit_breaker.reset_timeout", "30s")
 
+	vip.SetDefault("server.rate_limiter.enabled", true)
+	vip.SetDefault("server.rate_limiter.rate", 10)
+	vip.SetDefault("server.rate_limiter.burst", 20)
+
 	vip.SetDefault("auditing.asynchronous.enabled", true)
 	vip.SetDefault("auditing.asynchronous.channel_buffer_size", 10000)
 	vip.SetDefault("auditing.asynchronous.worker_count", 3)
