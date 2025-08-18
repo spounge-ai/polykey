@@ -4,7 +4,7 @@ package constants
 const (
 	StmtGetLatestKey    = "get_latest_key"
 	StmtGetKeyByVersion = "get_key_by_version"
-	StmtCreateKey       = "create_key"
+	
 	StmtUpdateMetadata  = "update_metadata"
 	StmtRevokeKey       = "revoke_key"
 	StmtCheckExists     = "check_exists"
@@ -30,10 +30,7 @@ var Queries = map[string]string{
 		FROM keys 
 		WHERE id = $1::uuid AND version = $2`,
 
-	StmtCreateKey: `
-		INSERT INTO keys (id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at, revoked_at`,
+	
 
 	StmtUpdateMetadata: `
 		UPDATE keys 

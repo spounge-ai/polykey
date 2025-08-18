@@ -113,12 +113,12 @@ func (cr *CachedRepository) GetKeyMetadataByVersion(ctx context.Context, id doma
 	return cr.repo.GetKeyMetadataByVersion(ctx, id, version)
 }
 
-func (cr *CachedRepository) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
-	createdKey, err := cr.repo.CreateKey(ctx, key)
+func (cr *CachedRepository) CreateKey(ctx context.Context, key *domain.Key) error {
+	err := cr.repo.CreateKey(ctx, key)
 	if err == nil {
-		cr.invalidateCache(createdKey.ID)
+		cr.invalidateCache(key.ID)
 	}
-	return createdKey, err
+	return err
 }
 
 func (cr *CachedRepository) CreateBatchKeys(ctx context.Context, keys []*domain.Key) error {

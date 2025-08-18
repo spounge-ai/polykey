@@ -68,14 +68,11 @@ func (cb *KeyRepositoryCircuitBreaker) GetKeyMetadataByVersion(ctx context.Conte
 	return result.(*pk.KeyMetadata), nil
 }
 
-func (cb *KeyRepositoryCircuitBreaker) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
-	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
-		return cb.repo.CreateKey(ctx, key)
+func (cb *KeyRepositoryCircuitBreaker) CreateKey(ctx context.Context, key *domain.Key) error {
+	_, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
+		return nil, cb.repo.CreateKey(ctx, key)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return result.(*domain.Key), nil
+	return err
 }
 
 func (cb *KeyRepositoryCircuitBreaker) CreateBatchKeys(ctx context.Context, keys []*domain.Key) error {

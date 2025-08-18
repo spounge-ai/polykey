@@ -109,18 +109,17 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, err
 	}
 
-	createdKey, err := s.keyRepo.CreateKey(ctx, finalKey)
-	if err != nil {
+	if err := s.keyRepo.CreateKey(ctx, finalKey); err != nil {
 		return nil, fmt.Errorf("failed to create key: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "key created", "keyId", createdKey.ID, "keyType", req.GetKeyType().String())
+	s.logger.InfoContext(ctx, "key created", "keyId", finalKey.ID, "keyType", req.GetKeyType().String())
 
 	return &pk.CreateKeyResponse{
-		KeyId:    createdKey.ID.String(),
-		Metadata: createdKey.Metadata,
+		KeyId:    finalKey.ID.String(),
+		Metadata: finalKey.Metadata,
 		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    append([]byte(nil), createdKey.EncryptedDEK...),
+			EncryptedKeyData:    append([]byte(nil), finalKey.EncryptedDEK...),
 			EncryptionAlgorithm: algorithm,
 			KeyChecksum:         "sha256", // Note: This checksum is of the *encrypted* key, which is less useful.
 		},

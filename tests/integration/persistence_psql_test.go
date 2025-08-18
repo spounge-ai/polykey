@@ -55,7 +55,7 @@ func TestNeonDBStorage(t *testing.T) {
 			Status:       domain.KeyStatusActive,
 		}
 
-		_, err = storage.CreateKey(context.Background(), key)
+		err = storage.CreateKey(context.Background(), key)
 		require.NoError(t, err)
 
 		retrievedKey, err := storage.GetKey(context.Background(), keyID)
@@ -79,7 +79,7 @@ func TestNeonDBStorage(t *testing.T) {
 			EncryptedDEK: []byte("initial-dek"),
 			Status:       domain.KeyStatusActive,
 		}
-		_, err = storage.CreateKey(context.Background(), key)
+		err = storage.CreateKey(context.Background(), key)
 		require.NoError(t, err)
 
 		newDEK := []byte("new-test-dek")

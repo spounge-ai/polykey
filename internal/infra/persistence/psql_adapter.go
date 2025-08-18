@@ -120,40 +120,48 @@ func (a *PSQLAdapter) GetKeyMetadataByVersion(ctx context.Context, id domain.Key
 	return &metadata, nil
 }
 
-func (a *PSQLAdapter) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
+func (a *PSQLAdapter) CreateKey(ctx context.Context, key *domain.Key) error {
 	if key == nil {
-		return nil, errors.New("key cannot be nil")
+		return errors.New("key cannot be nil")
 	}
 	if key.Metadata == nil {
-		return nil, errors.New("key metadata cannot be nil")
+		return errors.New("key metadata cannot be nil")
 	}
 	if len(key.EncryptedDEK) == 0 {
-		return nil, errors.New("encrypted DEK cannot be empty")
+		return errors.New("encrypted DEK cannot be empty")
 	}
 
 	metadataRaw, err := a.optimizer.MarshalWithBuffer(key.Metadata)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
 	storageType := getStorageTypeOptimized(key.Metadata.GetStorageType())
 
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	row := a.DB.QueryRow(ctx, consts.Queries[consts.StmtCreateKey],
-		key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK,
-		key.Status, storageType, key.CreatedAt, key.UpdatedAt)
+	// Use CopyFrom for single-row inserts for performance, as it bypasses some SQL overhead.
+	rows := [][]interface{}{
+		{
+			key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK,
+			key.Status, storageType, key.CreatedAt, key.UpdatedAt,
+		},
+	}
 
-	createdKey, err := ScanKeyRowWithID(row)
+	_, err = a.DB.CopyFrom(
+		ctx,
+		pgx.Identifier{"keys"},
+		[]string{"id", "version", "metadata", "encrypted_dek", "status", "storage_type", "created_at", "updated_at"},
+		pgx.CopyFromRows(rows),
+	)
+
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
-			return nil, psql.ErrKeyAlreadyExists
+			return psql.ErrKeyAlreadyExists
 		}
-		return nil, fmt.Errorf("failed to create key %s: %w", key.ID.String(), err)
+		return fmt.Errorf("failed to create key %s: %w", key.ID.String(), err)
 	}
 
-	return createdKey, nil
+	return nil
 }
 
 func (a *PSQLAdapter) CreateBatchKeys(ctx context.Context, keys []*domain.Key) error {
