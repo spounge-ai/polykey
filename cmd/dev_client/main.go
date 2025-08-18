@@ -93,6 +93,7 @@ func (tc *PolykeyTestClient) Close() {
 func (tc *PolykeyTestClient) RunAllTests() {
 	tc.runHappyPathTests()
 	tc.runErrorConditionTests()
+	tc.runBatchTests()
 }
 
 func (tc *PolykeyTestClient) runHappyPathTests() {
@@ -112,6 +113,18 @@ func (tc *PolykeyTestClient) runHappyPathTests() {
 		tc.testCache(authedCtx, keyID) // Add cache test here
 	}
 	tc.testListKeys(authedCtx)
+}
+
+func (tc *PolykeyTestClient) runBatchTests() {
+	authToken := tc.authenticate()
+	if authToken == "" {
+		return
+	}
+
+	authedCtx := tc.createAuthenticatedContext(authToken)
+
+	createdKeys := tc.testBatchCreateKeys(authedCtx)
+	tc.testBatchGetKeys(authedCtx, createdKeys)
 }
 
 func (tc *PolykeyTestClient) runErrorConditionTests() {
@@ -363,6 +376,93 @@ func (tc *PolykeyTestClient) testUnauthenticatedAccess() {
 		tc.logger.Info("Unauthenticated access test passed", "code", s.Code().String())
 	} else {
 		tc.logger.Error("Unauthenticated access test failed", "error", err)
+	}
+}
+
+func (tc *PolykeyTestClient) testBatchCreateKeys(ctx context.Context) []*pk.BatchCreateKeysResult {
+	tc.logger.Info("--- Batch Create Keys Test ---")
+
+	createItems := []*pk.CreateKeyItem{
+		{
+			KeyType:     pk.KeyType_KEY_TYPE_AES_256,
+			Description: "Batch key 1",
+			Tags:        map[string]string{"batch": "true", "index": "1"},
+		},
+		{
+			KeyType:     pk.KeyType_KEY_TYPE_AES_256,
+			Description: "Batch key 2",
+			Tags:        map[string]string{"batch": "true", "index": "2"},
+		},
+		{
+			KeyType:     pk.KeyType_KEY_TYPE_AES_256,
+			Description: "Batch key 3",
+			Tags:        map[string]string{"batch": "true", "index": "3"},
+		},
+	}
+
+	req := &pk.BatchCreateKeysRequest{
+		RequesterContext: &pk.RequesterContext{
+			ClientIdentity: tc.creds.ID,
+		},
+		Keys: createItems,
+	}
+
+	resp, err := tc.client.BatchCreateKeys(ctx, req)
+	if err != nil {
+		tc.logger.Error("BatchCreateKeys failed", "error", err)
+		return nil
+	}
+
+	tc.logger.Info("BatchCreateKeys successful", "results_count", len(resp.GetResults()))
+	for i, result := range resp.GetResults() {
+		switch r := result.Result.(type) {
+		case *pk.BatchCreateKeysResult_Success:
+			tc.logger.Info("Key created successfully", "index", i, "keyId", r.Success.GetKeyId())
+		case *pk.BatchCreateKeysResult_Error:
+			tc.logger.Error("Failed to create key", "index", i, "error", r.Error)
+		}
+	}
+	return resp.GetResults()
+}
+
+func (tc *PolykeyTestClient) testBatchGetKeys(ctx context.Context, createdKeys []*pk.BatchCreateKeysResult) {
+	tc.logger.Info("--- Batch Get Keys Test ---")
+
+	if len(createdKeys) == 0 {
+		tc.logger.Info("No keys to get")
+		return
+	}
+
+	getItems := make([]*pk.KeyRequestItem, 0, len(createdKeys))
+	for _, result := range createdKeys {
+		if success := result.GetSuccess(); success != nil {
+			getItems = append(getItems, &pk.KeyRequestItem{
+				KeyId: success.GetKeyId(),
+			})
+		}
+	}
+
+	req := &pk.BatchGetKeysRequest{
+		RequesterContext: &pk.RequesterContext{
+			ClientIdentity: tc.creds.ID,
+		},
+		Keys: getItems,
+	}
+
+	resp, err := tc.client.BatchGetKeys(ctx, req)
+	if err != nil {
+		tc.logger.Error("BatchGetKeys failed", "error", err)
+		return
+	}
+
+	tc.logger.Info("BatchGetKeys successful", "results_count", len(resp.GetResults()))
+	for i, result := range resp.GetResults() {
+		switch r := result.Result.(type) {
+		case *pk.BatchGetKeysResult_Success:
+			tc.logger.Info("Key retrieved successfully", "index", i, "keyId", r.Success.GetMetadata().GetKeyId())
+		case *pk.BatchGetKeysResult_Error:
+			tc.logger.Error("Failed to retrieve key", "index", i, "error", r.Error)
+		}
 	}
 }
 
