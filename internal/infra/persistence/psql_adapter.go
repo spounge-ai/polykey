@@ -378,7 +378,7 @@ func (a *PSQLAdapter) GetBatchKeys(ctx context.Context, ids []domain.KeyID) ([]*
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // Increased timeout for batch
 	defer cancel()
 
-	rows, err := a.DB.Query(ctx, `SELECT id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at, revoked_at FROM keys WHERE id = ANY($1) ORDER BY id, version DESC`, stringIDs)
+	rows, err := a.DB.Query(ctx, consts.Queries[consts.StmtGetBatchKeys], stringIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get batch keys: %w", err)
 	}
@@ -414,7 +414,7 @@ func (a *PSQLAdapter) GetBatchKeyMetadata(ctx context.Context, ids []domain.KeyI
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // Increased timeout for batch
 	defer cancel()
 
-	rows, err := a.DB.Query(ctx, `SELECT metadata FROM keys WHERE id = ANY($1) ORDER BY id, version DESC`, stringIDs)
+	rows, err := a.DB.Query(ctx, consts.Queries[consts.StmtGetBatchKeyMetadata], stringIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get batch key metadata: %w", err)
 	}
@@ -455,7 +455,7 @@ func (a *PSQLAdapter) RevokeBatchKeys(ctx context.Context, ids []domain.KeyID) e
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	result, err := a.DB.Exec(ctx, `UPDATE keys SET status = $1, revoked_at = $2 WHERE id = ANY($3)`, domain.KeyStatusRevoked, time.Now(), stringIDs)
+	result, err := a.DB.Exec(ctx, consts.Queries[consts.StmtRevokeBatchKeys], domain.KeyStatusRevoked, time.Now(), stringIDs)
 	if err != nil {
 		return fmt.Errorf("failed to revoke batch keys: %w", err)
 	}

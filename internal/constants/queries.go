@@ -12,6 +12,9 @@ const (
 	StmtListKeys        = "list_keys"
 	StmtGetKeyMetadata    = "get_key_metadata"
 	StmtGetKeyMetadataByVersion = "get_key_metadata_by_version"
+	StmtGetBatchKeys        = "get_batch_keys"
+	StmtGetBatchKeyMetadata = "get_batch_key_metadata"
+	StmtRevokeBatchKeys     = "revoke_batch_keys"
 )
 
 var Queries = map[string]string{
@@ -76,4 +79,21 @@ var Queries = map[string]string{
 	StmtGetKeyMetadataByVersion: `
 		SELECT metadata FROM keys 
 		WHERE id = $1::uuid AND version = $2`,
+
+	StmtGetBatchKeys: `
+		SELECT id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at, revoked_at
+		FROM keys
+		WHERE id = ANY($1)
+		ORDER BY id, version DESC`,
+
+	StmtGetBatchKeyMetadata: `
+		SELECT metadata
+		FROM keys
+		WHERE id = ANY($1)
+		ORDER BY id, version DESC`,
+
+	StmtRevokeBatchKeys: `
+		UPDATE keys
+		SET status = $1, revoked_at = $2
+		WHERE id = ANY($3)`,
 }
