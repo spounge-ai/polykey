@@ -14,8 +14,10 @@ import (
 
 const (
 	// Cache configuration
-	defaultCacheTTL     = 5 * time.Minute
-	cacheCleanupInterval = 10 * time.Minute
+	defaultCacheTTL      = 2 * time.Minute
+	cacheCleanupInterval = 5 * time.Minute
+	cacheIndexCapacity   = 64
+	cacheKeyVersionsCap  = 16
 )
 
 // CachedRepository is a decorator for a KeyRepository that adds a caching layer.
@@ -32,7 +34,7 @@ type CachedRepository struct {
 func NewCachedRepository(repo domain.KeyRepository, logger *slog.Logger) *CachedRepository {
 	cr := &CachedRepository{
 		repo:       repo,
-		cacheIndex: make(map[string]map[string]struct{}),
+		cacheIndex: make(map[string]map[string]struct{}, cacheIndexCapacity),
 		optimizer:  NewQueryOptimizer(),
 		logger:     logger,
 	}
@@ -93,12 +95,12 @@ func (cr *CachedRepository) GetKeyByVersion(ctx context.Context, id domain.KeyID
 	return key, nil
 }
 
-func (cr *CachedRepository) CreateKey(ctx context.Context, key *domain.Key) error {
-	err := cr.repo.CreateKey(ctx, key)
+func (cr *CachedRepository) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
+	createdKey, err := cr.repo.CreateKey(ctx, key)
 	if err == nil {
-		cr.invalidateCache(key.ID)
+		cr.invalidateCache(createdKey.ID)
 	}
-	return err
+	return createdKey, err
 }
 
 func (cr *CachedRepository) CreateKeys(ctx context.Context, keys []*domain.Key) error {
@@ -176,7 +178,7 @@ func (cr *CachedRepository) storeInCache(cacheKey string, k *domain.Key) {
 	cr.cacheIndexMux.Lock()
 	keyIDStr := k.ID.String()
 	if _, ok := cr.cacheIndex[keyIDStr]; !ok {
-		cr.cacheIndex[keyIDStr] = make(map[string]struct{})
+		cr.cacheIndex[keyIDStr] = make(map[string]struct{}, cacheKeyVersionsCap)
 	}
 	cr.cacheIndex[keyIDStr][cacheKey] = struct{}{}
 	cr.cacheIndexMux.Unlock()

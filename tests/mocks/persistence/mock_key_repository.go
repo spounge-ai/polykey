@@ -35,9 +35,9 @@ func (r *InMemoryKeyRepository) GetKeyByVersion(ctx context.Context, id domain.K
 	return r.GetKey(ctx, id)
 }
 
-func (r *InMemoryKeyRepository) CreateKey(ctx context.Context, key *domain.Key, isPremium bool) error {
+func (r *InMemoryKeyRepository) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
 	r.keys.Store(key.ID.String(), key)
-	return nil
+	return key, nil
 }
 
 func (r *InMemoryKeyRepository) ListKeys(ctx context.Context) ([]*domain.Key, error) {

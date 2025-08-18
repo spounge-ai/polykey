@@ -111,17 +111,18 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	// Now, populate the final domain object with the encrypted DEK for storage.
 	finalKey.EncryptedDEK = encryptedDEK
 
-	if err := s.keyRepo.CreateKey(ctx, finalKey); err != nil {
+	createdKey, err := s.keyRepo.CreateKey(ctx, finalKey)
+	if err != nil {
 		return nil, fmt.Errorf("failed to create key: %w", err)
 	}
 
 	s.logger.InfoContext(ctx, "key created", "keyId", keyID, "keyType", req.GetKeyType().String())
 
 	return &pk.CreateKeyResponse{
-		KeyId:    keyID.String(),
-		Metadata: finalKey.Metadata,
+		KeyId:    createdKey.ID.String(),
+		Metadata: createdKey.Metadata,
 		KeyMaterial: &pk.KeyMaterial{
-			EncryptedKeyData:    append([]byte(nil), finalKey.EncryptedDEK...),
+			EncryptedKeyData:    append([]byte(nil), createdKey.EncryptedDEK...),
 			EncryptionAlgorithm: algorithm,
 			KeyChecksum:         "sha256", // Note: This checksum is of the *encrypted* key, which is less useful.
 		},

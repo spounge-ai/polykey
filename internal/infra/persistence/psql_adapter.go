@@ -36,17 +36,13 @@ func NewPSQLAdapter(db *pgxpool.Pool, logger *slog.Logger) (*PSQLAdapter, error)
 		txManager:    NewTransactionManager[*domain.Key](logger),
 	}
 
-	if err := a.PrepareStatements(context.Background(), consts.Queries); err != nil {
-		return nil, fmt.Errorf("failed to prepare statements: %w", err)
-	}
-
 	return a, nil
 }
 
 func (a *PSQLAdapter) GetKey(ctx context.Context, id domain.KeyID) (*domain.Key, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	row := a.DB.QueryRow(ctx, consts.StmtGetLatestKey, id.String())
+	row := a.DB.QueryRow(ctx, consts.Queries[consts.StmtGetLatestKey], id.String())
 	key, err := ScanKeyRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -63,10 +59,10 @@ func (a *PSQLAdapter) GetKeyByVersion(ctx context.Context, id domain.KeyID, vers
 	if version <= 0 {
 		return nil, psql.ErrInvalidVersion
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	row := a.DB.QueryRow(ctx, consts.StmtGetKeyByVersion, id.String(), version)
+	row := a.DB.QueryRow(ctx, consts.Queries[consts.StmtGetKeyByVersion], id.String(), version)
 	key, err := ScanKeyRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -80,43 +76,43 @@ func (a *PSQLAdapter) GetKeyByVersion(ctx context.Context, id domain.KeyID, vers
 	return key, nil
 }
 
-func (a *PSQLAdapter) CreateKey(ctx context.Context, key *domain.Key) error {
+func (a *PSQLAdapter) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
 	if key == nil {
-		return errors.New("key cannot be nil")
+		return nil, errors.New("key cannot be nil")
 	}
 	if key.Metadata == nil {
-		return errors.New("key metadata cannot be nil")
+		return nil, errors.New("key metadata cannot be nil")
 	}
 	if len(key.EncryptedDEK) == 0 {
-		return errors.New("encrypted DEK cannot be empty")
+		return nil, errors.New("encrypted DEK cannot be empty")
 	}
 
 	exists, err := a.Exists(ctx, key.ID)
 	if err != nil {
-		return fmt.Errorf("failed to check key existence: %w", err)
+		return nil, fmt.Errorf("failed to check key existence: %w", err)
 	}
 	if exists {
-		return psql.ErrKeyAlreadyExists
+		return nil, psql.ErrKeyAlreadyExists
 	}
 
 	metadataRaw, err := a.optimizer.MarshalWithBuffer(key.Metadata)
 	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
 	storageType := getStorageTypeOptimized(key.Metadata.GetStorageType())
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	_, err = a.DB.Exec(ctx, consts.StmtCreateKey,
+	row := a.DB.QueryRow(ctx, consts.Queries[consts.StmtCreateKey],
 		key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK,
 		key.Status, storageType, key.CreatedAt, key.UpdatedAt)
 
-	if err != nil {
-		return fmt.Errorf("failed to create key %s: %w", key.ID.String(), err)
+	if err := row.Scan(&key.Version, &key.CreatedAt, &key.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("failed to create key %s: %w", key.ID.String(), err)
 	}
 
-	return nil
+	return key, nil
 }
 
 func (a *PSQLAdapter) CreateKeys(ctx context.Context, keys []*domain.Key) error {
@@ -127,10 +123,10 @@ func (a *PSQLAdapter) CreateKeys(ctx context.Context, keys []*domain.Key) error 
 			return fmt.Errorf("failed to marshal metadata for key %s: %w", key.ID.String(), err)
 		}
 		storageType := getStorageTypeOptimized(key.Metadata.GetStorageType())
-		batch.Queue(consts.StmtCreateKey, key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK, key.Status, storageType, key.CreatedAt, key.UpdatedAt)
+		batch.Queue(consts.Queries[consts.StmtCreateKey], key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK, key.Status, storageType, key.CreatedAt, key.UpdatedAt)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	br := a.DB.SendBatch(ctx, batch)
 	defer func() {
@@ -150,9 +146,9 @@ func (a *PSQLAdapter) CreateKeys(ctx context.Context, keys []*domain.Key) error 
 }
 
 func (a *PSQLAdapter) ListKeys(ctx context.Context) ([]*domain.Key, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	rows, err := a.DB.Query(ctx, consts.StmtListKeys)
+	rows, err := a.DB.Query(ctx, consts.Queries[consts.StmtListKeys])
 	if err != nil {
 		return nil, fmt.Errorf("failed to query keys: %w", err)
 	}
@@ -185,9 +181,9 @@ func (a *PSQLAdapter) UpdateKeyMetadata(ctx context.Context, id domain.KeyID, me
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	result, err := a.DB.Exec(ctx, consts.StmtUpdateMetadata, metadataRaw, time.Now(), id.String())
+	result, err := a.DB.Exec(ctx, consts.Queries[consts.StmtUpdateMetadata], metadataRaw, time.Now(), id.String())
 	if err != nil {
 		return fmt.Errorf("failed to update key metadata %s: %w", id.String(), err)
 	}
@@ -204,7 +200,7 @@ func (a *PSQLAdapter) RotateKey(ctx context.Context, id domain.KeyID, newEncrypt
 		return nil, errors.New("new encrypted DEK cannot be empty")
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
 	return a.txManager.ExecuteInTransaction(ctx, a.DB, func(ctx context.Context, tx pgx.Tx) (*domain.Key, error) {
@@ -280,9 +276,9 @@ func (a *PSQLAdapter) rotateKeyInTx(ctx context.Context, tx pgx.Tx, id domain.Ke
 }
 
 func (a *PSQLAdapter) RevokeKey(ctx context.Context, id domain.KeyID) error {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	result, err := a.DB.Exec(ctx, consts.StmtRevokeKey, domain.KeyStatusRevoked, time.Now(), id.String())
+	result, err := a.DB.Exec(ctx, consts.Queries[consts.StmtRevokeKey], domain.KeyStatusRevoked, time.Now(), id.String())
 	if err != nil {
 		return fmt.Errorf("failed to revoke key %s: %w", id.String(), err)
 	}
@@ -295,9 +291,9 @@ func (a *PSQLAdapter) RevokeKey(ctx context.Context, id domain.KeyID) error {
 }
 
 func (a *PSQLAdapter) GetKeyVersions(ctx context.Context, id domain.KeyID) ([]*domain.Key, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	rows, err := a.DB.Query(ctx, consts.StmtGetVersions, id.String())
+	rows, err := a.DB.Query(ctx, consts.Queries[consts.StmtGetVersions], id.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to query key versions: %w", err)
 	}
@@ -322,10 +318,10 @@ func (a *PSQLAdapter) GetKeyVersions(ctx context.Context, id domain.KeyID) ([]*d
 }
 
 func (a *PSQLAdapter) Exists(ctx context.Context, id domain.KeyID) (bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	var exists bool
-	err := a.DB.QueryRow(ctx, consts.StmtCheckExists, id.String()).Scan(&exists)
+	err := a.DB.QueryRow(ctx, consts.Queries[consts.StmtCheckExists], id.String()).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("failed to check key existence %s: %w", id.String(), err)
 	}

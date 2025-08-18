@@ -59,11 +59,10 @@ func (cb *KeyRepositoryCircuitBreaker) GetKeyByVersion(ctx context.Context, id d
 	})
 }
 
-func (cb *KeyRepositoryCircuitBreaker) CreateKey(ctx context.Context, key *domain.Key) error {
-	_, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
-		return nil, cb.repo.CreateKey(ctx, key)
+func (cb *KeyRepositoryCircuitBreaker) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
+	return cb.getKeyBreaker.Execute(ctx, func(ctx context.Context) (*domain.Key, error) {
+		return cb.repo.CreateKey(ctx, key)
 	})
-	return err
 }
 
 func (cb *KeyRepositoryCircuitBreaker) CreateKeys(ctx context.Context, keys []*domain.Key) error {

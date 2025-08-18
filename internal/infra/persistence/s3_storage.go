@@ -53,8 +53,12 @@ func (s *S3Storage) GetKeyByVersion(ctx context.Context, id domain.KeyID, versio
 	return s.getKeyFromPath(ctx, keyPath)
 }
 
-func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key) error {
-	return s.putKey(ctx, key)
+func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
+	err := s.putKey(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
 }
 
 func (s *S3Storage) CreateKeys(ctx context.Context, keys []*domain.Key) error {

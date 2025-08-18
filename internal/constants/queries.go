@@ -27,7 +27,8 @@ var Queries = map[string]string{
 
 	StmtCreateKey: `
 		INSERT INTO keys (id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING version, created_at, updated_at`,
 
 	StmtUpdateMetadata: `
 		UPDATE keys 

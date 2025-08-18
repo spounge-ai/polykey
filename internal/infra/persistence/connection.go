@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"time"
+	"strings"
+	
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/infra/config"
 )
@@ -22,6 +24,22 @@ func NewSecureConnectionPool(ctx context.Context, dbConfig config.NeonDBConfig, 
 		return nil, fmt.Errorf("database connection must use TLS in production mode")
 	}
 
+	// Start NeonDB Optimizations
+	// Add -pooler to the host if not present. Assumes endpoint format is 'ep-project-123456.region.aws.neon.tech'.
+	if !strings.Contains(poolConfig.ConnConfig.Host, "-pooler") {
+		parts := strings.SplitN(poolConfig.ConnConfig.Host, ".", 2)
+		if len(parts) == 2 {
+			poolConfig.ConnConfig.Host = parts[0] + "-pooler." + parts[1]
+		}
+	}
+
+	// Use simple protocol for PgBouncer compatibility.
+	if poolConfig.ConnConfig.RuntimeParams == nil {
+		poolConfig.ConnConfig.RuntimeParams = make(map[string]string)
+	}
+	poolConfig.ConnConfig.RuntimeParams["prefer_simple_protocol"] = "true"
+	// End NeonDB Optimizations
+
 	if persistenceConfig.Database.TLS.Enabled {
 		poolConfig.ConnConfig.TLSConfig = &tls.Config{
 			ServerName:         poolConfig.ConnConfig.Host,
@@ -32,8 +50,8 @@ func NewSecureConnectionPool(ctx context.Context, dbConfig config.NeonDBConfig, 
 
 	poolConfig.MaxConns = persistenceConfig.Database.Connection.MaxConns
 	poolConfig.MinConns = persistenceConfig.Database.Connection.MinConns
-	poolConfig.MaxConnIdleTime = 30 * time.Second
-	poolConfig.MaxConnLifetime = 5 * time.Minute
+	poolConfig.MaxConnIdleTime = persistenceConfig.Database.Connection.MaxConnIdleTime
+	poolConfig.MaxConnLifetime = persistenceConfig.Database.Connection.MaxConnLifetime
 	poolConfig.HealthCheckPeriod = persistenceConfig.Database.Connection.HealthCheckPeriod
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)

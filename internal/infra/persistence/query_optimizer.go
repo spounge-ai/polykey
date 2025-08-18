@@ -8,7 +8,7 @@ import (
 
 const (
 	// builderInitialCap is the initial capacity for the string builder.
-	builderInitialCap = 64
+	builderInitialCap = 128
 )
 
 // QueryOptimizer manages performance optimizations like buffer and builder pools.
