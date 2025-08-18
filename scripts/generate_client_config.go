@@ -19,7 +19,6 @@ type serverClientData struct {
 	HashedAPIKey string   `yaml:"hashed_api_key"`
 	Permissions  []string `yaml:"permissions"`
 	Description  string   `yaml:"description,omitempty"`
-	Tier         string   `yaml:"tier"`
 }
 
 // serverConfig matches the top-level structure of the server-side client file
@@ -68,7 +67,6 @@ func generateServerConfig(clientID, clientSecret, description string) error {
 				HashedAPIKey: string(hashedSecret),
 				Permissions: []string{"*"}, // Give dev client all permissions
 				Description:  description,
-				Tier:         "enterprise",
 			},
 		},
 	}
@@ -80,6 +78,7 @@ func generateServerConfig(clientID, clientSecret, description string) error {
 
 	return os.WriteFile(serverConfigPath, yamlData, 0644)
 }
+
 
 func generateClientSecret(clientID, clientSecret string) error {
 	secret := clientSecretConfig{

@@ -20,6 +20,11 @@ persistence:
     tls:
       enabled: false
       ssl_mode: "disable" # e.g., disable, require, verify-ca, verify-full
+      ssl_cert: "<path-to-your-db-client-cert.pem>"
+      ssl_key: "<path-to-your-db-client-key.pem>"
+      ssl_root_cert: "<path-to-your-db-ca-cert.pem>"
+    max_retries: 3
+    retry_backoff: 1s
 
 aws:
   enabled: false # Set to true to use AWS services (S3, KMS)
