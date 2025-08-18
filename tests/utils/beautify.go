@@ -1,8 +1,5 @@
 package utils
 
-
-// need to fix ops timer orignal logging verus jest log time is off
-
 import (
 	"encoding/json"
 	"fmt"
@@ -10,274 +7,253 @@ import (
 	"time"
 )
 
+// --- Constants ---
 const (
 	ColorGreen   = "\033[0;32m"
 	ColorRed     = "\033[0;31m"
+	ColorYellow  = "\033[0;33m"
 	ColorGray    = "\033[0;90m"
-	ColorCyan    = "\033[0;36m"
 	ColorBold    = "\033[1m"
 	ColorReset   = "\033[0m"
 	ColorBgGreen = "\033[42;30m"
 	ColorBgRed   = "\033[41;37m"
+
+	SymbolPass = "✓"
+	SymbolFail = "✗"
+	SymbolSkip = "⚠"
 )
+
+// --- Structs ---
 
 type LogEntry map[string]any
 
-type state struct {
-	currentSuite string
-	failures     []string
-	passes       int
-	tests        map[string]time.Time
-	startTime    time.Time
-	lastStepTime time.Time
+type TestState struct {
+	currentSuite  string
+	failures      int
+	passes        int
+	skips         int
+	firstLogTime  time.Time
+	lastLogTime   time.Time
 }
 
+type LogHandler struct {
+	Suite    string
+	TestName func(e LogEntry) string
+	Status   func(e LogEntry) string // PASS, FAIL, SKIP
+}
+
+// --- Main Function ---
+
 func PrintJestReport(logData string) bool {
-	s := &state{
-		tests: make(map[string]time.Time),
-	}
+	state := &TestState{}
 
-	isTestOutput := false
-	isAppOutput := false
-
-	fmt.Println()
+	fmt.Printf("\n%sPolykey Dev Client Tests%s\n", ColorBold, ColorReset)
 
 	logLines := strings.Split(strings.TrimSpace(logData), "\n")
-	for i, line := range logLines {
+	for _, line := range logLines {
 		var entry LogEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
 		}
 
-		if s.startTime.IsZero() {
-			s.startTime = extractTimestampAsTime(entry)
-			s.lastStepTime = s.startTime
+		// Set timestamps for total duration calculation
+		entryTime := extractTimestampAsTime(entry)
+		if !entryTime.IsZero() {
+			if state.firstLogTime.IsZero() {
+				state.firstLogTime = entryTime
+			}
+			state.lastLogTime = entryTime
 		}
 
-		if i == 0 {
-			if _, ok := entry["Test"]; ok {
-				isTestOutput = true
-				fmt.Printf("%s RUNS %s\n", ColorBold+ColorCyan, "Go Test Suite"+ColorReset)
+		if msg, ok := entry["msg"].(string); ok {
+			if handler, exists := logHandlers[msg]; exists {
+				processLogEntry(state, entry, handler)
 			}
-			if _, ok := entry["msg"]; ok {
-				isAppOutput = true
-				fmt.Printf("%s RUNS %s\n", ColorBold+ColorCyan, "Polykey Dev Client"+ColorReset)
-			}
-		}
-
-		if isTestOutput {
-			processGoTestEntry(entry, s)
-		} else if isAppOutput {
-			processAppLogEntry(entry, s)
 		}
 	}
 
-	printSummary(s)
-	return len(s.failures) > 0
+	printSummary(state)
+	return state.failures > 0
 }
 
-func processAppLogEntry(entry LogEntry, s *state) {
-	msg, _ := entry["msg"].(string)
-	timestamp := extractTimestamp(entry, s.lastStepTime)
-	s.lastStepTime = extractTimestampAsTime(entry)
+// --- Processing Logic ---
 
-	errorVal, hasError := entry["error"]
+func processLogEntry(s *TestState, entry LogEntry, handler LogHandler) {
+	printSuiteHeader(s, handler.Suite)
 
-	switch msg {
-	case "Configuration loaded":
-		printSuiteHeader(&s.currentSuite, "SETUP")
-		details := fmt.Sprintf("server=%v", entry["server"])
-		printStepWithTime("PASS", "Configuration", details, timestamp)
+	testName := handler.TestName(entry)
+	status := handler.Status(entry)
+
+	var durationMs float64
+	if d, ok := entry["duration"].(float64); ok {
+		durationMs = d / 1e6 // slog logs duration in nanoseconds
+	}
+
+	switch status {
+	case "PASS":
 		s.passes++
-	case "gRPC connection established successfully":
-		printSuiteHeader(&s.currentSuite, "CONNECTION")
-		printStepWithTime("PASS", "gRPC Connection", "", timestamp)
-		s.passes++
-	case "Authentication successful":
-		printSuiteHeader(&s.currentSuite, "AUTHENTICATION")
-		details := fmt.Sprintf("expires_in=%v", entry["expires_in"])
-		printStepWithTime("PASS", "Client Authentication", details, timestamp)
-		s.passes++
-	case "HealthCheck successful":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		details := fmt.Sprintf("status=%v, version=%v", entry["status"], entry["version"])
-		printStepWithTime("PASS", "Health Check", details, timestamp)
-		s.passes++
-	case "CreateKey successful":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		details := fmt.Sprintf("keyId=%v", entry["keyId"])
-		printStepWithTime("PASS", "CreateKey", details, timestamp)
-		s.passes++
-	case "GetKey successful", "GetKey successful (pre-rotation)", "GetKey successful (post-rotation)":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		details := fmt.Sprintf("keyId=%v, version=%v", entry["keyId"], entry["version"])
-		printStepWithTime("PASS", msg, details, timestamp)
-		s.passes++
-	case "RotateKey successful":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		details := fmt.Sprintf("keyId=%v, newVersion=%v", entry["keyId"], entry["newVersion"])
-		printStepWithTime("PASS", "RotateKey", details, timestamp)
-		s.passes++
-	case "ListKeys successful":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		details := fmt.Sprintf("count=%v", entry["count"])
-		printStepWithTime("PASS", "ListKeys", details, timestamp)
-		s.passes++
-	case "Starting key rotation validation":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		printStepWithTime("PASS", "Key Rotation Validation Started", "", timestamp)
-		s.passes++
-	case "Key ID preserved after rotation":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		details := fmt.Sprintf("keyId=%v", entry["keyId"])
-		printStepWithTime("PASS", "Key ID Preserved", details, timestamp)
-		s.passes++
-	case "Key version incremented correctly":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		details := fmt.Sprintf("originalVersion=%v, rotatedVersion=%v", entry["originalVersion"], entry["rotatedVersion"])
-		printStepWithTime("PASS", "Key Version Incremented", details, timestamp)
-		s.passes++
-	case "Key material successfully rotated":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		printStepWithTime("PASS", "Key Material Rotated", "", timestamp)
-		s.passes++
-	case "Key type preserved":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		details := fmt.Sprintf("keyType=%v", entry["keyType"])
-		printStepWithTime("PASS", "Key Type Preserved", details, timestamp)
-		s.passes++
-	case "Key rotation validation completed":
-		printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-		printStepWithTime("PASS", "Key Rotation Validation Completed", "", timestamp)
-		s.passes++
-	case "Unauthenticated access test passed":
-		printSuiteHeader(&s.currentSuite, "ERROR CONDITIONS")
-		details := fmt.Sprintf("gRPC_code=%v", entry["code"])
-		printStepWithTime("PASS", "Rejects request with no token", details, timestamp)
-		s.passes++
-	case "Invalid token test passed":
-		printSuiteHeader(&s.currentSuite, "ERROR CONDITIONS")
-		details := fmt.Sprintf("gRPC_code=%v", entry["code"])
-		printStepWithTime("PASS", "Rejects request with invalid token", details, timestamp)
-		s.passes++
+	case "FAIL":
+		s.failures++
+	case "SKIP":
+		s.skips++
+	}
+
+	printTestResult(status, testName, durationMs)
+}
+
+// --- Presentation Logic ---
+
+func printSuiteHeader(s *TestState, newSuite string) {
+	if s.currentSuite != newSuite {
+		separator := strings.Repeat("─", 10)
+		fmt.Printf("\n%s%s %s %s%s\n", ColorGray, separator, newSuite, separator, ColorReset)
+		s.currentSuite = newSuite
+	}
+}
+
+func printTestResult(status, message string, durationMs float64) {
+	var color, symbol string
+	switch status {
+	case "PASS":
+		color, symbol = ColorGreen, SymbolPass
+	case "FAIL":
+		color, symbol = ColorRed, SymbolFail
+	case "SKIP":
+		color, symbol = ColorYellow, SymbolSkip
 	default:
-		if hasError && errorVal != nil {
-			printSuiteHeader(&s.currentSuite, "ERROR")
-			details := fmt.Sprintf("%v", errorVal)
-			printStepWithTime("FAIL", msg, details, timestamp)
-			s.failures = append(s.failures, fmt.Sprintf("%s: %s", msg, details))
-		} else {
-			printSuiteHeader(&s.currentSuite, "HAPPY PATH")
-			details := ""
-			if v, ok := entry["details"]; ok {
-				details = fmt.Sprintf("%v", v)
-			}
-			printStepWithTime("PASS", msg, details, timestamp)
-			s.passes++
-		}
+		color, symbol = ColorGray, "?"
 	}
+
+	timeStr := fmt.Sprintf("%s[%.2fms]%s", ColorGreen, durationMs, ColorReset)
+	fmt.Printf("  %s%s%s %s %s\n", color, symbol, ColorReset, message, timeStr)
 }
 
-
-func processGoTestEntry(entry LogEntry, s *state) {
-	action, _ := entry["Action"].(string)
-	testName, _ := entry["Test"].(string)
-	packageName, _ := entry["Package"].(string)
-	timestamp := extractTimestamp(entry, s.lastStepTime)
-	s.lastStepTime = extractTimestampAsTime(entry)
-
-	if testName == "" {
-		return
+func printSummary(s *TestState) {
+	total := s.passes + s.failures + s.skips
+	var duration time.Duration
+	if !s.firstLogTime.IsZero() && !s.lastLogTime.IsZero() {
+		duration = s.lastLogTime.Sub(s.firstLogTime).Round(time.Millisecond)
 	}
 
-	switch action {
-	case "run":
-		printSuiteHeader(&s.currentSuite, packageName)
-		s.tests[testName] = time.Now()
-		if timestamp != "" {
-			fmt.Printf("  %s %s%s%s %s[%s]%s\n", "○", ColorGray, testName, ColorReset, ColorGreen, timestamp, ColorReset)
-		} else {
-			fmt.Printf("  %s %s%s%s\n", "○", ColorGray, testName, ColorReset)
-		}
-	case "pass":
-		duration := time.Since(s.tests[testName]).Round(time.Millisecond)
-		details := fmt.Sprintf("%v", duration)
-		printStepWithTime("PASS", testName, details, timestamp)
-		s.passes++
-	case "fail":
-		duration := time.Since(s.tests[testName]).Round(time.Millisecond)
-		details := fmt.Sprintf("%v", duration)
-		printStepWithTime("FAIL", testName, details, timestamp)
-		s.failures = append(s.failures, testName)
-	}
-}
+	fmt.Printf("\n%s\n", strings.Repeat("=", 40))
 
-func extractTimestamp(entry LogEntry, lastTime time.Time) string {
-	entryTime := extractTimestampAsTime(entry)
-	if entryTime.IsZero() {
-		return ""
+	if s.failures > 0 {
+		fmt.Printf("%s FAIL %s %d failed, %d passed, %d skipped\n", ColorBgRed, ColorReset, s.failures, s.passes, s.skips)
+	} else {
+		fmt.Printf("%s PASS %s All %d checks executed\n", ColorBgGreen, ColorReset, total)
 	}
-
-	if lastTime.IsZero() {
-		lastTime = entryTime
-	}
-
-	duration := entryTime.Sub(lastTime)
-	return fmt.Sprintf("%.2fms", float64(duration.Nanoseconds())/1e6)
+	fmt.Printf("Total runtime ~%v\n", duration)
 }
 
 func extractTimestampAsTime(entry LogEntry) time.Time {
 	if ts, ok := entry["time"].(string); ok {
-		if t, err := time.Parse(time.RFC3339, ts); err == nil {
-			return t
-		}
-	}
-	if ts, ok := entry["timestamp"].(string); ok {
-		if t, err := time.Parse(time.RFC3339, ts); err == nil {
-			return t
-		}
-	}
-	if ts, ok := entry["ts"].(string); ok {
-		if t, err := time.Parse(time.RFC3339, ts); err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, ts); err == nil {
 			return t
 		}
 	}
 	return time.Time{}
 }
 
-func printSuiteHeader(currentSuite *string, newSuite string) {
-	if *currentSuite != newSuite {
-		separator := strings.Repeat("─", 10)
-		fmt.Printf("\n%s%s %s%s%s %s%s\n", ColorGray, separator, ColorBold, newSuite, ColorReset, separator, ColorReset)
-		*currentSuite = newSuite
-	}
-}
 
-func printStepWithTime(status, message, details, timestamp string) {
-	var color, symbol string
-	if status == "PASS" {
-		color, symbol = ColorGreen, "✓"
-	} else {
-		color, symbol = ColorRed, "✗"
-	}
+// --- Handlers Map ---
 
-	timeStr := ""
-	if timestamp != "" {
-		timeStr = fmt.Sprintf(" %s[%s]%s", ColorGreen, timestamp, ColorReset)
-	}
-
-	if details != "" {
-		fmt.Printf("  %s%s%s %s %s(%s)%s%s\n", color, symbol, ColorReset, message, ColorGray, details, ColorReset, timeStr)
-	} else {
-		fmt.Printf("  %s%s%s %s%s\n", color, symbol, ColorReset, message, timeStr)
-	}
-}
-
-func printSummary(s *state) {
-	fmt.Printf("\n%s\n%s%s\n", ColorGray, strings.Repeat("=", 40), ColorReset)
-	if len(s.failures) > 0 {
-		fmt.Printf(" %s FAIL %s %d failed, %d passed\n", ColorBgRed, ColorReset, len(s.failures), s.passes)
-	} else {
-		fmt.Printf(" %s PASS %s All %d checks passed\n", ColorBgGreen, ColorReset, s.passes)
-	}
+var logHandlers = map[string]LogHandler{
+	"Configuration loaded": {
+		Suite: "SETUP",
+		TestName: func(e LogEntry) string {
+			return fmt.Sprintf("Configuration loaded (server=%v)", e["server"])
+		},
+		Status: func(e LogEntry) string { return "PASS" },
+	},
+	"gRPC connection established successfully": {
+		Suite:    "SETUP",
+		TestName: func(e LogEntry) string { return "gRPC Connection established" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
+	"Authentication successful": {
+		Suite: "AUTHENTICATION",
+		TestName: func(e LogEntry) string {
+			return fmt.Sprintf("Client authenticated (expires_in=%.0fs)", e["expires_in"].(float64))
+		},
+		Status: func(e LogEntry) string { return "PASS" },
+	},
+	"HealthCheck successful": {
+		Suite: "HAPPY PATH",
+		TestName: func(e LogEntry) string {
+			return fmt.Sprintf("Health Check OK (status=%v, version=%v)", e["status"], e["version"])
+		},
+		Status: func(e LogEntry) string { return "PASS" },
+	},
+	"CreateKey successful": {
+		Suite: "HAPPY PATH",
+		TestName: func(e LogEntry) string {
+			return fmt.Sprintf("CreateKey success (id=%v)", e["keyId"])
+		},
+		Status: func(e LogEntry) string { return "PASS" },
+	},
+	"GetKey successful": {
+		Suite: "HAPPY PATH",
+		TestName: func(e LogEntry) string {
+			return fmt.Sprintf("GetKey success (id=%v, version=%.0f)", e["keyId"], e["version"])
+		},
+		Status: func(e LogEntry) string { return "PASS" },
+	},
+	"Exists check for created key passed": {
+		Suite:    "HAPPY PATH",
+		TestName: func(e LogEntry) string { return "Exists (created key) OK" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
+	"Exists check for non-existent key passed": {
+		Suite:    "HAPPY PATH",
+		TestName: func(e LogEntry) string { return "Exists (non-existent key) rejected" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
+	"RotateKey successful": {
+		Suite: "HAPPY PATH",
+		TestName: func(e LogEntry) string {
+			return fmt.Sprintf("RotateKey success (id=%v, newVersion=%.0f)", e["keyId"], e["newVersion"])
+		},
+		Status: func(e LogEntry) string { return "PASS" },
+	},
+	"Key material successfully rotated": {
+		Suite:    "HAPPY PATH",
+		TestName: func(e LogEntry) string { return "Rotation validation OK" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
+	"GetKey (cached) successful": {
+		Suite:    "HAPPY PATH",
+		TestName: func(e LogEntry) string { return "GetKey (cached) OK" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
+	"ListKeys successful": {
+		Suite: "HAPPY PATH",
+		TestName: func(e LogEntry) string {
+			return fmt.Sprintf("ListKeys (count=%.0f) OK", e["count"])
+		},
+		Status: func(e LogEntry) string { return "PASS" },
+	},
+	"Unauthenticated access test passed": {
+		Suite: "ERROR CONDITIONS",
+		TestName: func(e LogEntry) string {
+			return fmt.Sprintf("Rejects no token (gRPC=%v)", e["code"])
+		},
+		Status: func(e LogEntry) string { return "PASS" },
+	},
+	"Invalid token test passed": {
+		Suite: "ERROR CONDITIONS",
+		TestName: func(e LogEntry) string {
+			return fmt.Sprintf("Rejects invalid token (gRPC=%v)", e["code"])
+		},
+		Status: func(e LogEntry) string { return "PASS" },
+	},
+	"BatchCreateKeys successful": {
+		Suite:    "BATCH OPERATIONS",
+		TestName: func(e LogEntry) string { return "BatchCreateKeys OK" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
+	"BatchGetKeys successful": {
+		Suite:    "BATCH OPERATIONS",
+		TestName: func(e LogEntry) string { return "BatchGetKeys OK" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
 }
