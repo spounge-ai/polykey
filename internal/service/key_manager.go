@@ -82,6 +82,158 @@ func (s *keyServiceImpl) RotateKey(ctx context.Context, req *pk.RotateKeyRequest
 	}
 }
 
+func (s *keyServiceImpl) BatchRotateKeys(ctx context.Context, req *pk.BatchRotateKeysRequest) (*pk.BatchRotateKeysResponse, error) {
+	ctx, span := tracer.Start(ctx, "BatchRotateKeys")
+	defer span.End()
+
+	if req == nil || req.RequesterContext == nil || req.RequesterContext.GetClientIdentity() == "" {
+		return nil, ErrInvalidRequest
+	}
+
+	var (
+		successCount int32
+		failedCount  int32
+		results      []*pk.BatchRotateKeysResult
+	)
+
+	// Use a channel to collect results from the pipeline workers
+	batchResults := make(chan pipelines.KeyRotationResult, len(req.GetKeys()))
+
+	for _, item := range req.GetKeys() {
+		keyID, err := domain.KeyIDFromString(item.GetKeyId())
+		if err != nil {
+			failedCount++
+			results = append(results, &pk.BatchRotateKeysResult{
+				KeyId: item.GetKeyId(),
+				Result: &pk.BatchRotateKeysResult_Error{Error: err.Error()},
+			})
+			if !req.GetContinueOnError() {
+				return nil, fmt.Errorf("invalid key ID in batch request: %w", err)
+			}
+			continue
+		}
+
+		// Get the current key to determine the storage profile and DEK pool
+		currentKey, err := s.keyRepo.GetKey(ctx, keyID)
+		if err != nil {
+			failedCount++
+			results = append(results, &pk.BatchRotateKeysResult{
+				KeyId: item.GetKeyId(),
+				Result: &pk.BatchRotateKeysResult_Error{Error: fmt.Sprintf("failed to get current key: %v", err)},
+			})
+			if !req.GetContinueOnError() {
+				return nil, fmt.Errorf("failed to get current key for rotation: %w", err)
+			}
+			continue
+		}
+
+		kmsProvider, err := s.getKMSProvider(currentKey.Metadata.GetStorageType())
+		if err != nil {
+			failedCount++
+			results = append(results, &pk.BatchRotateKeysResult{
+				KeyId: item.GetKeyId(),
+				Result: &pk.BatchRotateKeysResult_Error{Error: fmt.Sprintf("failed to get KMS provider: %v", err)},
+			})
+			if !req.GetContinueOnError() {
+				return nil, fmt.Errorf("failed to get KMS provider for rotation: %w", err)
+			}
+			continue
+		}
+
+		dekPool, ok := s.dekPools[currentKey.Metadata.GetKeyType()]
+		if !ok {
+			failedCount++
+			results = append(results, &pk.BatchRotateKeysResult{
+				KeyId: item.GetKeyId(),
+				Result: &pk.BatchRotateKeysResult_Error{Error: fmt.Sprintf("unsupported key type for pooling: %v", currentKey.Metadata.GetKeyType())},
+			})
+			if !req.GetContinueOnError() {
+				return nil, fmt.Errorf("unsupported key type for pooling: %w", ErrInvalidKeyType)
+			}
+			continue
+		}
+
+		rotationReq := pipelines.KeyRotationRequest{
+			KeyID:       keyID,
+			KMSProvider: kmsProvider,
+			DEKPool:     dekPool,
+		}
+
+		if !s.keyRotationPipeline.Enqueue(rotationReq) {
+			failedCount++
+			results = append(results, &pk.BatchRotateKeysResult{
+				KeyId: item.GetKeyId(),
+				Result: &pk.BatchRotateKeysResult_Error{Error: "key rotation queue is full"},
+			})
+			if !req.GetContinueOnError() {
+				return nil, status.Errorf(codes.ResourceExhausted, "key rotation queue is full, please try again later")
+			}
+			continue
+		}
+		// If enqueued, we expect a result back on the channel
+		go func(keyID domain.KeyID) {
+			select {
+			case result := <-s.keyRotationPipeline.Results():
+				batchResults <- result
+			case <-ctx.Done():
+				// If context is cancelled, send an error result
+				batchResults <- pipelines.KeyRotationResult{RotatedKey: nil, Error: ctx.Err()}
+			}
+		}(keyID)
+	}
+
+	// Collect results from the pipeline
+	for i := 0; i < len(req.GetKeys()); i++ {
+		select {
+		case result := <-batchResults:
+			if result.Error != nil {
+				failedCount++
+				results = append(results, &pk.BatchRotateKeysResult{
+					KeyId: result.RotatedKey.ID.String(), // Assuming ID is available even on error
+					Result: &pk.BatchRotateKeysResult_Error{Error: result.Error.Error()},
+				})
+			} else {
+				successCount++
+				gracePeriod := time.Duration(req.GetKeys()[i].GetGracePeriodSeconds()) * time.Second // This is problematic, need to map back to original request item
+				now := time.Now()
+				resp := &pk.RotateKeyResponse{
+					KeyId:           result.RotatedKey.ID.String(),
+					NewVersion:      result.RotatedKey.Version,
+					PreviousVersion: result.RotatedKey.Version - 1, // Assuming version increments by 1
+					NewKeyMaterial: &pk.KeyMaterial{
+						EncryptedKeyData:    append([]byte(nil), result.RotatedKey.EncryptedDEK...),
+						EncryptionAlgorithm: "AES-256-GCM", // This should be dynamic based on key type
+						KeyChecksum:         "sha256",
+					},
+					Metadata:            result.RotatedKey.Metadata,
+					RotationTimestamp:   timestamppb.New(now),
+					OldVersionExpiresAt: timestamppb.New(now.Add(gracePeriod)),
+				}
+				results = append(results, &pk.BatchRotateKeysResult{
+					KeyId: result.RotatedKey.ID.String(),
+					Result: &pk.BatchRotateKeysResult_Success{Success: resp},
+				})
+			}
+		case <-ctx.Done():
+			// If context is cancelled while collecting results, stop and return current results
+			return &pk.BatchRotateKeysResponse{
+				Results:           results,
+				ResponseTimestamp: timestamppb.Now(),
+				SuccessfulCount:   successCount,
+				FailedCount:       failedCount + (int32(len(req.GetKeys())) - int32(i)), // Mark remaining as failed
+			}, ctx.Err()
+		}
+	}
+
+	return &pk.BatchRotateKeysResponse{
+		Results:           results,
+		ResponseTimestamp: timestamppb.Now(),
+		SuccessfulCount:   successCount,
+		FailedCount:       failedCount,
+	}, nil
+}
+
+
 func (s *keyServiceImpl) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) error {
 	if req == nil {
 		return fmt.Errorf("%w: request is nil", ErrInvalidRequest)

@@ -145,6 +145,13 @@ func (s *PolykeyService) BatchGetKeyMetadata(ctx context.Context, req *pk.BatchG
 		})
 }
 
+func (s *PolykeyService) BatchRotateKeys(ctx context.Context, req *pk.BatchRotateKeysRequest) (*pk.BatchRotateKeysResponse, error) {
+	return execWithoutKey(s, ctx, cts.MethodRotateKey, cts.MethodScopes[cts.MethodRotateKey],
+		func(ctx context.Context) (*pk.BatchRotateKeysResponse, error) {
+			return s.deps.KeyService.BatchRotateKeys(ctx, req)
+		})
+}
+
 func (s *PolykeyService) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
 	return execWithoutKey(s, ctx, cts.MethodListKeys, cts.MethodScopes[cts.MethodListKeys],
 		func(ctx context.Context) (*pk.ListKeysResponse, error) {
