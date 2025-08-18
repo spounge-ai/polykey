@@ -117,6 +117,92 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	}, nil
 }
 
+func (s *keyServiceImpl) BatchCreateKeys(ctx context.Context, req *pk.BatchCreateKeysRequest) (*pk.BatchCreateKeysResponse, error) {
+	if req == nil || req.RequesterContext == nil || req.RequesterContext.GetClientIdentity() == "" {
+		return nil, app_errors.ErrInvalidInput
+	}
+
+	authenticatedUser, ok := domain.UserFromContext(ctx)
+	if !ok {
+		return nil, app_errors.ErrAuthentication
+	}
+
+	storageProfile := pk.StorageProfile_STORAGE_PROFILE_STANDARD
+	if authenticatedUser.Tier == domain.TierPro || authenticatedUser.Tier == domain.TierEnterprise {
+		storageProfile = pk.StorageProfile_STORAGE_PROFILE_HARDENED
+	}
+
+	keys := make([]*domain.Key, len(req.Keys))
+	for i, item := range req.Keys {
+		description, err := domain.NewDescription(item.GetDescription())
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
+		}
+
+		dekPool, ok := s.dekPools[item.GetKeyType()]
+		if !ok {
+			return nil, fmt.Errorf("%w: unsupported key type for pooling", ErrInvalidKeyType)
+		}
+
+		dek := dekPool.Get()
+		defer dekPool.Put(dek)
+
+		if _, err := rand.Read(dek); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrKeyGenerationFail, err)
+		}
+
+		keyID := domain.NewKeyID()
+		now := time.Now()
+
+		kmsProvider, err := s.getKMSProvider(storageProfile)
+		if err != nil {
+			return nil, err
+		}
+
+		finalKey := &domain.Key{
+			ID:        keyID,
+			Version:   1,
+			Status:    domain.KeyStatusActive,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Metadata: &pk.KeyMetadata{
+				KeyId:              keyID.String(),
+				KeyType:            item.GetKeyType(),
+				Status:             pk.KeyStatus_KEY_STATUS_ACTIVE,
+				Version:            1,
+				CreatedAt:          timestamppb.New(now),
+				UpdatedAt:          timestamppb.New(now),
+				ExpiresAt:          item.GetExpiresAt(),
+				CreatorIdentity:    req.RequesterContext.GetClientIdentity(),
+				AuthorizedContexts: item.GetInitialAuthorizedContexts(),
+				AccessPolicies:     item.GetAccessPolicies(),
+				Description:        description.String(),
+				Tags:               item.GetTags(),
+				DataClassification: item.GetDataClassification(),
+				StorageType:        storageProfile,
+				AccessCount:        0,
+			},
+		}
+
+		encryptedDEK, err := kmsProvider.EncryptDEK(ctx, dek, finalKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
+		}
+
+		finalKey.EncryptedDEK = encryptedDEK
+		keys[i] = finalKey
+	}
+
+	if err := s.keyRepo.CreateBatchKeys(ctx, keys); err != nil {
+		return nil, fmt.Errorf("failed to create keys in batch: %w", err)
+	}
+
+	// Since CreateBatchKeys does not return the created keys, we cannot build a proper response yet.
+	// This will be addressed in a future step.
+	return &pk.BatchCreateKeysResponse{},
+	 nil
+}
+
 
 
 

@@ -121,8 +121,8 @@ func (cr *CachedRepository) CreateKey(ctx context.Context, key *domain.Key) (*do
 	return createdKey, err
 }
 
-func (cr *CachedRepository) CreateKeys(ctx context.Context, keys []*domain.Key) error {
-	err := cr.repo.CreateKeys(ctx, keys)
+func (cr *CachedRepository) CreateBatchKeys(ctx context.Context, keys []*domain.Key) error {
+	err := cr.repo.CreateBatchKeys(ctx, keys)
 	if err == nil {
 		for _, key := range keys {
 			cr.invalidateCache(key.ID)

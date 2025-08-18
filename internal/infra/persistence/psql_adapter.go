@@ -156,31 +156,41 @@ func (a *PSQLAdapter) CreateKey(ctx context.Context, key *domain.Key) (*domain.K
 	return createdKey, nil
 }
 
-func (a *PSQLAdapter) CreateKeys(ctx context.Context, keys []*domain.Key) error {
-	batch := &pgx.Batch{}
-	for _, key := range keys {
+func (a *PSQLAdapter) CreateBatchKeys(ctx context.Context, keys []*domain.Key) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	columnNames := []string{
+		"id", "version", "metadata", "encrypted_dek",
+		"status", "storage_type", "created_at", "updated_at",
+	}
+
+	rows := make([][]interface{}, len(keys))
+	for i, key := range keys {
 		metadataRaw, err := a.optimizer.MarshalWithBuffer(key.Metadata)
 		if err != nil {
 			return fmt.Errorf("failed to marshal metadata for key %s: %w", key.ID.String(), err)
 		}
-		storageType := getStorageTypeOptimized(key.Metadata.GetStorageType())
-		batch.Queue(consts.Queries[consts.StmtCreateKey], key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK, key.Status, storageType, key.CreatedAt, key.UpdatedAt)
+		rows[i] = []interface{}{
+			key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK,
+			key.Status, getStorageTypeOptimized(key.Metadata.GetStorageType()), key.CreatedAt, key.UpdatedAt,
+		}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	br := a.DB.SendBatch(ctx, batch)
-	defer func() {
-		if err := br.Close(); err != nil {
-			a.logger.Error("failed to close batch", "error", err)
-		}
-	}()
+	_, err := a.DB.CopyFrom(
+		ctx,
+		pgx.Identifier{"keys"},
+		columnNames,
+		pgx.CopyFromRows(rows),
+	)
 
-	for i := 0; i < len(keys); i++ {
-		_, err := br.Exec()
-		if err != nil {
-			return fmt.Errorf("failed to create key in batch: %w", err)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+			return psql.ErrKeyAlreadyExists
 		}
+		return fmt.Errorf("failed to create keys in batch: %w", err)
 	}
 
 	return nil

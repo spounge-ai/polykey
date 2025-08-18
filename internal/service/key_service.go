@@ -33,6 +33,7 @@ type KeyService interface {
 	RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest) error
 	UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) error
 	GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error)
+	BatchCreateKeys(ctx context.Context, req *pk.BatchCreateKeysRequest) (*pk.BatchCreateKeysResponse, error)
 }
 
 type keyServiceImpl struct {

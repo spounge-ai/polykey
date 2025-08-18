@@ -44,7 +44,7 @@ type KeyRepository interface {
 	GetKeyMetadata(ctx context.Context, id KeyID) (*pk.KeyMetadata, error)
 	GetKeyMetadataByVersion(ctx context.Context, id KeyID, version int32) (*pk.KeyMetadata, error)
 	CreateKey(ctx context.Context, key *Key) (*Key, error)
-	CreateKeys(ctx context.Context, keys []*Key) error
+	CreateBatchKeys(ctx context.Context, keys []*Key) error
 	ListKeys(ctx context.Context, lastCreatedAt *time.Time, limit int) ([]*Key, error)
 	UpdateKeyMetadata(ctx context.Context, id KeyID, metadata *pk.KeyMetadata) error
 	RotateKey(ctx context.Context, id KeyID, newEncryptedDEK []byte) (*Key, error)

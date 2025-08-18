@@ -77,7 +77,7 @@ func (s *S3Storage) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key
 	return key, nil
 }
 
-func (s *S3Storage) CreateKeys(ctx context.Context, keys []*domain.Key) error {
+func (s *S3Storage) CreateBatchKeys(ctx context.Context, keys []*domain.Key) error {
 	for _, key := range keys {
 		if err := s.putKey(ctx, key); err != nil {
 			return err

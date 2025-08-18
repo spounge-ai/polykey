@@ -82,9 +82,9 @@ func (cb *KeyRepositoryCircuitBreaker) CreateKey(ctx context.Context, key *domai
 	})
 }
 
-func (cb *KeyRepositoryCircuitBreaker) CreateKeys(ctx context.Context, keys []*domain.Key) error {
+func (cb *KeyRepositoryCircuitBreaker) CreateBatchKeys(ctx context.Context, keys []*domain.Key) error {
 	_, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
-		return nil, cb.repo.CreateKeys(ctx, keys)
+		return nil, cb.repo.CreateBatchKeys(ctx, keys)
 	})
 	return err
 }

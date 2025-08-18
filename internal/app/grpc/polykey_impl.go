@@ -124,6 +124,13 @@ func (s *PolykeyService) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		})
 }
 
+func (s *PolykeyService) BatchCreateKeys(ctx context.Context, req *pk.BatchCreateKeysRequest) (*pk.BatchCreateKeysResponse, error) {
+	return execWithoutKey(s, ctx, cts.MethodCreateKey, cts.MethodScopes[cts.MethodCreateKey],
+		func(ctx context.Context) (*pk.BatchCreateKeysResponse, error) {
+			return s.deps.KeyService.BatchCreateKeys(ctx, req)
+		})
+}
+
 func (s *PolykeyService) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
 	return execWithoutKey(s, ctx, cts.MethodListKeys, cts.MethodScopes[cts.MethodListKeys],
 		func(ctx context.Context) (*pk.ListKeysResponse, error) {
