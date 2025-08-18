@@ -10,13 +10,19 @@ import (
 	"time"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	"github.com/spounge-ai/polykey/pkg/cache"
 	"github.com/spounge-ai/polykey/pkg/execution"
 )
 
-const localKmsTimeout = 1 * time.Second
+const (
+	localKmsTimeout      = 1 * time.Second
+	derivedKeyCacheTTL   = 1 * time.Hour
+	derivedKeyCacheClean = 5 * time.Minute
+)
 
 type LocalKMSProvider struct {
-	masterKey []byte
+	masterKey       []byte
+	derivedKeyCache cache.Store[string, []byte]
 }
 
 func NewLocalKMSProvider(masterKey string) (*LocalKMSProvider, error) {
@@ -24,19 +30,39 @@ func NewLocalKMSProvider(masterKey string) (*LocalKMSProvider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode master key: %w", err)
 	}
-	return &LocalKMSProvider{masterKey: key}, nil
+	return &LocalKMSProvider{
+		masterKey: key,
+		derivedKeyCache: cache.New[string, []byte](
+			cache.WithDefaultTTL[string, []byte](derivedKeyCacheTTL),
+			cache.WithCleanupInterval[string, []byte](derivedKeyCacheClean),
+		),
+	}, nil
+}
+
+func (p *LocalKMSProvider) getDerivedKey(ctx context.Context, key *domain.Key) ([]byte, error) {
+	cacheKey := key.ID.String()
+	if derivedKey, found := p.derivedKeyCache.Get(ctx, cacheKey); found {
+		return derivedKey, nil
+	}
+
+	info := []byte(key.ID.String())
+	salt := []byte("polykey-salt:" + key.ID.String())
+	derivedKey, err := DeriveKey(p.masterKey, salt, info, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive key: %w", err)
+	}
+
+	p.derivedKeyCache.Set(ctx, cacheKey, derivedKey, 0)
+	return derivedKey, nil
 }
 
 // EncryptDEK encrypts the given plaintext DEK using a derived key.
 func (p *LocalKMSProvider) EncryptDEK(ctx context.Context, plaintextDEK []byte, key *domain.Key) ([]byte, error) {
 	return execution.WithTimeout(ctx, localKmsTimeout, func(ctx context.Context) ([]byte, error) {
-		info := []byte(key.ID.String())
-		salt := []byte("polykey-salt:" + key.ID.String())
-		derivedKey, err := DeriveKey(p.masterKey, salt, info, 32)
+		derivedKey, err := p.getDerivedKey(ctx, key)
 		if err != nil {
-			return nil, fmt.Errorf("failed to derive key: %w", err)
+			return nil, err
 		}
-
 		return p.encryptWithKey(derivedKey, plaintextDEK)
 	})
 }
@@ -44,12 +70,9 @@ func (p *LocalKMSProvider) EncryptDEK(ctx context.Context, plaintextDEK []byte, 
 // DecryptDEK decrypts the DEK using a derived key, with a fallback to the master key for backward compatibility.
 func (p *LocalKMSProvider) DecryptDEK(ctx context.Context, key *domain.Key) ([]byte, error) {
 	return execution.WithTimeout(ctx, localKmsTimeout, func(ctx context.Context) ([]byte, error) {
-		// First, try decrypting with the derived key (the new method).
-		info := []byte(key.ID.String())
-		salt := []byte("polykey-salt:" + key.ID.String())
-		derivedKey, err := DeriveKey(p.masterKey, salt, info, 32)
+		derivedKey, err := p.getDerivedKey(ctx, key)
 		if err != nil {
-			return nil, fmt.Errorf("failed to derive key for decryption: %w", err)
+			return nil, err
 		}
 
 		plaintextDEK, err := p.decryptWithKey(derivedKey, key.EncryptedDEK)

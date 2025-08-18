@@ -109,6 +109,7 @@ func (tc *PolykeyTestClient) runHappyPathTests() {
 		tc.testGetKey(authedCtx, keyID)
 		tc.testKeyExists(authedCtx, keyID)
 		tc.testKeyRotation(authedCtx, keyID)
+		tc.testCache(authedCtx, keyID) // Add cache test here
 	}
 	tc.testListKeys(authedCtx)
 }
@@ -321,6 +322,35 @@ func (tc *PolykeyTestClient) testListKeys(ctx context.Context) {
 		return
 	}
 	tc.logger.Info("ListKeys successful", "count", len(listResp.GetKeys()))
+}
+
+func (tc *PolykeyTestClient) testCache(ctx context.Context, keyID string) {
+	tc.logger.Info("--- Cache Test ---")
+	// This call should be a cache hit for the full key object
+	_, err := tc.client.GetKey(ctx, &pk.GetKeyRequest{
+		KeyId: keyID,
+		RequesterContext: &pk.RequesterContext{
+			ClientIdentity: tc.creds.ID,
+		},
+	})
+	if err != nil {
+		tc.logger.Error("GetKey (cached) failed", "error", err)
+	} else {
+		tc.logger.Info("GetKey (cached) successful", "keyId", keyID)
+	}
+
+	// This call should be a cache hit for the metadata
+	_, err = tc.client.GetKeyMetadata(ctx, &pk.GetKeyMetadataRequest{
+		KeyId: keyID,
+		RequesterContext: &pk.RequesterContext{
+			ClientIdentity: tc.creds.ID,
+		},
+	})
+	if err != nil {
+		tc.logger.Error("GetKeyMetadata (cached) failed", "error", err)
+	} else {
+		tc.logger.Info("GetKeyMetadata (cached) successful", "keyId", keyID)
+	}
 }
 
 func (tc *PolykeyTestClient) testUnauthenticatedAccess() {
