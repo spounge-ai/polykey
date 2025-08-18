@@ -442,6 +442,70 @@ func (a *PSQLAdapter) GetBatchKeyMetadata(ctx context.Context, ids []domain.KeyI
 	return metadataList, nil
 }
 
+func (a *PSQLAdapter) RevokeBatchKeys(ctx context.Context, ids []domain.KeyID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	stringIDs := make([]string, len(ids))
+	for i, id := range ids {
+		stringIDs[i] = id.String()
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	result, err := a.DB.Exec(ctx, `UPDATE keys SET status = $1, revoked_at = $2 WHERE id = ANY($3)`, domain.KeyStatusRevoked, time.Now(), stringIDs)
+	if err != nil {
+		return fmt.Errorf("failed to revoke batch keys: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		// This might happen if some IDs in the batch don't exist or are already revoked.
+		// Depending on requirements, this could be an error or just a warning.
+		a.logger.Warn("no rows affected during batch revoke, some keys might not exist or were already revoked", "ids", stringIDs)
+	}
+
+	return nil
+}
+
+func (a *PSQLAdapter) UpdateBatchKeyMetadata(ctx context.Context, updates []*domain.Key) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	batch := &pgx.Batch{}
+	for _, key := range updates {
+		if key.Metadata == nil {
+			return errors.New("key metadata cannot be nil for batch update")
+		}
+		metadataRaw, err := a.optimizer.MarshalWithBuffer(key.Metadata)
+		if err != nil {
+			return fmt.Errorf("failed to marshal metadata for key %s: %w", key.ID.String(), err)
+		}
+		batch.Queue(consts.Queries[consts.StmtUpdateMetadata], metadataRaw, time.Now(), key.ID.String())
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // Increased timeout for batch
+	defer cancel()
+
+	br := a.DB.SendBatch(ctx, batch)
+	defer func() {
+		if err := br.Close(); err != nil {
+			a.logger.Error("failed to close batch", "error", err)
+		}
+	}()
+
+	for i := 0; i < len(updates); i++ {
+		_, err := br.Exec()
+		if err != nil {
+			return fmt.Errorf("failed to update key metadata in batch: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (a *PSQLAdapter) Close() error {
 	a.DB.Close()
 	return nil

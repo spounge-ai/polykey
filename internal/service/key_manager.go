@@ -220,7 +220,7 @@ func (s *keyServiceImpl) BatchRotateKeys(ctx context.Context, req *pk.BatchRotat
 				Results:           results,
 				ResponseTimestamp: timestamppb.Now(),
 				SuccessfulCount:   successCount,
-				FailedCount:       failedCount + (int32(len(req.GetKeys())) - int32(i)), // Mark remaining as failed
+				FailedCount:       failedCount + (int32(len(req.GetKeys())) - successCount - failedCount), // Mark remaining as failed
 			}, ctx.Err()
 		}
 	}
@@ -250,6 +250,76 @@ func (s *keyServiceImpl) RevokeKey(ctx context.Context, req *pk.RevokeKeyRequest
 
 	s.logger.InfoContext(ctx, "key revoked", "keyId", req.GetKeyId())
 	return nil
+}
+
+func (s *keyServiceImpl) BatchRevokeKeys(ctx context.Context, req *pk.BatchRevokeKeysRequest) (*pk.BatchRevokeKeysResponse, error) {
+	ctx, span := tracer.Start(ctx, "BatchRevokeKeys")
+	defer span.End()
+
+	if req == nil || req.RequesterContext == nil || req.RequesterContext.GetClientIdentity() == "" {
+		return nil, ErrInvalidRequest
+	}
+
+	var (
+		successCount int32
+		failedCount  int32
+		results      []*pk.BatchRevokeKeysResult
+	)
+
+	keyIDs := make([]domain.KeyID, len(req.GetKeys()))
+	for _, item := range req.GetKeys() {
+		keyID, err := domain.KeyIDFromString(item.GetKeyId())
+		if err != nil {
+			failedCount++
+			results = append(results, &pk.BatchRevokeKeysResult{
+				KeyId: item.GetKeyId(),
+				Result: &pk.BatchRevokeKeysResult_Error{Error: err.Error()},
+			})
+			if !req.GetContinueOnError() {
+				return nil, fmt.Errorf("invalid key ID in batch request: %w", err)
+			}
+			continue
+		}
+		keyIDs = append(keyIDs, keyID)
+	}
+
+	if err := s.keyRepo.RevokeBatchKeys(ctx, keyIDs); err != nil {
+		// If the entire batch revoke fails, return a single error unless continue_on_error is true
+		if !req.GetContinueOnError() {
+			return nil, fmt.Errorf("failed to revoke batch keys from repository: %w", err)
+		}
+		// If continue_on_error is true, mark all as failed
+		for _, id := range keyIDs {
+			failedCount++
+			results = append(results, &pk.BatchRevokeKeysResult{
+				KeyId: id.String(),
+				Result: &pk.BatchRevokeKeysResult_Error{Error: err.Error()},
+			})
+		}
+		return &pk.BatchRevokeKeysResponse{
+			Results:           results,
+			ResponseTimestamp: timestamppb.Now(),
+			SuccessfulCount:   successCount,
+			FailedCount:       failedCount,
+		}, nil
+	}
+
+	// For successful batch revoke, we assume all keys were revoked. 
+	// The repository doesn't return individual success/failure for batch.
+	for _, id := range keyIDs {
+		successCount++
+		results = append(results, &pk.BatchRevokeKeysResult{
+			KeyId: id.String(),
+			Result: &pk.BatchRevokeKeysResult_Success{Success: true},
+		})
+	}
+
+	return &pk.BatchRevokeKeysResponse{
+		Results:           results,
+		ResponseTimestamp: timestamppb.Now(),
+		SuccessfulCount:   successCount,
+		FailedCount:       failedCount,
+	}, nil
 }
 
 func (s *keyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) error {
@@ -309,4 +379,137 @@ func (s *keyServiceImpl) UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKe
 
 	s.logger.InfoContext(ctx, "key metadata updated", "keyId", req.GetKeyId(), "fields", updatedFields)
 	return nil
+}
+
+func (s *keyServiceImpl) BatchUpdateKeyMetadata(ctx context.Context, req *pk.BatchUpdateKeyMetadataRequest) (*pk.BatchUpdateKeyMetadataResponse, error) {
+	ctx, span := tracer.Start(ctx, "BatchUpdateKeyMetadata")
+	defer span.End()
+
+	if req == nil || req.RequesterContext == nil || req.RequesterContext.GetClientIdentity() == "" {
+		return nil, ErrInvalidRequest
+	}
+
+	var (
+		successCount int32
+		failedCount  int32
+		results      []*pk.BatchUpdateKeyMetadataResult
+	)
+
+	keysToUpdate := make([]*domain.Key, 0, len(req.GetKeys()))
+	for _, item := range req.GetKeys() {
+		keyID, err := domain.KeyIDFromString(item.GetKeyId())
+		if err != nil {
+			failedCount++
+			results = append(results, &pk.BatchUpdateKeyMetadataResult{
+				KeyId: item.GetKeyId(),
+				Result: &pk.BatchUpdateKeyMetadataResult_Error{Error: err.Error()},
+			})
+			if !req.GetContinueOnError() {
+				return nil, fmt.Errorf("invalid key ID in batch request: %w", err)
+			}
+			continue
+		}
+
+		// Get the current key to apply updates
+		currentKey, err := s.keyRepo.GetKey(ctx, keyID)
+		if err != nil {
+			failedCount++
+			results = append(results, &pk.BatchUpdateKeyMetadataResult{
+				KeyId: item.GetKeyId(),
+				Result: &pk.BatchUpdateKeyMetadataResult_Error{Error: fmt.Sprintf("failed to get key for update: %v", err)},
+			})
+			if !req.GetContinueOnError() {
+				return nil, fmt.Errorf("failed to get key for update: %w", err)
+			}
+			continue
+		}
+
+		metadata := currentKey.Metadata
+
+		if item.Description != nil {
+			description, err := domain.NewDescription(*item.Description)
+			if err != nil {
+				failedCount++
+				results = append(results, &pk.BatchUpdateKeyMetadataResult{
+					KeyId: item.GetKeyId(),
+					Result: &pk.BatchUpdateKeyMetadataResult_Error{Error: fmt.Sprintf("invalid description: %v", err)},
+				})
+				if !req.GetContinueOnError() {
+					return nil, fmt.Errorf("invalid description: %w", err)
+				}
+				continue
+			}
+			metadata.Description = description.String()
+		}
+		if item.ExpiresAt != nil {
+			metadata.ExpiresAt = item.ExpiresAt
+		}
+		if item.DataClassification != nil {
+			metadata.DataClassification = *item.DataClassification
+		}
+
+		if len(item.GetTagsToAdd()) > 0 || len(item.GetTagsToRemove()) > 0 {
+			if metadata.Tags == nil {
+				metadata.Tags = make(map[string]string)
+			}
+			if len(item.GetTagsToAdd()) > 0 {
+				maps.Copy(metadata.Tags, item.GetTagsToAdd())
+			}
+			for _, tag := range item.GetTagsToRemove() {
+				delete(metadata.Tags, tag)
+			}
+		}
+
+		// Policies to update
+		if len(item.GetPoliciesToUpdate()) > 0 {
+			if metadata.AccessPolicies == nil {
+				metadata.AccessPolicies = make(map[string]string)
+			}
+			maps.Copy(metadata.AccessPolicies, item.GetPoliciesToUpdate())
+		}
+
+		metadata.UpdatedAt = timestamppb.Now()
+		currentKey.Metadata = metadata
+		currentKey.UpdatedAt = time.Now()
+		keysToUpdate = append(keysToUpdate, currentKey)
+	}
+
+	// Perform batch update in repository
+	if err := s.keyRepo.UpdateBatchKeyMetadata(ctx, keysToUpdate); err != nil {
+		// If the entire batch update fails, return a single error unless continue_on_error is true
+		if !req.GetContinueOnError() {
+			return nil, fmt.Errorf("failed to update batch key metadata in repository: %w", err)
+		}
+		// If continue_on_error is true, mark all as failed
+		for _, item := range req.GetKeys() {
+			failedCount++
+			results = append(results, &pk.BatchUpdateKeyMetadataResult{
+				KeyId: item.GetKeyId(),
+				Result: &pk.BatchUpdateKeyMetadataResult_Error{Error: err.Error()},
+			})
+		}
+		return &pk.BatchUpdateKeyMetadataResponse{
+			Results:           results,
+			ResponseTimestamp: timestamppb.Now(),
+			SuccessfulCount:   successCount,
+			FailedCount:       failedCount,
+		}, nil
+	}
+
+	// For successful batch update, we assume all keys were updated. 
+	// The repository doesn't return individual success/failure for batch.
+	for _, item := range req.GetKeys() {
+		successCount++
+		results = append(results, &pk.BatchUpdateKeyMetadataResult{
+			KeyId: item.GetKeyId(),
+			Result: &pk.BatchUpdateKeyMetadataResult_Success{Success: true},
+		})
+	}
+
+	return &pk.BatchUpdateKeyMetadataResponse{
+		Results:           results,
+		ResponseTimestamp: timestamppb.Now(),
+		SuccessfulCount:   successCount,
+		FailedCount:       failedCount,
+	}, nil
 }

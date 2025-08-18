@@ -159,3 +159,17 @@ func (cb *KeyRepositoryCircuitBreaker) GetBatchKeyMetadata(ctx context.Context, 
 	return result.([]*pk.KeyMetadata), nil
 }
 
+func (cb *KeyRepositoryCircuitBreaker) RevokeBatchKeys(ctx context.Context, ids []domain.KeyID) error {
+	_, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
+		return nil, cb.repo.RevokeBatchKeys(ctx, ids)
+	})
+	return err
+}
+
+func (cb *KeyRepositoryCircuitBreaker) UpdateBatchKeyMetadata(ctx context.Context, updates []*domain.Key) error {
+	_, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
+		return nil, cb.repo.UpdateBatchKeyMetadata(ctx, updates)
+	})
+	return err
+}
+

@@ -53,5 +53,6 @@ type KeyRepository interface {
 	GetBatchKeys(ctx context.Context, ids []KeyID) ([]*Key, error)
 	GetBatchKeyMetadata(ctx context.Context, ids []KeyID) ([]*pk.KeyMetadata, error)
 	RevokeBatchKeys(ctx context.Context, ids []KeyID) error
+	UpdateBatchKeyMetadata(ctx context.Context, updates []*Key) error
 }
  

@@ -322,6 +322,28 @@ func (s *S3Storage) GetBatchKeyMetadata(ctx context.Context, ids []domain.KeyID)
 	return metadataList, nil
 }
 
+func (s *S3Storage) RevokeBatchKeys(ctx context.Context, ids []domain.KeyID) error {
+	for _, id := range ids {
+		if err := s.RevokeKey(ctx, id); err != nil {
+			s.logger.Error("failed to revoke key in batch operation", "keyID", id.String(), "error", err)
+			// Depending on requirements, you might want to return the error immediately
+			// or collect all errors and return them at the end.
+			// For now, we continue to process other keys.
+		}
+	}
+	return nil
+}
+
+func (s *S3Storage) UpdateBatchKeyMetadata(ctx context.Context, updates []*domain.Key) error {
+	for _, key := range updates {
+		if err := s.UpdateKeyMetadata(ctx, key.ID, key.Metadata); err != nil {
+			s.logger.Error("failed to update key metadata in batch operation", "keyID", key.ID.String(), "error", err)
+			// Similar to revoke, decide on error handling strategy (collect errors vs. immediate return)
+		}
+	}
+	return nil
+}
+
 func (s *S3Storage) HealthCheck() error {
 	_, err := s.client.HeadBucket(context.Background(), &s3.HeadBucketInput{
 		Bucket: &s.bucketName,

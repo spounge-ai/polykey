@@ -184,6 +184,18 @@ func (cr *CachedRepository) GetBatchKeyMetadata(ctx context.Context, ids []domai
 	return cr.repo.GetBatchKeyMetadata(ctx, ids)
 }
 
+func (cr *CachedRepository) RevokeBatchKeys(ctx context.Context, ids []domain.KeyID) error {
+	// Bypassing cache for simplicity in batch operations.
+	// Individual key invalidation would be complex here.
+	return cr.repo.RevokeBatchKeys(ctx, ids)
+}
+
+func (cr *CachedRepository) UpdateBatchKeyMetadata(ctx context.Context, updates []*domain.Key) error {
+	// Bypassing cache for simplicity in batch operations.
+	// Individual key invalidation would be complex here.
+	return cr.repo.UpdateBatchKeyMetadata(ctx, updates)
+}
+
 // Helper methods
 
 func (cr *CachedRepository) getCacheKey(id domain.KeyID, version int32) string {

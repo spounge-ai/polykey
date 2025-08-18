@@ -9,19 +9,24 @@ import (
 	"github.com/spounge-ai/polykey/internal/domain"
 	"github.com/spounge-ai/polykey/internal/kms"
 	"github.com/spounge-ai/polykey/pkg/memory"
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
 // KeyRotationRequest holds the data for a key rotation request.
 type KeyRotationRequest struct {
-	KeyID       domain.KeyID
-	KMSProvider kms.KMSProvider
-	DEKPool     *memory.BufferPool
+	KeyID              domain.KeyID
+	KMSProvider        kms.KMSProvider
+	DEKPool            *memory.BufferPool
+	GracePeriodSeconds int32
+	KeyType            pk.KeyType
 }
 
 // KeyRotationResult holds the result of a key rotation.
 type KeyRotationResult struct {
+	KeyID      domain.KeyID
 	RotatedKey *domain.Key
 	Error      error
+	GracePeriodSeconds int32
 }
 
 // KeyRotationPipeline manages the concurrent processing of key rotations.
@@ -75,7 +80,7 @@ func (p *KeyRotationPipeline) worker(ctx context.Context) {
 			return
 		case req := <-p.requests:
 			rotatedKey, err := p.processRotation(ctx, req)
-			result := KeyRotationResult{RotatedKey: rotatedKey, Error: err}
+			result := KeyRotationResult{RotatedKey: rotatedKey, Error: err, KeyID: req.KeyID, GracePeriodSeconds: req.GracePeriodSeconds}
 
 			// Send the result back
 			select {
