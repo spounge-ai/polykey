@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/domain"
+	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	infra_audit "github.com/spounge-ai/polykey/internal/infra/audit"
 	infra_auth "github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
 	"github.com/spounge-ai/polykey/internal/kms"
+	"github.com/spounge-ai/polykey/internal/service"
 )
 
 type Container struct {
@@ -29,6 +32,8 @@ type Container struct {
 	tokenStore   infra_auth.TokenStore
 	auditLogger  domain.AuditLogger
 	authorizer   domain.Authorizer
+	keyService   service.KeyService
+	authService  service.AuthService
 }
 
 func NewContainer(cfg *infra_config.Config, logger *slog.Logger) *Container {
@@ -42,9 +47,12 @@ type Dependencies struct {
 	KMSProviders map[string]kms.KMSProvider
 	KeyRepo      domain.KeyRepository
 	AuditRepo    domain.AuditRepository
+	AuditLogger  domain.AuditLogger
 	ClientStore  domain.ClientStore
 	TokenManager *infra_auth.TokenManager
 	Authorizer   domain.Authorizer
+	KeyService   service.KeyService
+	AuthService  service.AuthService
 }
 
 func (c *Container) GetDependencies(ctx context.Context) (*Dependencies, error) {
@@ -55,9 +63,12 @@ func (c *Container) GetDependencies(ctx context.Context) (*Dependencies, error) 
 		KMSProviders: c.kmsProviders,
 		KeyRepo:      c.keyRepo,
 		AuditRepo:    c.auditRepo,
+		AuditLogger:  c.auditLogger,
 		ClientStore:  c.clientStore,
 		TokenManager: c.tokenManager,
 		Authorizer:   c.authorizer,
+		KeyService:   c.keyService,
+		AuthService:  c.authService,
 	}, nil
 }
 
@@ -72,6 +83,8 @@ func (c *Container) initializeAll(ctx context.Context) error {
 		func(context.Context) error { return c.initClientStore() },
 		func(context.Context) error { return c.initTokenManager() },
 		func(context.Context) error { return c.initAuthorizer() },
+		func(context.Context) error { return c.initKeyService() },
+		func(context.Context) error { return c.initAuthService() },
 	}
 	for _, initFn := range initializers {
 		if err := initFn(ctx); err != nil {
@@ -103,8 +116,23 @@ func (c *Container) initAuditLogger() error {
 	if c.auditRepo == nil {
 		return fmt.Errorf("audit repository not initialized")
 	}
-	c.auditLogger = infra_audit.NewAuditLogger(c.logger, c.auditRepo)
-	c.logger.Debug("initialized audit logger")
+
+	if c.config.Auditing.Asynchronous.Enabled {
+		asyncConfig := infra_audit.AsyncAuditLoggerConfig{
+			ChannelBufferSize: c.config.Auditing.Asynchronous.ChannelBufferSize,
+			WorkerCount:       c.config.Auditing.Asynchronous.WorkerCount,
+			BatchSize:         c.config.Auditing.Asynchronous.BatchSize,
+			BatchTimeout:      c.config.Auditing.Asynchronous.BatchTimeout,
+		}
+		asyncLogger := infra_audit.NewAsyncAuditLogger(c.logger, c.auditRepo, asyncConfig)
+		asyncLogger.Start()
+		c.auditLogger = asyncLogger
+		c.logger.Debug("initialized asynchronous audit logger")
+	} else {
+		c.auditLogger = infra_audit.NewAuditLogger(c.logger, c.auditRepo)
+		c.logger.Debug("initialized synchronous audit logger")
+	}
+
 	return nil
 }
 
@@ -244,7 +272,48 @@ func (c *Container) initTokenManager() error {
 	return err
 }
 
+func (c *Container) initKeyService() error {
+	if c.keyService != nil {
+		return nil
+	}
+	if c.keyRepo == nil {
+		return fmt.Errorf("key repository not initialized")
+	}
+	if c.kmsProviders == nil {
+		return fmt.Errorf("kms providers not initialized")
+	}
+	if c.auditLogger == nil {
+		return fmt.Errorf("audit logger not initialized")
+	}
+	errorClassifier := app_errors.NewErrorClassifier(c.logger)
+	c.keyService = service.NewKeyService(c.config, c.keyRepo, c.kmsProviders, c.logger, errorClassifier, c.auditLogger)
+	c.logger.Debug("initialized key service")
+	return nil
+}
+
+func (c *Container) initAuthService() error {
+	if c.authService != nil {
+		return nil
+	}
+	if c.clientStore == nil {
+		return fmt.Errorf("client store not initialized")
+	}
+	if c.tokenManager == nil {
+		return fmt.Errorf("token manager not initialized")
+	}
+	c.authService = service.NewAuthService(c.clientStore, c.tokenManager, time.Hour)
+	c.logger.Debug("initialized auth service")
+	return nil
+}
+
 func (c *Container) Close() error {
+	// Stop the audit logger first to ensure all events are flushed before dependencies close.
+	if c.auditLogger != nil {
+		if logger, ok := c.auditLogger.(interface{ Stop() }); ok {
+			logger.Stop()
+		}
+	}
+
 	var errs []error
 	if c.pgxPool != nil {
 		c.pgxPool.Close()

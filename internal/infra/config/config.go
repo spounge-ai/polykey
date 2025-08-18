@@ -28,6 +28,7 @@ type Config struct {
 	CockroachDB      *CockroachDBConfig   `mapstructure:"cockroachdb"`
 	Vault            *VaultConfig         `mapstructure:"vault"`
 	AWS              *AWSConfig           `mapstructure:"aws"`
+	Auditing         AuditingConfig       `mapstructure:"auditing"`
 	Authorization        AuthorizationConfig  `mapstructure:"authorization"`
 	ClientCredentialsPath string               `mapstructure:"client_credentials_path"`
 	DefaultKMSProvider    string               `mapstructure:"default_kms_provider"`
@@ -59,6 +60,12 @@ func Load(path string) (*Config, error) {
 	vip.SetDefault("persistence.circuit_breaker.enabled", true)
 	vip.SetDefault("persistence.circuit_breaker.max_failures", 5)
 	vip.SetDefault("persistence.circuit_breaker.reset_timeout", "30s")
+
+	vip.SetDefault("auditing.asynchronous.enabled", true)
+	vip.SetDefault("auditing.asynchronous.channel_buffer_size", 10000)
+	vip.SetDefault("auditing.asynchronous.worker_count", 3)
+	vip.SetDefault("auditing.asynchronous.batch_size", 500)
+	vip.SetDefault("auditing.asynchronous.batch_timeout", "1s")
 
 	if err := vip.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

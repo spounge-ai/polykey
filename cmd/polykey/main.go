@@ -10,15 +10,12 @@ import (
 
 	"github.com/spounge-ai/polykey/internal/app/grpc"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
-	"github.com/spounge-ai/polykey/internal/infra/audit"
-	"github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
-	"github.com/spounge-ai/polykey/internal/service"
 	"github.com/spounge-ai/polykey/internal/wiring"
 	"github.com/spounge-ai/polykey/pkg/patterns/lifecycle"
 )
 
-const defaultTokenTTL = 1 * time.Hour
+
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -52,12 +49,8 @@ func main() {
 	}
 
 	errorClassifier := app_errors.NewErrorClassifier(logger)
-	auditLogger := audit.NewAuditLogger(logger, deps.AuditRepo)
-	authorizer := auth.NewAuthorizer(cfg.Authorization, deps.KeyRepo, auditLogger)
-	keyService := service.NewKeyService(cfg, deps.KeyRepo, deps.KMSProviders, logger, errorClassifier, auditLogger)
-	authService := service.NewAuthService(deps.ClientStore, deps.TokenManager, defaultTokenTTL)
 
-	srv, port, err := grpc.New(cfg, keyService, authService, authorizer, auditLogger, logger, errorClassifier, tlsConfig)
+	srv, port, err := grpc.New(cfg, deps.KeyService, deps.AuthService, deps.Authorizer, deps.AuditLogger, logger, errorClassifier, tlsConfig)
 	if err != nil {
 		logger.Error("failed to create server", "error", err)
 		os.Exit(1)
