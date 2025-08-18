@@ -17,142 +17,71 @@
 </div>
 
 
-> Note (08/08/25): Working on race conditions, further security, then re-apply to docker
+> Note (08/18/25): Finishing up unit and integration testing then containerizing.
 
 <hr style="width: 100%; height: 4px; background-color: #888; border: none; margin: 2em auto 1em;" />
 
+Polykey is a high-performance, secure-by-design Key Management Service (KMS) written in Go. It provides a gRPC API for the complete lifecycle management of cryptographic keys, built on a cloud-native and observable architecture.
 
+For a detailed technical breakdown of all RPCs, see the [**API Reference**](./docs/API_REFERENCE.md).
 
-This repository contains:
-- A OpenRouter-esque logic for LLMs and 3rd Party APIs.
-- A command-line test client
-- A full, containerized development setup using Docker + Make
+For instructions on how to configure the service and build a client, see the [**Integration Guide**](./docs/INTEGRATION_GUIDE.md).
 
-The project emphasizes **clarity, reproducibility, and extensibility**, with a unified output format for both running and testing the service.
+## Core Features
 
+-   **Secure by Design**:
+    -   **Transport Security**: Enforces mutual TLS (mTLS) for all gRPC communication.
+    -   **Authentication**: Uses a JWT-based authentication flow (`Authenticate` RPC).
+    -   **Authorization**: Implements Role-Based Access Control (RBAC) and can enforce a zero-trust policy by matching a client's mTLS certificate identity to its application-layer identity.
+    -   **Secure Bootstrapping**: Loads critical secrets (e.g., master keys, JWT signing keys) at startup from **AWS Parameter Store**, not from config files.
 
-## ⚙️ Core Features
+-   **Comprehensive Key Lifecycle Management**:
+    -   **Full CRUD Operations**: Create, Get, List, Update, and Revoke keys.
+    -   **Key Rotation**: Built-in RPC for rotating keys to create new versions.
+    -   **Batch Operations**: High-throughput batch endpoints for all major key operations to reduce network latency.
 
-- **Modern gRPC:** Robust client-server communication using idiomatic Go and best practices.
-- **Containerized Workflow:** Fully containerized via Docker and Docker Compose for consistent dev/test environments.
-- **Advanced Makefile:** One Makefile to rule them all—build, test, run, clean, format.
-- **Dynamic Config:** Smart config loader supports CLI flags, environment variables, and runtime context.
-- **Unified Reporting:** A custom log "beautifier" prints Jest-style output for both app runs and tests.
-- **Graceful Shutdown:** Handles system signals (`SIGINT`, `SIGTERM`) for clean exits.
+-   **Cloud-Native & Resilient Architecture**:
+    -   **Structured Logging**: Uses `slog` for structured, context-aware JSON logging.
+    -   **Observability**: Integrated OpenTelemetry for distributed tracing.
+    -   **Resilience Patterns**: Employs a circuit breaker pattern for the persistence layer to prevent cascading failures.
+    -   **Concurrency**: Uses worker pools and pipelines for handling asynchronous background tasks like key rotation.
 
-## 👨‍💻 Workflow
+-   **Flexible Backend Support**:
+    -   **Persistence**: Supports PostgreSQL-compatible databases (like NeonDB and CockroachDB).
+    -   **KMS Providers**: Supports a local, master-key-based KMS and AWS Key Management Service (KMS) for hardened, production-grade key encryption.
 
+## Architecture Overview
 
-This project supports two primary development workflows: a fully containerized environment using Docker (recommended) and a local environment using your machine's Go installation.
+The service follows a clean architecture pattern, separating concerns into distinct layers within the `internal` directory:
+
+-   `/domain`: Defines the core business entities, interfaces, and value objects.
+-   `/service`: Implements the core business logic for key management operations.
+-   `/infra`: Contains implementations for external concerns like persistence, caching, and communication with AWS.
+-   `/app`: Holds the gRPC server implementation, including all RPC handlers and interceptors for concerns like logging, auth, and validation.
+-   `/wiring`: Manages dependency injection for production and mock environments.
+
+## ⚙️ Getting Started
 
 ### Building the Binaries
 
-The `Makefile` provides two distinct build targets:
-
-* **`make build-local` (For Development)**
-    This is the **fastest** way to compile the application for local use. It leverages Go's build cache, making subsequent builds nearly instantaneous.
-    -   **Use Case:** Quick compilation after making code changes.
-    -   **Output:** Executables for your local operating system in the `./bin` directory.
-
-* **`make build` (For Production)**
-    This command creates clean, portable, and production-ready binaries. It is slower because it rebuilds all packages from scratch (`-a` flag) and cross-compiles for a `linux/amd64` environment, making it perfect for deploying inside Docker containers.
-    -   **Use Case:** Creating the final artifacts for a CI/CD pipeline or for building a Docker image.
-    -   **Output:** Statically linked Linux executables in the `./bin` directory.
+-   `make build-local`: The fastest way to compile for local development, using the Go build cache.
+-   `make build`: Creates clean, statically-linked Linux binaries suitable for production/container environments.
 
 ### Running the Application
 
-#### Docker-Based Workflow (Recommended)
+The recommended workflow is using Docker Compose, which mirrors a production-like environment.
 
-Running the entire stack with Docker Compose is the most reliable way to develop, as it perfectly mirrors a production-like environment.
+-   `make compose-dev`: Builds the necessary Docker images and starts the `polykey-server`.
 
-* **`make compose-dev`**: This single command builds the necessary Docker images and starts both the `polykey-server` and `polykey-dev-client` in isolated containers. Docker Compose handles the networking, ensuring the client can always reach the server.
+### Running Tests
 
-#### Local Go Workflow
-
-This workflow is useful for quickly testing a single component without the overhead of containerization.
-
-1.  **Start the Server:** In one terminal, run:
-    ```sh
-    make run-server
-    ```
-2.  **Run the Client:** In a second terminal, run one of the client commands:
-    ```sh
-    make run-client
-    ```
-
-    This command runs the app and produces a clean summary:
-    ```bash
-
-    ▶ RUNS Polykey Dev Client
-
-    ────────── SETUP ──────────
-      ✓ Configuration (server=localhost:50051)
-
-    ────────── CONNECTION ──────────
-      ✓ Network Connectivity
-        Connection state changed ... (state=READY)
-      ✓ gRPC Connection
-
-    ────────── EXECUTION ──────────
-      ✓ Tool Execution (tool=example_tool)
-
-    ========================================
-    PASS  All 4 checks passed
-    ```
-
-## 🧪 Running Tests
-
-### Available Commands:
-
-| Command                 | Description                                 |
-| ----------------------- | ------------------------------------------- |
-| `make test`             | Run all unit tests                          |
-| `make test-race`        | Run unit tests with the race detector       |
-| `make test-integration` | Run integration tests in Docker environment |
-
-Example output:
-
-```
-▶ RUNS Go Test Suite
-
-────────── internal/config ──────────
-  ✓ TestDetectRuntime (0.1ms)
-  ✓ TestLoadConfig (0.2ms)
-
-────────── cmd/dev_client ──────────
-  ✓ TestSomethingInClient (0.1ms)
-
-========================================
- PASS  All 3 tests passed
-```
-
-## 🧱 Architecture
-
-### 🧩 Configuration
-
-The `ConfigLoader` (`internal/config/config.go`) reads settings from:
-
-* CLI flags (e.g. `-server localhost:50051`)
-* Environment variables (e.g. `POLYKEY_SERVER_ADDR`)
-* Auto-detection when running inside Docker/K8s
-
-### 🐳 Containerization
-
-* **Dockerfile:** Multi-stage build for lean, secure binaries
-* **Docker Compose:** Orchestrates services (`polykey-server`, `polykey-dev-client`) and manages health checks
-
-## 🎨 Beautifier Internals
-
-The beautifier is a custom Go formatter (`test/utils/beautify.go`) that parses JSON logs and produces clean, Jest-style reports for both app runs and tests.
-
-It supports logs from the dev client (`make run-client`) and Go tests (`make test`).
-
-For detailed usage and how to extend it, see [test/README.md](test/README.md).
+| Command | Description |
+| :--- | :--- |
+| `make test` | Run all unit tests. |
+| `make test-race` | Run unit tests with the race detector enabled. |
+| `make test-integration` | Run the integration test suite. |
 
 ## 📄 License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
 
-## Contact
-
-🧽 For questions, support, or to report bugs, please open an issue or contact the maintainers at [dev@spounge.com](mailto:dev@spounge.com).
