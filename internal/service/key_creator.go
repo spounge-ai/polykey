@@ -11,8 +11,8 @@ import (
 	"github.com/spounge-ai/polykey/pkg/authorization"
 	"github.com/spounge-ai/polykey/pkg/crypto"
 	"github.com/spounge-ai/polykey/pkg/patterns/batch"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const MaxKeyIDGenerationRetries = 10
@@ -84,8 +84,8 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, app_errors.ErrInvalidInput
 	}
 
-	authenticatedUser, _ := domain.UserFromContext(ctx)
-	storageProfile := authorization.GetStorageProfileForTier(authenticatedUser.Tier)
+	clientTier := authorization.FromProtoTier(req.GetRequesterContext().GetClientTier())
+	storageProfile := authorization.GetStorageProfileForTier(clientTier)
 
 	_, algorithm, err := crypto.GetCryptoDetails(req.GetKeyType())
 	if err != nil {
@@ -133,8 +133,8 @@ func (s *keyServiceImpl) BatchCreateKeys(ctx context.Context, req *pk.BatchCreat
 		return nil, app_errors.ErrInvalidInput
 	}
 
-	authenticatedUser, _ := domain.UserFromContext(ctx)
-	storageProfile := authorization.GetStorageProfileForTier(authenticatedUser.Tier)
+	clientTier := authorization.FromProtoTier(req.GetRequesterContext().GetClientTier())
+	storageProfile := authorization.GetStorageProfileForTier(clientTier)
 
 	processor := batch.BatchProcessor[*pk.CreateKeyItem, *domain.Key]{
 		MaxConcurrency: 10, // Make this configurable

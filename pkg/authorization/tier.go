@@ -4,8 +4,23 @@ import (
 	"fmt"
 
 	"github.com/spounge-ai/polykey/internal/domain"
+	cmn "github.com/spounge-ai/spounge-proto/gen/go/common/v2"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
+
+// FromProtoTier converts a protobuf ClientTier enum to a domain KeyTier string.
+func FromProtoTier(tier cmn.ClientTier) domain.KeyTier {
+	switch tier {
+	case cmn.ClientTier_CLIENT_TIER_FREE:
+		return domain.TierFree
+	case cmn.ClientTier_CLIENT_TIER_PRO:
+		return domain.TierPro
+	case cmn.ClientTier_CLIENT_TIER_ENTERPRISE:
+		return domain.TierEnterprise
+	default:
+		return domain.TierUnknown
+	}
+}
 
 // ValidateTierForProfile checks if a client of a certain tier can use the specified storage profile.
 // It includes input validation and returns a structured error.

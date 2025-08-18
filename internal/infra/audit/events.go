@@ -22,7 +22,6 @@ type ActorInfo struct {
 	ClientIP    string `json:"client_ip"`
 	UserAgent   string `json:"user_agent"`
 	SessionID   string `json:"session_id"`
-	Tier        string `json:"tier"`
 }
 
 // ResourceInfo describes the resource that was acted upon.

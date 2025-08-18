@@ -35,12 +35,11 @@ func NewTokenManager(privateKeyPEM string, tokenStore TokenStore, auditLogger do
 }
 
 // GenerateToken generates a new JWT token signed with RS256.
-func (tm *TokenManager) GenerateToken(userID string, roles []string, tier domain.KeyTier, expiration time.Duration) (string, error) {
+func (tm *TokenManager) GenerateToken(userID string, roles []string, expiration time.Duration) (string, error) {
 	expirationTime := time.Now().Add(expiration)
 	claims := &Claims{
 		UserID: userID,
 		Roles:  roles,
-		Tier:   tier,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
 			ExpiresAt: jwt.NewNumericDate(expirationTime),

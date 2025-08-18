@@ -10,9 +10,9 @@ import (
 	"github.com/spounge-ai/polykey/internal/constants"
 	"github.com/spounge-ai/polykey/internal/domain"
 	"github.com/spounge-ai/polykey/internal/infra/config"
-	"github.com/spounge-ai/polykey/pkg/postgres"
-	"github.com/spounge-ai/polykey/pkg/cache"
 	pkg_auth "github.com/spounge-ai/polykey/pkg/authorization"
+	"github.com/spounge-ai/polykey/pkg/cache"
+	"github.com/spounge-ai/polykey/pkg/postgres"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -96,7 +96,7 @@ func (a *realAuthorizer) Authorize(ctx context.Context, reqContext *pk.Requester
 
 	span.SetAttributes(attribute.Bool("auth.cache_hit", false))
 
-	authorized, reason := a.checkAuthorization(ctx, user, operation, keyID)
+	authorized, reason := a.checkAuthorization(ctx, user, operation, keyID, reqContext)
 	if authorized {
 		a.policyCache.Set(ctx, cacheKey, true, 0) // Use default TTL
 		span.SetAttributes(attribute.Bool("auth.authorized", true), attribute.String("auth.reason", reason))
@@ -122,7 +122,7 @@ func (a *realAuthorizer) checkIdentityMatch(ctx context.Context, user *domain.Au
 	return true, "identity_match_ok"
 }
 
-func (a *realAuthorizer) checkAuthorization(ctx context.Context, user *domain.AuthenticatedUser, operation string, keyID domain.KeyID) (bool, string) {
+func (a *realAuthorizer) checkAuthorization(ctx context.Context, user *domain.AuthenticatedUser, operation string, keyID domain.KeyID, reqContext *pk.RequesterContext) (bool, string) {
 	// If keyID is not provided, we can't do resource-based authorization.
 	// This applies to operations like CreateKey or ListKeys.
 	if keyID.IsZero() {
@@ -150,8 +150,13 @@ func (a *realAuthorizer) checkAuthorization(ctx context.Context, user *domain.Au
 			return false, "insufficient_key_permissions"
 		}
 
+		if reqContext == nil {
+			return false, "requester_context_is_required_for_tier_validation"
+		}
+		clientTier := pkg_auth.FromProtoTier(reqContext.GetClientTier())
+
 		// Check if the user's current tier is sufficient for the key's storage profile.
-		if err := pkg_auth.ValidateTierForProfile(user.Tier, key.Metadata.GetStorageType()); err != nil {
+		if err := pkg_auth.ValidateTierForProfile(clientTier, key.Metadata.GetStorageType()); err != nil {
 			return false, err.Error()
 		}
 	}

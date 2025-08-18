@@ -60,7 +60,6 @@ func (sal *StructuredAuditLogger) LogKeyOperation(ctx context.Context, req *KeyO
 	if user, ok := domain.UserFromContext(ctx); ok {
 		event.Actor = &ActorInfo{
 			UserID:    user.ID,
-			Tier:      string(user.Tier),
 			SessionID: req.SessionID,
 			ClientIP:  req.ClientIP,
 			UserAgent: req.UserAgent,
@@ -136,7 +135,6 @@ func (sal *StructuredAuditLogger) logToStructuredLogger(ctx context.Context, eve
 			slog.String("user_id", event.Actor.UserID),
 			slog.String("client_ip", event.Actor.ClientIP),
 			slog.String("user_agent", event.Actor.UserAgent),
-			slog.String("tier", event.Actor.Tier),
 		))
 	}
 

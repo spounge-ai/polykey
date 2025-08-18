@@ -16,7 +16,6 @@ type AuthenticationResult struct {
 	AccessToken string
 	TokenType   string
 	ExpiresIn   int64
-	ClientTier  domain.KeyTier
 }
 
 // AuthService defines the interface for the authentication business logic.
@@ -51,7 +50,7 @@ func (s *authService) Authenticate(ctx context.Context, clientID, clientSecret s
 		return nil, fmt.Errorf("authentication failed: invalid credentials")
 	}
 
-	accessToken, err := s.tokenManager.GenerateToken(client.ID, client.Permissions, client.Tier, s.tokenTTL)
+	accessToken, err := s.tokenManager.GenerateToken(client.ID, client.Permissions, s.tokenTTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
@@ -60,6 +59,5 @@ func (s *authService) Authenticate(ctx context.Context, clientID, clientSecret s
 		AccessToken: accessToken,
 		TokenType:   "Bearer",
 		ExpiresIn:   int64(s.tokenTTL.Seconds()),
-		ClientTier:  client.Tier,
 	}, nil
 }

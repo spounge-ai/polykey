@@ -71,7 +71,6 @@ func AuthenticationInterceptor(tokenManager *auth.TokenManager, limiter ratelimi
 		user := &domain.AuthenticatedUser{
 			ID:          claims.UserID,
 			Permissions: claims.Roles,
-			Tier:        claims.Tier,
 		}
 
 		ctx = domain.NewContextWithUser(ctx, user)
