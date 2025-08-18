@@ -174,6 +174,16 @@ func (cr *CachedRepository) Exists(ctx context.Context, id domain.KeyID) (bool, 
 	return cr.repo.Exists(ctx, id)
 }
 
+func (cr *CachedRepository) GetBatchKeys(ctx context.Context, ids []domain.KeyID) ([]*domain.Key, error) {
+	// Bypassing cache for simplicity in batch operations.
+	return cr.repo.GetBatchKeys(ctx, ids)
+}
+
+func (cr *CachedRepository) GetBatchKeyMetadata(ctx context.Context, ids []domain.KeyID) ([]*pk.KeyMetadata, error) {
+	// Bypassing cache for simplicity in batch operations.
+	return cr.repo.GetBatchKeyMetadata(ctx, ids)
+}
+
 // Helper methods
 
 func (cr *CachedRepository) getCacheKey(id domain.KeyID, version int32) string {

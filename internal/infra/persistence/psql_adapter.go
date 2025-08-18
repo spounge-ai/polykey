@@ -365,6 +365,83 @@ func (a *PSQLAdapter) Exists(ctx context.Context, id domain.KeyID) (bool, error)
 	return exists, nil
 }
 
+func (a *PSQLAdapter) GetBatchKeys(ctx context.Context, ids []domain.KeyID) ([]*domain.Key, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	stringIDs := make([]string, len(ids))
+	for i, id := range ids {
+		stringIDs[i] = id.String()
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // Increased timeout for batch
+	defer cancel()
+
+	rows, err := a.DB.Query(ctx, `SELECT id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at, revoked_at FROM keys WHERE id = ANY($1) ORDER BY id, version DESC`, stringIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get batch keys: %w", err)
+	}
+	defer rows.Close()
+
+	keys := make([]*domain.Key, 0, len(ids))
+	for rows.Next() {
+		key, err := ScanKeyRowWithID(rows)
+		if err != nil {
+			a.logger.Error("failed to scan key row in GetBatchKeys", "error", err)
+			continue
+		}
+		keys = append(keys, key)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over batch key rows: %w", err)
+	}
+
+	return keys, nil
+}
+
+func (a *PSQLAdapter) GetBatchKeyMetadata(ctx context.Context, ids []domain.KeyID) ([]*pk.KeyMetadata, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	stringIDs := make([]string, len(ids))
+	for i, id := range ids {
+		stringIDs[i] = id.String()
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // Increased timeout for batch
+	defer cancel()
+
+	rows, err := a.DB.Query(ctx, `SELECT metadata FROM keys WHERE id = ANY($1) ORDER BY id, version DESC`, stringIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get batch key metadata: %w", err)
+	}
+	defer rows.Close()
+
+	metadataList := make([]*pk.KeyMetadata, 0, len(ids))
+	for rows.Next() {
+		var metadataRaw []byte
+		if err := rows.Scan(&metadataRaw); err != nil {
+			a.logger.Error("failed to scan metadata row in GetBatchKeyMetadata", "error", err)
+			continue
+		}
+		var metadata pk.KeyMetadata
+		if err := json.Unmarshal(metadataRaw, &metadata); err != nil {
+			a.logger.Error("failed to unmarshal metadata in GetBatchKeyMetadata", "error", err)
+			continue
+		}
+		metadataList = append(metadataList, &metadata)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over batch key metadata rows: %w", err)
+	}
+
+	return metadataList, nil
+}
+
 func (a *PSQLAdapter) Close() error {
 	a.DB.Close()
 	return nil

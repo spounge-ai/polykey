@@ -296,6 +296,32 @@ func (s *S3Storage) Exists(ctx context.Context, id domain.KeyID) (bool, error) {
 	return true, nil
 }
 
+func (s *S3Storage) GetBatchKeys(ctx context.Context, ids []domain.KeyID) ([]*domain.Key, error) {
+	var keys []*domain.Key
+	for _, id := range ids {
+		key, err := s.GetKey(ctx, id)
+		if err != nil {
+			s.logger.Error("failed to get key in batch operation", "keyID", id.String(), "error", err)
+			continue // Continue processing other keys even if one fails
+		}
+		keys = append(keys, key)
+	}
+	return keys, nil
+}
+
+func (s *S3Storage) GetBatchKeyMetadata(ctx context.Context, ids []domain.KeyID) ([]*pk.KeyMetadata, error) {
+	var metadataList []*pk.KeyMetadata
+	for _, id := range ids {
+		metadata, err := s.GetKeyMetadata(ctx, id)
+		if err != nil {
+			s.logger.Error("failed to get key metadata in batch operation", "keyID", id.String(), "error", err)
+			continue // Continue processing other keys even if one fails
+		}
+		metadataList = append(metadataList, metadata)
+	}
+	return metadataList, nil
+}
+
 func (s *S3Storage) HealthCheck() error {
 	_, err := s.client.HeadBucket(context.Background(), &s3.HeadBucketInput{
 		Bucket: &s.bucketName,

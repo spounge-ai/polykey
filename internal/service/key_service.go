@@ -34,6 +34,9 @@ type KeyService interface {
 	UpdateKeyMetadata(ctx context.Context, req *pk.UpdateKeyMetadataRequest) error
 	GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetadataRequest) (*pk.GetKeyMetadataResponse, error)
 	BatchCreateKeys(ctx context.Context, req *pk.BatchCreateKeysRequest) (*pk.BatchCreateKeysResponse, error)
+	BatchGetKeys(ctx context.Context, req *pk.BatchGetKeysRequest) (*pk.BatchGetKeysResponse, error)
+	BatchGetKeyMetadata(ctx context.Context, req *pk.BatchGetKeyMetadataRequest) (*pk.BatchGetKeyMetadataResponse, error)
+	BatchRotateKeys(ctx context.Context, req *pk.BatchRotateKeysRequest) (*pk.BatchRotateKeysResponse, error)
 }
 
 type keyServiceImpl struct {

@@ -50,5 +50,7 @@ type KeyRepository interface {
 	RevokeKey(ctx context.Context, id KeyID) error
 	GetKeyVersions(ctx context.Context, id KeyID) ([]*Key, error)
 	Exists(ctx context.Context, id KeyID) (bool, error)
+	GetBatchKeys(ctx context.Context, ids []KeyID) ([]*Key, error)
+	GetBatchKeyMetadata(ctx context.Context, ids []KeyID) ([]*pk.KeyMetadata, error)
 }
  

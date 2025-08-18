@@ -131,6 +131,20 @@ func (s *PolykeyService) BatchCreateKeys(ctx context.Context, req *pk.BatchCreat
 		})
 }
 
+func (s *PolykeyService) BatchGetKeys(ctx context.Context, req *pk.BatchGetKeysRequest) (*pk.BatchGetKeysResponse, error) {
+	return execWithoutKey(s, ctx, cts.MethodGetKey, cts.MethodScopes[cts.MethodGetKey],
+		func(ctx context.Context) (*pk.BatchGetKeysResponse, error) {
+			return s.deps.KeyService.BatchGetKeys(ctx, req)
+		})
+}
+
+func (s *PolykeyService) BatchGetKeyMetadata(ctx context.Context, req *pk.BatchGetKeyMetadataRequest) (*pk.BatchGetKeyMetadataResponse, error) {
+	return execWithoutKey(s, ctx, cts.MethodGetKeyMetadata, cts.MethodScopes[cts.MethodGetKeyMetadata],
+		func(ctx context.Context) (*pk.BatchGetKeyMetadataResponse, error) {
+			return s.deps.KeyService.BatchGetKeyMetadata(ctx, req)
+		})
+}
+
 func (s *PolykeyService) ListKeys(ctx context.Context, req *pk.ListKeysRequest) (*pk.ListKeysResponse, error) {
 	return execWithoutKey(s, ctx, cts.MethodListKeys, cts.MethodScopes[cts.MethodListKeys],
 		func(ctx context.Context) (*pk.ListKeysResponse, error) {

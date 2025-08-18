@@ -12,74 +12,70 @@ import (
 // KeyRepositoryCircuitBreaker adds a circuit breaker to a KeyRepository.
 // It uses multiple type-safe breakers to avoid runtime type assertions.
 type KeyRepositoryCircuitBreaker struct {
-	repo                  domain.KeyRepository
-	getKeyBreaker         *circuitbreaker.Breaker[*domain.Key]
-	getKeyMetadataBreaker *circuitbreaker.Breaker[*pk.KeyMetadata]
-	listKeysBreaker       *circuitbreaker.Breaker[[]*domain.Key]
-	existsBreaker         *circuitbreaker.Breaker[bool]
-	voidBreaker           *circuitbreaker.Breaker[any] // For methods returning only an error
+	repo        domain.KeyRepository
+	voidBreaker *circuitbreaker.Breaker[any] // Single breaker for all methods
 }
 
 // NewKeyRepositoryCircuitBreaker creates a new KeyRepository with a circuit breaker.
 func NewKeyRepositoryCircuitBreaker(repo domain.KeyRepository, maxFailures int, resetTimeout time.Duration) domain.KeyRepository {
-	// Shared options for all breakers
 	opts := []circuitbreaker.Option[any]{
 		circuitbreaker.WithResetTimeout[any](resetTimeout),
 	}
 
-	// It's safe to cast options for different generic types if they don't depend on the type T.
-	// This is a bit of a workaround for Go's type system regarding generic functional options.
-	getKeyOpts := []circuitbreaker.Option[*domain.Key]{
-		circuitbreaker.WithResetTimeout[*domain.Key](resetTimeout),
-	}
-	getKeyMetadataOpts := []circuitbreaker.Option[*pk.KeyMetadata]{
-		circuitbreaker.WithResetTimeout[*pk.KeyMetadata](resetTimeout),
-	}
-	listKeysOpts := []circuitbreaker.Option[[]*domain.Key]{
-		circuitbreaker.WithResetTimeout[[]*domain.Key](resetTimeout),
-	}
-	existsOpts := []circuitbreaker.Option[bool]{
-		circuitbreaker.WithResetTimeout[bool](resetTimeout),
-	}
-
 	return &KeyRepositoryCircuitBreaker{
-		repo:                  repo,
-		getKeyBreaker:         circuitbreaker.New(maxFailures, getKeyOpts...),
-		getKeyMetadataBreaker: circuitbreaker.New(maxFailures, getKeyMetadataOpts...),
-		listKeysBreaker:       circuitbreaker.New(maxFailures, listKeysOpts...),
-		existsBreaker:         circuitbreaker.New(maxFailures, existsOpts...),
-		voidBreaker:           circuitbreaker.New(maxFailures, opts...),
+		repo:        repo,
+		voidBreaker: circuitbreaker.New(maxFailures, opts...),
 	}
 }
 
 func (cb *KeyRepositoryCircuitBreaker) GetKey(ctx context.Context, id domain.KeyID) (*domain.Key, error) {
-	return cb.getKeyBreaker.Execute(ctx, func(ctx context.Context) (*domain.Key, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
 		return cb.repo.GetKey(ctx, id)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result.(*domain.Key), nil
 }
 
 func (cb *KeyRepositoryCircuitBreaker) GetKeyByVersion(ctx context.Context, id domain.KeyID, version int32) (*domain.Key, error) {
-	return cb.getKeyBreaker.Execute(ctx, func(ctx context.Context) (*domain.Key, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
 		return cb.repo.GetKeyByVersion(ctx, id, version)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result.(*domain.Key), nil
 }
 
 func (cb *KeyRepositoryCircuitBreaker) GetKeyMetadata(ctx context.Context, id domain.KeyID) (*pk.KeyMetadata, error) {
-	return cb.getKeyMetadataBreaker.Execute(ctx, func(ctx context.Context) (*pk.KeyMetadata, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
 		return cb.repo.GetKeyMetadata(ctx, id)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result.(*pk.KeyMetadata), nil
 }
 
 func (cb *KeyRepositoryCircuitBreaker) GetKeyMetadataByVersion(ctx context.Context, id domain.KeyID, version int32) (*pk.KeyMetadata, error) {
-	return cb.getKeyMetadataBreaker.Execute(ctx, func(ctx context.Context) (*pk.KeyMetadata, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
 		return cb.repo.GetKeyMetadataByVersion(ctx, id, version)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result.(*pk.KeyMetadata), nil
 }
 
 func (cb *KeyRepositoryCircuitBreaker) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
-	return cb.getKeyBreaker.Execute(ctx, func(ctx context.Context) (*domain.Key, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
 		return cb.repo.CreateKey(ctx, key)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result.(*domain.Key), nil
 }
 
 func (cb *KeyRepositoryCircuitBreaker) CreateBatchKeys(ctx context.Context, keys []*domain.Key) error {
@@ -90,9 +86,13 @@ func (cb *KeyRepositoryCircuitBreaker) CreateBatchKeys(ctx context.Context, keys
 }
 
 func (cb *KeyRepositoryCircuitBreaker) ListKeys(ctx context.Context, lastCreatedAt *time.Time, limit int) ([]*domain.Key, error) {
-	return cb.listKeysBreaker.Execute(ctx, func(ctx context.Context) ([]*domain.Key, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
 		return cb.repo.ListKeys(ctx, lastCreatedAt, limit)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result.([]*domain.Key), nil
 }
 
 func (cb *KeyRepositoryCircuitBreaker) UpdateKeyMetadata(ctx context.Context, id domain.KeyID, metadata *pk.KeyMetadata) error {
@@ -103,9 +103,13 @@ func (cb *KeyRepositoryCircuitBreaker) UpdateKeyMetadata(ctx context.Context, id
 }
 
 func (cb *KeyRepositoryCircuitBreaker) RotateKey(ctx context.Context, id domain.KeyID, newEncryptedDEK []byte) (*domain.Key, error) {
-	return cb.getKeyBreaker.Execute(ctx, func(ctx context.Context) (*domain.Key, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
 		return cb.repo.RotateKey(ctx, id, newEncryptedDEK)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result.(*domain.Key), nil
 }
 
 func (cb *KeyRepositoryCircuitBreaker) RevokeKey(ctx context.Context, id domain.KeyID) error {
@@ -116,13 +120,42 @@ func (cb *KeyRepositoryCircuitBreaker) RevokeKey(ctx context.Context, id domain.
 }
 
 func (cb *KeyRepositoryCircuitBreaker) GetKeyVersions(ctx context.Context, id domain.KeyID) ([]*domain.Key, error) {
-	return cb.listKeysBreaker.Execute(ctx, func(ctx context.Context) ([]*domain.Key, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
 		return cb.repo.GetKeyVersions(ctx, id)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result.([]*domain.Key), nil
 }
 
 func (cb *KeyRepositoryCircuitBreaker) Exists(ctx context.Context, id domain.KeyID) (bool, error) {
-	return cb.existsBreaker.Execute(ctx, func(ctx context.Context) (bool, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
 		return cb.repo.Exists(ctx, id)
 	})
+	if err != nil {
+		return false, err
+	}
+	return result.(bool), nil
 }
+
+func (cb *KeyRepositoryCircuitBreaker) GetBatchKeys(ctx context.Context, ids []domain.KeyID) ([]*domain.Key, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
+		return cb.repo.GetBatchKeys(ctx, ids)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.([]*domain.Key), nil
+}
+
+func (cb *KeyRepositoryCircuitBreaker) GetBatchKeyMetadata(ctx context.Context, ids []domain.KeyID) ([]*pk.KeyMetadata, error) {
+	result, err := cb.voidBreaker.Execute(ctx, func(ctx context.Context) (any, error) {
+		return cb.repo.GetBatchKeyMetadata(ctx, ids)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.([]*pk.KeyMetadata), nil
+}
+
