@@ -10,26 +10,22 @@ import (
 // ValidateTierForProfile checks if a client of a certain tier can use the specified storage profile.
 // It includes input validation and returns a structured error.
 func ValidateTierForProfile(tier domain.KeyTier, profile pk.StorageProfile) error {
-	// Input validation
-	if tier == "" {
-		tier = domain.TierUnknown // Default to unknown/free tier
+	// A user's tier determines the BEST profile they can use.
+	// They are, however, allowed to use any profile at or below their level.
+	maxProfile := GetStorageProfileForTier(tier)
+
+	// This logic assumes that HARDENED > STANDARD.
+	if profile > maxProfile {
+		return fmt.Errorf("tier '%s' is not permitted to use the '%s' storage profile", tier, profile.String())
 	}
 
-	switch tier {
-	case domain.TierEnterprise, domain.TierPro:
-		// These tiers can use any profile.
-		return nil
-	case domain.TierFree, domain.TierUnknown:
-		if profile == pk.StorageProfile_STORAGE_PROFILE_HARDENED {
-			return fmt.Errorf("tier '%s' is not permitted to use the hardened storage profile", tier)
-		}
-		return nil
-	default:
-		// This case handles any unexpected tier values that might be introduced.
-		// We also check for hardened storage here as a safeguard.
-		if profile == pk.StorageProfile_STORAGE_PROFILE_HARDENED {
-			return fmt.Errorf("tier '%s' is not permitted to use the hardened storage profile", tier)
-		}
-		return nil
+	return nil
+}
+
+// GetStorageProfileForTier determines the appropriate storage profile based on the client's tier.
+func GetStorageProfileForTier(tier domain.KeyTier) pk.StorageProfile {
+	if tier == domain.TierPro || tier == domain.TierEnterprise {
+		return pk.StorageProfile_STORAGE_PROFILE_HARDENED
 	}
+	return pk.StorageProfile_STORAGE_PROFILE_STANDARD
 }

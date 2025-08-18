@@ -37,7 +37,6 @@ const (
 )
 
 
-
 type KeyRepository interface {
 	GetKey(ctx context.Context, id KeyID) (*Key, error)
 	GetKeyByVersion(ctx context.Context, id KeyID, version int32) (*Key, error)
@@ -52,20 +51,4 @@ type KeyRepository interface {
 	GetKeyVersions(ctx context.Context, id KeyID) ([]*Key, error)
 	Exists(ctx context.Context, id KeyID) (bool, error)
 }
-
-type AuditEvent struct {
-	ID               string
-	ClientIdentity   string
-	Operation        string
-	KeyID            string
-	AuthDecisionID   string
-	Success          bool
-	Error            string
-	Timestamp        time.Time
-	RequestMetadata  map[string]string
-}
-
-type AuditRepository interface {
-	CreateAuditEvent(ctx context.Context, event *AuditEvent) error
-	GetAuditHistory(ctx context.Context, keyID string, limit int) ([]*AuditEvent, error)
-}
+ 

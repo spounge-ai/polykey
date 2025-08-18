@@ -22,7 +22,7 @@ func UnaryValidationInterceptor(errorClassifier *app_errors.ErrorClassifier) grp
 	}
 	queryValidator := validation.NewQueryValidator()
 
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		// TODO: Start OpenTelemetry span for validation
 		// span := trace.SpanFromContext(ctx)
 		// span.AddEvent("validation_start")

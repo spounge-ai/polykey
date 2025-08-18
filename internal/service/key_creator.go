@@ -8,6 +8,7 @@ import (
 
 	"github.com/spounge-ai/polykey/internal/domain"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
+	"github.com/spounge-ai/polykey/pkg/authorization"
 	"github.com/spounge-ai/polykey/pkg/crypto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2" 
@@ -20,15 +21,8 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, app_errors.ErrInvalidInput
 	}
 
-	authenticatedUser, ok := domain.UserFromContext(ctx)
-	if !ok {
-		return nil, app_errors.ErrAuthentication
-	}
-
-	storageProfile := pk.StorageProfile_STORAGE_PROFILE_STANDARD
-	if authenticatedUser.Tier == domain.TierPro || authenticatedUser.Tier == domain.TierEnterprise {
-		storageProfile = pk.StorageProfile_STORAGE_PROFILE_HARDENED
-	}
+	authenticatedUser, _ := domain.UserFromContext(ctx)
+	storageProfile := authorization.GetStorageProfileForTier(authenticatedUser.Tier)
 
 	description, err := domain.NewDescription(req.GetDescription())
 	if err != nil {
@@ -122,15 +116,8 @@ func (s *keyServiceImpl) BatchCreateKeys(ctx context.Context, req *pk.BatchCreat
 		return nil, app_errors.ErrInvalidInput
 	}
 
-	authenticatedUser, ok := domain.UserFromContext(ctx)
-	if !ok {
-		return nil, app_errors.ErrAuthentication
-	}
-
-	storageProfile := pk.StorageProfile_STORAGE_PROFILE_STANDARD
-	if authenticatedUser.Tier == domain.TierPro || authenticatedUser.Tier == domain.TierEnterprise {
-		storageProfile = pk.StorageProfile_STORAGE_PROFILE_HARDENED
-	}
+	authenticatedUser, _ := domain.UserFromContext(ctx)
+	storageProfile := authorization.GetStorageProfileForTier(authenticatedUser.Tier)
 
 	keys := make([]*domain.Key, len(req.Keys))
 	for i, item := range req.Keys {
