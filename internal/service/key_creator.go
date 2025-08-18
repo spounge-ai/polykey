@@ -12,10 +12,72 @@ import (
 	"github.com/spounge-ai/polykey/pkg/crypto"
 	"github.com/spounge-ai/polykey/pkg/patterns/batch"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2" 
+	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 )
 
 const MaxKeyIDGenerationRetries = 10
+
+// createKeyObject encapsulates the core logic for creating a new key domain object.
+// It handles DEK generation, encryption, and metadata population.
+func (s *keyServiceImpl) createKeyObject(ctx context.Context, item *pk.CreateKeyItem, clientIdentity string, storageProfile pk.StorageProfile) (*domain.Key, error) {
+	description, err := domain.NewDescription(item.GetDescription())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
+	}
+
+	dekPool, ok := s.dekPools[item.GetKeyType()]
+	if !ok {
+		return nil, fmt.Errorf("%w: unsupported key type for pooling", ErrInvalidKeyType)
+	}
+
+	dek := dekPool.Get()
+	defer dekPool.Put(dek)
+
+	if _, err := rand.Read(dek); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrKeyGenerationFail, err)
+	}
+
+	keyID := domain.NewKeyID()
+	now := time.Now()
+
+	kmsProvider, err := s.getKMSProvider(storageProfile)
+	if err != nil {
+		return nil, err
+	}
+
+	finalKey := &domain.Key{
+		ID:        keyID,
+		Version:   1,
+		Status:    domain.KeyStatusActive,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Metadata: &pk.KeyMetadata{
+			KeyId:              keyID.String(),
+			KeyType:            item.GetKeyType(),
+			Status:             pk.KeyStatus_KEY_STATUS_ACTIVE,
+			Version:            1,
+			CreatedAt:          timestamppb.New(now),
+			UpdatedAt:          timestamppb.New(now),
+			ExpiresAt:          item.GetExpiresAt(),
+			CreatorIdentity:    clientIdentity,
+			AuthorizedContexts: item.GetInitialAuthorizedContexts(),
+			AccessPolicies:     item.GetAccessPolicies(),
+			Description:        description.String(),
+			Tags:               item.GetTags(),
+			DataClassification: item.GetDataClassification(),
+			StorageType:        storageProfile,
+			AccessCount:        0,
+		},
+	}
+
+	encryptedDEK, err := kmsProvider.EncryptDEK(ctx, dek, finalKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
+	}
+
+	finalKey.EncryptedDEK = encryptedDEK
+	return finalKey, nil
+}
 
 func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest) (*pk.CreateKeyResponse, error) {
 	if req == nil || req.RequesterContext == nil || req.RequesterContext.GetClientIdentity() == "" {
@@ -25,80 +87,34 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 	authenticatedUser, _ := domain.UserFromContext(ctx)
 	storageProfile := authorization.GetStorageProfileForTier(authenticatedUser.Tier)
 
-	description, err := domain.NewDescription(req.GetDescription())
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
-	}
-
 	_, algorithm, err := crypto.GetCryptoDetails(req.GetKeyType())
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", app_errors.ErrInvalidInput, err)
 	}
 
-	dekPool, ok := s.dekPools[req.GetKeyType()]
-	if !ok {
-		return nil, fmt.Errorf("%w: unsupported key type for pooling", ErrInvalidKeyType)
+	// Adapt the single request to the item format expected by the helper.
+	item := &pk.CreateKeyItem{
+		KeyType:                   req.GetKeyType(),
+		Description:               req.GetDescription(),
+		Tags:                      req.GetTags(),
+		ExpiresAt:                 req.GetExpiresAt(),
+		InitialAuthorizedContexts: req.GetInitialAuthorizedContexts(),
+		AccessPolicies:            req.GetAccessPolicies(),
+		DataClassification:        req.GetDataClassification(),
+		GenerationParams:          req.GetGenerationParams(),
 	}
 
-	// Generate the DEK from a secure pool and ensure it is returned.
-	dek := dekPool.Get()
-	defer dekPool.Put(dek)
-
-	if _, err := rand.Read(dek); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrKeyGenerationFail, err)
-	}
-
-	// Generate a unique KeyID.
-	keyID := domain.NewKeyID()
-
-	now := time.Now()
-
-	kmsProvider, err := s.getKMSProvider(storageProfile)
+	finalKey, err := s.createKeyObject(ctx, item, req.RequesterContext.GetClientIdentity(), storageProfile)
 	if err != nil {
 		return nil, err
 	}
-
-	// Create the final key object first, so we have the ID for the KDF.
-	finalKey := &domain.Key{
-		ID:        keyID,
-		Version:   1,
-		Status:    domain.KeyStatusActive,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Metadata: &pk.KeyMetadata{
-			KeyId:              keyID.String(),
-			KeyType:            req.GetKeyType(),
-			Status:             pk.KeyStatus_KEY_STATUS_ACTIVE,
-			Version:            1,
-			CreatedAt:          timestamppb.New(now),
-			UpdatedAt:          timestamppb.New(now),
-			ExpiresAt:          req.GetExpiresAt(),
-			CreatorIdentity:    req.RequesterContext.GetClientIdentity(),
-			AuthorizedContexts: req.GetInitialAuthorizedContexts(),
-			AccessPolicies:     req.GetAccessPolicies(),
-			Description:        description.String(),
-			Tags:               req.GetTags(),
-			DataClassification: req.GetDataClassification(),
-			StorageType:        storageProfile,
-			AccessCount:        0,
-		},
-	}
-
-	// Immediate encryption pattern: Encrypt the DEK right after generation.
-	encryptedDEK, err := kmsProvider.EncryptDEK(ctx, dek, finalKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
-	}
-
-	// Now, populate the final domain object with the encrypted DEK for storage.
-	finalKey.EncryptedDEK = encryptedDEK
 
 	createdKey, err := s.keyRepo.CreateKey(ctx, finalKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "key created", "keyId", keyID, "keyType", req.GetKeyType().String())
+	s.logger.InfoContext(ctx, "key created", "keyId", createdKey.ID, "keyType", req.GetKeyType().String())
 
 	return &pk.CreateKeyResponse{
 		KeyId:    createdKey.ID.String(),
@@ -132,58 +148,7 @@ func (s *keyServiceImpl) BatchCreateKeys(ctx context.Context, req *pk.BatchCreat
 			return nil
 		},
 		Process: func(ctx context.Context, item *pk.CreateKeyItem) (*domain.Key, error) {
-			dekPool, ok := s.dekPools[item.GetKeyType()]
-			if !ok {
-				return nil, fmt.Errorf("%w: unsupported key type for pooling", ErrInvalidKeyType)
-			}
-
-			dek := dekPool.Get()
-			defer dekPool.Put(dek)
-
-			if _, err := rand.Read(dek); err != nil {
-				return nil, fmt.Errorf("%w: %w", ErrKeyGenerationFail, err)
-			}
-
-			keyID := domain.NewKeyID()
-			now := time.Now()
-
-			kmsProvider, err := s.getKMSProvider(storageProfile)
-			if err != nil {
-				return nil, err
-			}
-
-			finalKey := &domain.Key{
-				ID:        keyID,
-				Version:   1,
-				Status:    domain.KeyStatusActive,
-				CreatedAt: now,
-				UpdatedAt: now,
-				Metadata: &pk.KeyMetadata{
-					KeyId:              keyID.String(),
-					KeyType:            item.GetKeyType(),
-					Status:             pk.KeyStatus_KEY_STATUS_ACTIVE,
-					Version:            1,
-					CreatedAt:          timestamppb.New(now),
-					UpdatedAt:          timestamppb.New(now),
-					ExpiresAt:          item.GetExpiresAt(),
-					CreatorIdentity:    req.RequesterContext.GetClientIdentity(),
-					AuthorizedContexts: item.GetInitialAuthorizedContexts(),
-					AccessPolicies:     item.GetAccessPolicies(),
-					Description:        item.GetDescription(),
-					Tags:               item.GetTags(),
-					DataClassification: item.GetDataClassification(),
-					StorageType:        storageProfile,
-					AccessCount:        0,
-				},
-			}
-
-			encryptedDEK, err := kmsProvider.EncryptDEK(ctx, dek, finalKey)
-			if err != nil {
-				return nil, fmt.Errorf("failed to encrypt DEK: %w", err)
-			}
-
-			finalKey.EncryptedDEK = encryptedDEK
-			return finalKey, nil
+			return s.createKeyObject(ctx, item, req.RequesterContext.GetClientIdentity(), storageProfile)
 		},
 	}
 
@@ -220,7 +185,3 @@ func (s *keyServiceImpl) BatchCreateKeys(ctx context.Context, req *pk.BatchCreat
 		Results: batchResults,
 	}, nil
 }
-
-
-
-

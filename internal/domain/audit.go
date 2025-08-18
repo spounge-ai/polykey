@@ -23,5 +23,6 @@ type AuditEvent struct {
 
 type AuditRepository interface {
 	CreateAuditEvent(ctx context.Context, event *AuditEvent) error
+	CreateAuditEventsBatch(ctx context.Context, events []*AuditEvent) error
 	GetAuditHistory(ctx context.Context, keyID string, limit int) ([]*AuditEvent, error)
 }

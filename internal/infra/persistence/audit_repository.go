@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/domain"
 )
@@ -18,6 +19,29 @@ func NewAuditRepository(db *pgxpool.Pool) (*AuditRepository, error) {
 func (r *AuditRepository) CreateAuditEvent(ctx context.Context, event *domain.AuditEvent) error {
 	query := `INSERT INTO audit_events (id, client_identity, operation, key_id, auth_decision_id, success, error_message, timestamp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 	_, err := r.db.Exec(ctx, query, event.ID, event.ClientIdentity, event.Operation, event.KeyID, event.AuthDecisionID, event.Success, event.Error, event.Timestamp)
+	return err
+}
+
+func (r *AuditRepository) CreateAuditEventsBatch(ctx context.Context, events []*domain.AuditEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	rows := make([][]interface{}, len(events))
+	for i, event := range events {
+		rows[i] = []interface{}{
+			event.ID, event.ClientIdentity, event.Operation, event.KeyID,
+			event.AuthDecisionID, event.Success, event.Error, event.Timestamp,
+		}
+	}
+
+	_, err := r.db.CopyFrom(
+		ctx,
+		pgx.Identifier{"audit_events"},
+		[]string{"id", "client_identity", "operation", "key_id", "auth_decision_id", "success", "error_message", "timestamp"},
+		pgx.CopyFromRows(rows),
+	)
+
 	return err
 }
 

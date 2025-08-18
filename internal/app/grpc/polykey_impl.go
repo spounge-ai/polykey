@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	cts "github.com/spounge-ai/polykey/internal/constants"
@@ -91,6 +90,19 @@ func (s *PolykeyService) sanitizeError(ctx context.Context, method string, err e
 var emptyResponse = &emptypb.Empty{}
 
 
+func toProtoTier(tier domain.KeyTier) cmn.ClientTier {
+	switch tier {
+	case domain.TierFree:
+		return cmn.ClientTier_CLIENT_TIER_FREE
+	case domain.TierPro:
+		return cmn.ClientTier_CLIENT_TIER_PRO
+	case domain.TierEnterprise:
+		return cmn.ClientTier_CLIENT_TIER_ENTERPRISE
+	default:
+		return cmn.ClientTier_CLIENT_TIER_UNSPECIFIED
+	}
+}
+
 func (s *PolykeyService) Authenticate(ctx context.Context, req *pk.AuthenticateRequest) (*pk.AuthenticateResponse, error) {
 	if req.GetClientId() == "" || req.GetApiKey() == "" {
 		return nil, status.Error(codes.InvalidArgument, "client_id and api_key are required")
@@ -106,7 +118,7 @@ func (s *PolykeyService) Authenticate(ctx context.Context, req *pk.AuthenticateR
 		TokenType:   result.TokenType,
 		ExpiresIn:   result.ExpiresIn,
 		IssuedAt:    timestamppb.Now(),
-		ClientTier:  cmn.ClientTier(cmn.ClientTier_value[strings.ToUpper(string(result.ClientTier))]),
+		ClientTier:  toProtoTier(result.ClientTier),
 	}, nil
 }
 

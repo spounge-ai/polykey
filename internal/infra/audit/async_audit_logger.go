@@ -114,18 +114,13 @@ func (l *AsyncAuditLogger) worker() {
 }
 
 // writeBatchToDB writes a batch of audit events to the database.
-// Note: This implementation does not yet include the dead-letter queue logic for simplicity in this step.
 func (l *AsyncAuditLogger) writeBatchToDB(batch []*domain.AuditEvent) {
 	if len(batch) == 0 {
 		return
 	}
 
-	// In a real implementation, you would use pgx.Batch here for efficiency.
-	// For simplicity in this step, we will insert one by one.
-	for _, event := range batch {
-		if err := l.auditRepo.CreateAuditEvent(context.Background(), event); err != nil {
-			l.logger.Error("failed to write audit event to database", "error", err, "audit_id", event.ID)
-			// Here you would add retry logic and dead-letter queue handling.
-		}
+	if err := l.auditRepo.CreateAuditEventsBatch(context.Background(), batch); err != nil {
+		l.logger.Error("failed to write audit event batch to database", "error", err, "batch_size", len(batch))
+		// In a production system, add failed batch to a dead-letter queue for reprocessing.
 	}
 }

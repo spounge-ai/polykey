@@ -1,5 +1,8 @@
 package persistence
 
+
+// s3 implementation is depreciated for now
+
 import (
 	"bytes"
 	"context"

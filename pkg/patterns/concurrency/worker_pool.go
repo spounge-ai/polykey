@@ -1,114 +1,106 @@
 package concurrency
 
 import (
+	"context"
 	"sync"
-	"sync/atomic"
 )
 
-// WorkItem represents a work item to be processed by a worker.
-// It contains a generic data field.
-type WorkItem interface{}
-
-// WorkResult represents the result of a processed work item.
-// It contains a generic result field and an error field.
-type WorkResult struct {
-	Result interface{}
-	Err    error
+// Job represents a work item to be processed, including the data.
+type Job[T any] struct {
+	Data T
 }
 
-// AdaptiveWorkerPool is an adaptive worker pool with backpressure.
-// It can scale the number of workers up and down based on the queue size.
-// It has a minimum and maximum number of workers.
-// It has a request channel, a results channel, and a shutdown channel.
-// It uses a wait group to wait for all workers to finish.
-type AdaptiveWorkerPool struct {
-	workers    int32
-	maxWorkers int32
-	minWorkers int32
-	requests   chan WorkItem
-	results    chan WorkResult
-	shutdown   chan struct{}
-	wg         sync.WaitGroup
+// Result holds the outcome of a processed job.
+type Result[R any] struct {
+	Value R
+	Err   error
 }
 
-// NewAdaptiveWorkerPool creates a new AdaptiveWorkerPool.
-func NewAdaptiveWorkerPool(minWorkers, maxWorkers, queueDepth int) *AdaptiveWorkerPool {
-	pool := &AdaptiveWorkerPool{
-		minWorkers: int32(minWorkers),
-		maxWorkers: int32(maxWorkers),
-		requests:   make(chan WorkItem, queueDepth),
-		results:    make(chan WorkResult, queueDepth),
-		shutdown:   make(chan struct{}),
+// Processor is a function that processes a single job.
+type Processor[T, R any] func(ctx context.Context, data T) (R, error)
+
+// WorkerPool is a generic, fixed-size worker pool for concurrent task processing.
+// It is type-safe and uses a clear start/stop lifecycle.
+type WorkerPool[T, R any] struct {
+	workerCount int
+	jobs        chan Job[T]
+	results     chan Result[R]
+	processor   Processor[T, R]
+	wg          sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
+}
+
+// NewWorkerPool creates a new fixed-size worker pool.
+// - parentCtx: The context to govern the lifecycle of the pool's workers.
+// - workerCount: The number of concurrent workers to run.
+// - queueDepth: The buffer size of the job queue.
+// - processor: The function that will be executed by each worker for each job.
+func NewWorkerPool[T, R any](parentCtx context.Context, workerCount int, queueDepth int, processor Processor[T, R]) *WorkerPool[T, R] {
+	ctx, cancel := context.WithCancel(parentCtx)
+	return &WorkerPool[T, R]{
+		workerCount: workerCount,
+		jobs:        make(chan Job[T], queueDepth),
+		results:     make(chan Result[R], queueDepth),
+		processor:   processor,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
-
-	for i := 0; i < int(minWorkers); i++ {
-		pool.wg.Add(1)
-		go pool.worker()
-	}
-	atomic.StoreInt32(&pool.workers, int32(minWorkers))
-
-	return pool
 }
 
-// worker is the worker function.
-// It processes work items from the requests channel.
-// It sends results to the results channel.
-// It can be shut down by the shutdown channel.
-func (p *AdaptiveWorkerPool) worker() {
+// Start initializes and starts the workers in the pool.
+func (p *WorkerPool[T, R]) Start() {
+	for i := 0; i < p.workerCount; i++ {
+		p.wg.Add(1)
+		go p.worker()
+	}
+}
+
+// worker is the core processing loop for a single worker goroutine.
+func (p *WorkerPool[T, R]) worker() {
 	defer p.wg.Done()
 	for {
 		select {
-		case req, ok := <-p.requests:
+		case job, ok := <-p.jobs:
 			if !ok {
+				// Jobs channel was closed.
 				return
 			}
-			// This is where the work is done.
-			// In a real implementation, this would be a call to a function that does the work.
-			// For now, we just return the request as the result.
-			p.results <- WorkResult{Result: req, Err: nil}
-		case <-p.shutdown:
+			value, err := p.processor(p.ctx, job.Data)
+			p.results <- Result[R]{Value: value, Err: err}
+		case <-p.ctx.Done():
+			// Context was cancelled, terminate worker.
 			return
 		}
 	}
 }
 
-// adjustWorkers adjusts the number of workers based on the queue size.
-// It scales up if the queue is growing and scales down if the queue is empty.
-func (p *AdaptiveWorkerPool) adjustWorkers(queueSize int) {
-	current := atomic.LoadInt32(&p.workers)
-
-	// Scale up if queue is growing
-	if queueSize > cap(p.requests)/2 && current < p.maxWorkers {
-		if atomic.CompareAndSwapInt32(&p.workers, current, current+1) {
-			p.wg.Add(1)
-			go p.worker()
-		}
-	}
-
-	// Scale down if queue is empty
-	if queueSize == 0 && current > p.minWorkers {
-		select {
-		case p.shutdown <- struct{}{}:
-			atomic.AddInt32(&p.workers, -1)
-		default:
-		}
+// Submit sends a new job to the pool for processing.
+// This is a non-blocking call. If the job queue is full, the job is dropped.
+// Returns true if the job was submitted, false if the queue was full.
+func (p *WorkerPool[T, R]) Submit(data T) bool {
+	select {
+	case p.jobs <- Job[T]{Data: data}:
+		return true
+	default:
+		return false
 	}
 }
 
-// Submit submits a work item to the pool.
-func (p *AdaptiveWorkerPool) Submit(item WorkItem) {
-	p.requests <- item
-	p.adjustWorkers(len(p.requests))
-}
-
-// Results returns the results channel.
-func (p *AdaptiveWorkerPool) Results() <-chan WorkResult {
+// Results returns the channel from which processed results can be read.
+func (p *WorkerPool[T, R]) Results() <-chan Result[R] {
 	return p.results
 }
 
-// Shutdown shuts down the worker pool.
-func (p *AdaptiveWorkerPool) Shutdown() {
-	close(p.requests)
+// Stop gracefully shuts down the worker pool.
+// It waits for all submitted jobs to be processed before returning.
+func (p *WorkerPool[T, R]) Stop() {
+	// Close the jobs channel to signal workers to stop after finishing current work.
+	close(p.jobs)
+	// Wait for all worker goroutines to finish.
 	p.wg.Wait()
+	// Close the results channel after all workers are done.
 	close(p.results)
+	// Cancel the context to clean up any resources.
+	p.cancel()
 }
