@@ -12,11 +12,12 @@ import (
 // KeyRepositoryCircuitBreaker adds a circuit breaker to a KeyRepository.
 // It uses multiple type-safe breakers to avoid runtime type assertions.
 type KeyRepositoryCircuitBreaker struct {
-	repo            domain.KeyRepository
-	getKeyBreaker   *circuitbreaker.Breaker[*domain.Key]
-	listKeysBreaker *circuitbreaker.Breaker[[]*domain.Key]
-	existsBreaker   *circuitbreaker.Breaker[bool]
-	voidBreaker     *circuitbreaker.Breaker[any] // For methods returning only an error
+	repo                  domain.KeyRepository
+	getKeyBreaker         *circuitbreaker.Breaker[*domain.Key]
+	getKeyMetadataBreaker *circuitbreaker.Breaker[*pk.KeyMetadata]
+	listKeysBreaker       *circuitbreaker.Breaker[[]*domain.Key]
+	existsBreaker         *circuitbreaker.Breaker[bool]
+	voidBreaker           *circuitbreaker.Breaker[any] // For methods returning only an error
 }
 
 // NewKeyRepositoryCircuitBreaker creates a new KeyRepository with a circuit breaker.
@@ -31,6 +32,9 @@ func NewKeyRepositoryCircuitBreaker(repo domain.KeyRepository, maxFailures int, 
 	getKeyOpts := []circuitbreaker.Option[*domain.Key]{
 		circuitbreaker.WithResetTimeout[*domain.Key](resetTimeout),
 	}
+	getKeyMetadataOpts := []circuitbreaker.Option[*pk.KeyMetadata]{
+		circuitbreaker.WithResetTimeout[*pk.KeyMetadata](resetTimeout),
+	}
 	listKeysOpts := []circuitbreaker.Option[[]*domain.Key]{
 		circuitbreaker.WithResetTimeout[[]*domain.Key](resetTimeout),
 	}
@@ -39,11 +43,12 @@ func NewKeyRepositoryCircuitBreaker(repo domain.KeyRepository, maxFailures int, 
 	}
 
 	return &KeyRepositoryCircuitBreaker{
-		repo:            repo,
-		getKeyBreaker:   circuitbreaker.New(maxFailures, getKeyOpts...),
-		listKeysBreaker: circuitbreaker.New(maxFailures, listKeysOpts...),
-		existsBreaker:   circuitbreaker.New(maxFailures, existsOpts...),
-		voidBreaker:     circuitbreaker.New(maxFailures, opts...),
+		repo:                  repo,
+		getKeyBreaker:         circuitbreaker.New(maxFailures, getKeyOpts...),
+		getKeyMetadataBreaker: circuitbreaker.New(maxFailures, getKeyMetadataOpts...),
+		listKeysBreaker:       circuitbreaker.New(maxFailures, listKeysOpts...),
+		existsBreaker:         circuitbreaker.New(maxFailures, existsOpts...),
+		voidBreaker:           circuitbreaker.New(maxFailures, opts...),
 	}
 }
 
@@ -56,6 +61,18 @@ func (cb *KeyRepositoryCircuitBreaker) GetKey(ctx context.Context, id domain.Key
 func (cb *KeyRepositoryCircuitBreaker) GetKeyByVersion(ctx context.Context, id domain.KeyID, version int32) (*domain.Key, error) {
 	return cb.getKeyBreaker.Execute(ctx, func(ctx context.Context) (*domain.Key, error) {
 		return cb.repo.GetKeyByVersion(ctx, id, version)
+	})
+}
+
+func (cb *KeyRepositoryCircuitBreaker) GetKeyMetadata(ctx context.Context, id domain.KeyID) (*pk.KeyMetadata, error) {
+	return cb.getKeyMetadataBreaker.Execute(ctx, func(ctx context.Context) (*pk.KeyMetadata, error) {
+		return cb.repo.GetKeyMetadata(ctx, id)
+	})
+}
+
+func (cb *KeyRepositoryCircuitBreaker) GetKeyMetadataByVersion(ctx context.Context, id domain.KeyID, version int32) (*pk.KeyMetadata, error) {
+	return cb.getKeyMetadataBreaker.Execute(ctx, func(ctx context.Context) (*pk.KeyMetadata, error) {
+		return cb.repo.GetKeyMetadataByVersion(ctx, id, version)
 	})
 }
 

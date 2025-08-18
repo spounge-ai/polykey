@@ -10,6 +10,8 @@ const (
 	StmtCheckExists     = "check_exists"
 	StmtGetVersions     = "get_versions"
 	StmtListKeys        = "list_keys"
+	StmtGetKeyMetadata    = "get_key_metadata"
+	StmtGetKeyMetadataByVersion = "get_key_metadata_by_version"
 )
 
 var Queries = map[string]string{
@@ -28,7 +30,7 @@ var Queries = map[string]string{
 	StmtCreateKey: `
 		INSERT INTO keys (id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING version, created_at, updated_at`,
+		RETURNING id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at, revoked_at`,
 
 	StmtUpdateMetadata: `
 		UPDATE keys 
@@ -62,4 +64,14 @@ var Queries = map[string]string{
 			   created_at, updated_at, revoked_at 
 		FROM latest_keys
 		ORDER BY created_at DESC`,
+
+	StmtGetKeyMetadata: `
+		SELECT metadata FROM keys 
+		WHERE id = $1::uuid 
+		ORDER BY version DESC 
+		LIMIT 1`,
+
+	StmtGetKeyMetadataByVersion: `
+		SELECT metadata FROM keys 
+		WHERE id = $1::uuid AND version = $2`,
 }

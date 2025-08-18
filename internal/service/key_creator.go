@@ -53,21 +53,8 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, req *pk.CreateKeyRequest
 		return nil, fmt.Errorf("%w: %w", ErrKeyGenerationFail, err)
 	}
 
-	// Generate a unique KeyID, retrying up to MaxKeyIDGenerationRetries times in the unlikely event of a collision.
-	var keyID domain.KeyID
-	for i := 0; i < MaxKeyIDGenerationRetries; i++ {
-		keyID = domain.NewKeyID()
-		exists, err := s.keyRepo.Exists(ctx, keyID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check key existence: %w", err)
-		}
-		if !exists {
-			break
-		}
-		if i == MaxKeyIDGenerationRetries-1 {
-			return nil, fmt.Errorf("failed to generate a unique key ID after %d attempts", MaxKeyIDGenerationRetries)
-		}
-	}
+	// Generate a unique KeyID.
+	keyID := domain.NewKeyID()
 
 	now := time.Now()
 

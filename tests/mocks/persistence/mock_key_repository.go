@@ -35,6 +35,22 @@ func (r *InMemoryKeyRepository) GetKeyByVersion(ctx context.Context, id domain.K
 	return r.GetKey(ctx, id)
 }
 
+func (r *InMemoryKeyRepository) GetKeyMetadata(ctx context.Context, id domain.KeyID) (*pk.KeyMetadata, error) {
+	key, err := r.GetKey(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return key.Metadata, nil
+}
+
+func (r *InMemoryKeyRepository) GetKeyMetadataByVersion(ctx context.Context, id domain.KeyID, version int32) (*pk.KeyMetadata, error) {
+	key, err := r.GetKeyByVersion(ctx, id, version)
+	if err != nil {
+		return nil, err
+	}
+	return key.Metadata, nil
+}
+
 func (r *InMemoryKeyRepository) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
 	r.keys.Store(key.ID.String(), key)
 	return key, nil

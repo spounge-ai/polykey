@@ -93,14 +93,20 @@ func (s *keyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetad
 
 	span.SetAttributes(attribute.String("key.id", keyID.String()))
 
-	key, err := s.getKeyByRequest(ctx, keyID, req.GetVersion())
+	var metadata *pk.KeyMetadata
+	if req.GetVersion() > 0 {
+		metadata, err = s.keyRepo.GetKeyMetadataByVersion(ctx, keyID, req.GetVersion())
+	} else {
+		metadata, err = s.keyRepo.GetKeyMetadata(ctx, keyID)
+	}
+
 	if err != nil {
-		s.logger.ErrorContext(ctx, "[key_retriever.go:GetKeyMetadata] Error from getKeyByRequest", "error", err)
+		s.logger.ErrorContext(ctx, "[key_retriever.go:GetKeyMetadata] Error from keyRepo", "error", err)
 		return nil, err
 	}
 
 	resp := &pk.GetKeyMetadataResponse{
-		Metadata:          key.Metadata,
+		Metadata:          metadata,
 		ResponseTimestamp: timestamppb.Now(),
 	}
 
@@ -112,6 +118,6 @@ func (s *keyServiceImpl) GetKeyMetadata(ctx context.Context, req *pk.GetKeyMetad
 	}
 
 	s.auditLogger.AuditLog(ctx, req.GetRequesterContext().GetClientIdentity(), "GetKeyMetadata", keyID.String(), "", true, nil)
-	s.logger.InfoContext(ctx, "key metadata retrieved", "keyId", req.GetKeyId(), "version", key.Version)
+	s.logger.InfoContext(ctx, "key metadata retrieved", "keyId", req.GetKeyId(), "version", metadata.Version)
 	return resp, nil
 }

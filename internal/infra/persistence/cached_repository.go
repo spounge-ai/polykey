@@ -95,6 +95,24 @@ func (cr *CachedRepository) GetKeyByVersion(ctx context.Context, id domain.KeyID
 	return key, nil
 }
 
+func (cr *CachedRepository) GetKeyMetadata(ctx context.Context, id domain.KeyID) (*pk.KeyMetadata, error) {
+	cacheKey := cr.getCacheKey(id, 0) // 0 for latest version
+	if key, found := cr.cache.Get(ctx, cacheKey); found {
+		return key.Metadata, nil
+	}
+	// If not in cache, go to repo. Don't cache the result here to avoid partial objects.
+	return cr.repo.GetKeyMetadata(ctx, id)
+}
+
+func (cr *CachedRepository) GetKeyMetadataByVersion(ctx context.Context, id domain.KeyID, version int32) (*pk.KeyMetadata, error) {
+	cacheKey := cr.getCacheKey(id, version)
+	if key, found := cr.cache.Get(ctx, cacheKey); found {
+		return key.Metadata, nil
+	}
+	// If not in cache, go to repo.
+	return cr.repo.GetKeyMetadataByVersion(ctx, id, version)
+}
+
 func (cr *CachedRepository) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
 	createdKey, err := cr.repo.CreateKey(ctx, key)
 	if err == nil {

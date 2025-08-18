@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	consts "github.com/spounge-ai/polykey/internal/constants"
 	"github.com/spounge-ai/polykey/internal/domain"
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	psql "github.com/spounge-ai/polykey/pkg/postgres"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	
 )
 
 const (
@@ -76,6 +77,49 @@ func (a *PSQLAdapter) GetKeyByVersion(ctx context.Context, id domain.KeyID, vers
 	return key, nil
 }
 
+func (a *PSQLAdapter) GetKeyMetadata(ctx context.Context, id domain.KeyID) (*pk.KeyMetadata, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	var metadataRaw []byte
+	err := a.DB.QueryRow(ctx, consts.Queries[consts.StmtGetKeyMetadata], id.String()).Scan(&metadataRaw)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, psql.ErrKeyNotFound
+		}
+		return nil, fmt.Errorf("failed to get key metadata for %s: %w", id.String(), err)
+	}
+
+	var metadata pk.KeyMetadata
+	if err := json.Unmarshal(metadataRaw, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+	}
+
+	return &metadata, nil
+}
+
+func (a *PSQLAdapter) GetKeyMetadataByVersion(ctx context.Context, id domain.KeyID, version int32) (*pk.KeyMetadata, error) {
+	if version <= 0 {
+		return nil, psql.ErrInvalidVersion
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	var metadataRaw []byte
+	err := a.DB.QueryRow(ctx, consts.Queries[consts.StmtGetKeyMetadataByVersion], id.String(), version).Scan(&metadataRaw)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, psql.ErrKeyNotFound
+		}
+		return nil, fmt.Errorf("failed to get key metadata for %s version %d: %w", id.String(), version, err)
+	}
+
+	var metadata pk.KeyMetadata
+	if err := json.Unmarshal(metadataRaw, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+	}
+
+	return &metadata, nil
+}
+
 func (a *PSQLAdapter) CreateKey(ctx context.Context, key *domain.Key) (*domain.Key, error) {
 	if key == nil {
 		return nil, errors.New("key cannot be nil")
@@ -85,14 +129,6 @@ func (a *PSQLAdapter) CreateKey(ctx context.Context, key *domain.Key) (*domain.K
 	}
 	if len(key.EncryptedDEK) == 0 {
 		return nil, errors.New("encrypted DEK cannot be empty")
-	}
-
-	exists, err := a.Exists(ctx, key.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check key existence: %w", err)
-	}
-	if exists {
-		return nil, psql.ErrKeyAlreadyExists
 	}
 
 	metadataRaw, err := a.optimizer.MarshalWithBuffer(key.Metadata)
@@ -108,11 +144,16 @@ func (a *PSQLAdapter) CreateKey(ctx context.Context, key *domain.Key) (*domain.K
 		key.ID.String(), key.Version, metadataRaw, key.EncryptedDEK,
 		key.Status, storageType, key.CreatedAt, key.UpdatedAt)
 
-	if err := row.Scan(&key.Version, &key.CreatedAt, &key.UpdatedAt); err != nil {
+	createdKey, err := ScanKeyRowWithID(row)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+			return nil, psql.ErrKeyAlreadyExists
+		}
 		return nil, fmt.Errorf("failed to create key %s: %w", key.ID.String(), err)
 	}
 
-	return key, nil
+	return createdKey, nil
 }
 
 func (a *PSQLAdapter) CreateKeys(ctx context.Context, keys []*domain.Key) error {
@@ -218,61 +259,46 @@ func (a *PSQLAdapter) rotateKeyInTx(ctx context.Context, tx pgx.Tx, id domain.Ke
 		return nil, app_errors.ErrKeyRotationLocked
 	}
 
-	const selectQuery = `SELECT version, metadata, storage_type FROM keys 
-	                     WHERE id = $1::uuid ORDER BY version DESC LIMIT 1 FOR UPDATE`
-	
-	var currentVersion int32
-	var metadataRaw []byte
-	var storageType string
+	const rotateQuery = `
+		WITH old_key AS (
+			UPDATE keys
+			SET status = $1, updated_at = now()
+			WHERE id = $2 AND version = (SELECT MAX(version) FROM keys WHERE id = $2)
+			RETURNING id, metadata, storage_type
+		),
+		new_key AS (
+			INSERT INTO keys (id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at)
+			SELECT
+				id,
+				(metadata->>'version')::int + 1,
+				jsonb_set(metadata, '{version}', (((metadata->>'version')::int + 1)::text)::jsonb),
+				$3,
+				$4,
+				storage_type,
+				now(),
+				now()
+			FROM old_key
+			RETURNING id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at, revoked_at
+		)
+		SELECT id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at, revoked_at FROM new_key;
+	`
 
-	err = tx.QueryRow(ctx, selectQuery, id.String()).Scan(&currentVersion, &metadataRaw, &storageType)
+	row := tx.QueryRow(ctx, rotateQuery,
+		domain.KeyStatusRotated,
+		id.String(),
+		newEncryptedDEK,
+		domain.KeyStatusActive,
+	)
+
+	key, err := ScanKeyRowWithID(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, psql.ErrKeyNotFound
 		}
-		return nil, fmt.Errorf("failed to get current key version: %w", err)
+		return nil, fmt.Errorf("failed to rotate key %s: %w", id.String(), err)
 	}
 
-	const updateQuery = `UPDATE keys SET status = $1 WHERE id = $2::uuid AND version = $3`
-	_, err = tx.Exec(ctx, updateQuery, domain.KeyStatusRotated, id.String(), currentVersion)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update old key version status: %w", err)
-	}
-
-	var metadata pk.KeyMetadata
-	if err := json.Unmarshal(metadataRaw, &metadata); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
-	}
-
-	newVersion := currentVersion + 1
-	now := time.Now()
-	metadata.Version = newVersion
-	metadata.UpdatedAt = timestamppb.New(now)
-
-	newMetadataRaw, err := a.optimizer.MarshalWithBuffer(&metadata)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal updated metadata: %w", err)
-	}
-
-	const insertQuery = `INSERT INTO keys (id, version, metadata, encrypted_dek, status, storage_type, created_at, updated_at) 
-	                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-
-	_, err = tx.Exec(ctx, insertQuery,
-		id.String(), newVersion, newMetadataRaw, newEncryptedDEK,
-		domain.KeyStatusActive, storageType, now, now)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert new key version: %w", err)
-	}
-
-	return &domain.Key{
-		ID:           id,
-		Version:      newVersion,
-		Metadata:     &metadata,
-		EncryptedDEK: newEncryptedDEK,
-		Status:       domain.KeyStatusActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}, nil
+	return key, nil
 }
 
 func (a *PSQLAdapter) RevokeKey(ctx context.Context, id domain.KeyID) error {
