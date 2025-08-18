@@ -9,6 +9,7 @@ import (
 func DefaultRequesterContext(clientID string) *pk.RequesterContext {
 	return &pk.RequesterContext{
 		ClientIdentity: clientID,
+		ClientTier:     cmn.ClientTier_CLIENT_TIER_FREE,
 	}
 }
 
