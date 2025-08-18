@@ -186,10 +186,10 @@ func (a *PSQLAdapter) CreateKeys(ctx context.Context, keys []*domain.Key) error 
 	return nil
 }
 
-func (a *PSQLAdapter) ListKeys(ctx context.Context) ([]*domain.Key, error) {
+func (a *PSQLAdapter) ListKeys(ctx context.Context, lastCreatedAt *time.Time, limit int) ([]*domain.Key, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	rows, err := a.DB.Query(ctx, consts.Queries[consts.StmtListKeys])
+	rows, err := a.DB.Query(ctx, consts.Queries[consts.StmtListKeys], lastCreatedAt, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query keys: %w", err)
 	}

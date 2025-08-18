@@ -56,7 +56,7 @@ func (r *InMemoryKeyRepository) CreateKey(ctx context.Context, key *domain.Key) 
 	return key, nil
 }
 
-func (r *InMemoryKeyRepository) ListKeys(ctx context.Context) ([]*domain.Key, error) {
+func (r *InMemoryKeyRepository) ListKeys(ctx context.Context, lastCreatedAt *time.Time, limit int) ([]*domain.Key, error) {
 	var keys []*domain.Key
 	r.keys.Range(func(key, value interface{}) bool {
 		keys = append(keys, value.(*domain.Key))

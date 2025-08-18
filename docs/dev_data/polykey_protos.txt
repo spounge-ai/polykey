@@ -59,6 +59,204 @@ message ClientInfo {
 package polykey.v2;
 
 import "google/protobuf/timestamp.proto";
+import "polykey/v2/common.proto";
+import "polykey/v2/key_types.proto";
+import "polykey/v2/single_operations.proto";
+
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
+
+message KeyRequestItem {
+  string key_id = 1;
+  int32 version = 2;
+  bool skip_metadata = 3;
+}
+
+message BatchGetKeysRequest {
+  RequesterContext requester_context = 1;
+  AccessAttributes attributes = 2;
+  repeated KeyRequestItem keys = 3;
+  bool continue_on_error = 4;
+}
+
+message BatchGetKeysResult {
+  string key_id = 1;
+  oneof result {
+    GetKeyResponse success = 2;
+    string error = 3;
+  }
+}
+
+message BatchGetKeysResponse {
+  repeated BatchGetKeysResult results = 1;
+  google.protobuf.Timestamp response_timestamp = 2;
+  int32 successful_count = 3;
+  int32 failed_count = 4;
+}
+
+message CreateKeyItem {
+  KeyType key_type = 1;
+  string description = 2;
+  map<string, string> tags = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  repeated string initial_authorized_contexts = 5;
+  map<string, string> access_policies = 6;
+  string data_classification = 7;
+  map<string, string> generation_params = 8;
+}
+
+message BatchCreateKeysRequest {
+  RequesterContext requester_context = 1;
+  repeated CreateKeyItem keys = 2;
+  bool continue_on_error = 3;
+  bool atomic = 4;
+}
+
+message BatchCreateKeysResult {
+  int32 request_index = 1;
+  oneof result {
+    CreateKeyResponse success = 2;
+    string error = 3;
+  }
+}
+
+message BatchCreateKeysResponse {
+  repeated BatchCreateKeysResult results = 1;
+  google.protobuf.Timestamp response_timestamp = 2;
+  int32 successful_count = 3;
+  int32 failed_count = 4;
+}
+
+// Batch Rotate Keys
+message RotateKeyItem {
+  string key_id = 1;
+  RotationStrategy strategy = 2;
+  int32 grace_period_seconds = 3;
+  map<string, string> generation_params = 4;
+  bool preserve_access_policies = 5;
+}
+
+message BatchRotateKeysRequest {
+  RequesterContext requester_context = 1;
+  repeated RotateKeyItem keys = 2;
+  bool continue_on_error = 3;
+  bool atomic = 4;
+}
+
+message BatchRotateKeysResult {
+  string key_id = 1;
+  oneof result {
+    RotateKeyResponse success = 2;
+    string error = 3;
+  }
+}
+
+message BatchRotateKeysResponse {
+  repeated BatchRotateKeysResult results = 1;
+  google.protobuf.Timestamp response_timestamp = 2;
+  int32 successful_count = 3;
+  int32 failed_count = 4;
+}
+
+// Batch Revoke Keys
+message RevokeKeyItem {
+  string key_id = 1;
+  string revocation_reason = 2;
+  bool immediate = 3;
+  google.protobuf.Timestamp effective_at = 4;
+  bool notify_external_systems = 5;
+}
+
+message BatchRevokeKeysRequest {
+  RequesterContext requester_context = 1;
+  repeated RevokeKeyItem keys = 2;
+  bool continue_on_error = 3;
+  bool atomic = 4;
+}
+
+message BatchRevokeKeysResult {
+  string key_id = 1;
+  oneof result {
+    bool success = 2;
+    string error = 3;
+  }
+}
+
+message BatchRevokeKeysResponse {
+  repeated BatchRevokeKeysResult results = 1;
+  google.protobuf.Timestamp response_timestamp = 2;
+  int32 successful_count = 3;
+  int32 failed_count = 4;
+}
+
+// Batch Update Key Metadata
+message UpdateKeyMetadataItem {
+  string key_id = 1;
+  optional string description = 2;
+  map<string, string> tags_to_add = 3;
+  repeated string tags_to_remove = 4;
+  repeated string contexts_to_add = 5;
+  repeated string contexts_to_remove = 6;
+  map<string, string> policies_to_update = 7;
+  optional google.protobuf.Timestamp expires_at = 8;
+  optional string data_classification = 9;
+}
+
+message BatchUpdateKeyMetadataRequest {
+  RequesterContext requester_context = 1;
+  repeated UpdateKeyMetadataItem keys = 2;
+  bool continue_on_error = 3;
+  bool atomic = 4;
+}
+
+message BatchUpdateKeyMetadataResult {
+  string key_id = 1;
+  oneof result {
+    bool success = 2;
+    string error = 3;
+  }
+}
+
+message BatchUpdateKeyMetadataResponse {
+  repeated BatchUpdateKeyMetadataResult results = 1;
+  google.protobuf.Timestamp response_timestamp = 2;
+  int32 successful_count = 3;
+  int32 failed_count = 4;
+}
+
+// Batch Get Key Metadata
+message GetKeyMetadataItem {
+  string key_id = 1;
+  bool include_access_history = 2;
+  bool include_policy_details = 3;
+  int32 version = 4;
+}
+
+message BatchGetKeyMetadataRequest {
+  RequesterContext requester_context = 1;
+  AccessAttributes attributes = 2;
+  repeated GetKeyMetadataItem keys = 3;
+  bool continue_on_error = 4;
+}
+
+message BatchGetKeyMetadataResult {
+  string key_id = 1;
+  oneof result {
+    GetKeyMetadataResponse success = 2;
+    string error = 3;
+  }
+}
+
+message BatchGetKeyMetadataResponse {
+  repeated BatchGetKeyMetadataResult results = 1;
+  google.protobuf.Timestamp response_timestamp = 2;
+  int32 successful_count = 3;
+  int32 failed_count = 4;
+}syntax = "proto3";
+
+package polykey.v2;
+
+import "google/protobuf/timestamp.proto";
 import "polykey/v2/key_types.proto";
 import "common/v2/common.proto";
 option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
@@ -194,16 +392,20 @@ syntax = "proto3";
 
 package polykey.v2;
 
-import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
-import "polykey/v2/common.proto";
-import "polykey/v2/key_types.proto";
 import "polykey/v2/metrics.proto";
 import "polykey/v2/auth.proto";
+import "polykey/v2/single_operations.proto";
+import "polykey/v2/batch_operations.proto"; 
+import "polykey/v2/stream_operations.proto";
+
 
 option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
 
 service PolykeyService {
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+
+  // 1-5, few nodes
   rpc GetKey(GetKeyRequest) returns (GetKeyResponse);
   rpc ListKeys(ListKeysRequest) returns (ListKeysResponse);
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
@@ -211,12 +413,38 @@ service PolykeyService {
   rpc RevokeKey(RevokeKeyRequest) returns (google.protobuf.Empty);
   rpc UpdateKeyMetadata(UpdateKeyMetadataRequest) returns (google.protobuf.Empty);
   rpc GetKeyMetadata(GetKeyMetadataRequest) returns (GetKeyMetadataResponse);
-  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+
+ // Batch operations (5-50 keys)
+  rpc BatchGetKeys(BatchGetKeysRequest) returns (BatchGetKeysResponse);
+  rpc BatchCreateKeys(BatchCreateKeysRequest) returns (BatchCreateKeysResponse);
+  rpc BatchRotateKeys(BatchRotateKeysRequest) returns (BatchRotateKeysResponse);
+  rpc BatchRevokeKeys(BatchRevokeKeysRequest) returns (BatchRevokeKeysResponse);
+  rpc BatchUpdateKeyMetadata(BatchUpdateKeyMetadataRequest) returns (BatchUpdateKeyMetadataResponse);
+  rpc BatchGetKeyMetadata(BatchGetKeyMetadataRequest) returns (BatchGetKeyMetadataResponse);
+  
+
+  // Streaming operations (50+ keys) unlikely right now, but in-case
+  rpc StreamGetKeys(StreamGetKeysRequest) returns (stream StreamGetKeysResponse);
+  rpc StreamCreateKeys(stream StreamCreateKeysRequest) returns (stream StreamCreateKeysResponse);
+  rpc StreamRotateKeys(stream StreamRotateKeysRequest) returns (stream StreamRotateKeysResponse);
+  rpc StreamRevokeKeys(stream StreamRevokeKeysRequest) returns (stream StreamRevokeKeysResponse);
+  rpc StreamUpdateKeyMetadata(stream StreamUpdateKeyMetadataRequest) returns (stream StreamUpdateKeyMetadataResponse);
+  rpc StreamGetKeyMetadata(stream StreamGetKeyMetadataRequest) returns (stream StreamGetKeyMetadataResponse);
   
   rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
-  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);  
 }
+ syntax = "proto3";
+
+package polykey.v2;
+
+import "google/protobuf/timestamp.proto";
+import "polykey/v2/common.proto";
+import "polykey/v2/key_types.proto";
+
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
 
 message GetKeyRequest {
   string key_id = 1;
@@ -327,4 +555,91 @@ message GetKeyMetadataResponse {
   repeated AccessHistoryEntry access_history = 2;
   map<string, PolicyDetail> policy_details = 3;
   google.protobuf.Timestamp response_timestamp = 4;
+}syntax = "proto3";
+
+package polykey.v2;
+
+import "polykey/v2/common.proto";
+import "polykey/v2/single_operations.proto";
+
+option go_package = "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2;polykeyv2";
+
+// Stream request/response messages for high-volume operations (100+ keys)
+
+message StreamGetKeysRequest {
+  string key_id = 1;
+  RequesterContext requester_context = 2;
+  AccessAttributes attributes = 3;
+  int32 version = 4;
+  optional bool skip_metadata = 5;
+}
+
+message StreamCreateKeysRequest {
+  CreateKeyRequest request = 1;
+}
+
+message StreamRotateKeysRequest {
+  RotateKeyRequest request = 1;
+}
+
+message StreamRevokeKeysRequest {
+  RevokeKeyRequest request = 1;
+}
+
+message StreamUpdateKeyMetadataRequest {
+  UpdateKeyMetadataRequest request = 1;
+}
+
+message StreamGetKeyMetadataRequest {
+  GetKeyMetadataRequest request = 1;
+}
+
+// Stream responses
+message StreamGetKeysResponse {
+  string key_id = 1;
+  oneof result {
+    GetKeyResponse success = 2;
+    string error = 3;
+  }
+  int32 sequence_number = 4;
+}
+
+message StreamCreateKeysResponse {
+  int32 request_sequence = 1;
+  oneof result {
+    CreateKeyResponse success = 2;
+    string error = 3;
+  }
+}
+
+message StreamRotateKeysResponse {
+  string key_id = 1;
+  oneof result {
+    RotateKeyResponse success = 2;
+    string error = 3;
+  }
+}
+
+message StreamRevokeKeysResponse {
+  string key_id = 1;
+  oneof result {
+    bool success = 2;
+    string error = 3;
+  }
+}
+
+message StreamUpdateKeyMetadataResponse {
+  string key_id = 1;
+  oneof result {
+    bool success = 2;
+    string error = 3;
+  }
+}
+
+message StreamGetKeyMetadataResponse {
+  string key_id = 1;
+  oneof result {
+    GetKeyMetadataResponse success = 2;
+    string error = 3;
+  }
 }

@@ -131,10 +131,10 @@ func (cr *CachedRepository) CreateKeys(ctx context.Context, keys []*domain.Key) 
 	return err
 }
 
-func (cr *CachedRepository) ListKeys(ctx context.Context) ([]*domain.Key, error) {
+func (cr *CachedRepository) ListKeys(ctx context.Context, lastCreatedAt *time.Time, limit int) ([]*domain.Key, error) {
 	// Caching for ListKeys is complex and often not beneficial without proper invalidation strategies.
 	// For now, we bypass the cache for this operation.
-	return cr.repo.ListKeys(ctx)
+	return cr.repo.ListKeys(ctx, lastCreatedAt, limit)
 }
 
 func (cr *CachedRepository) UpdateKeyMetadata(ctx context.Context, id domain.KeyID, metadata *pk.KeyMetadata) error {

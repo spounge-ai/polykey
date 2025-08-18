@@ -89,9 +89,9 @@ func (cb *KeyRepositoryCircuitBreaker) CreateKeys(ctx context.Context, keys []*d
 	return err
 }
 
-func (cb *KeyRepositoryCircuitBreaker) ListKeys(ctx context.Context) ([]*domain.Key, error) {
+func (cb *KeyRepositoryCircuitBreaker) ListKeys(ctx context.Context, lastCreatedAt *time.Time, limit int) ([]*domain.Key, error) {
 	return cb.listKeysBreaker.Execute(ctx, func(ctx context.Context) ([]*domain.Key, error) {
-		return cb.repo.ListKeys(ctx)
+		return cb.repo.ListKeys(ctx, lastCreatedAt, limit)
 	})
 }
 

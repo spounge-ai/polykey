@@ -63,7 +63,9 @@ var Queries = map[string]string{
 		SELECT id, version, metadata, encrypted_dek, status, storage_type, 
 			   created_at, updated_at, revoked_at 
 		FROM latest_keys
-		ORDER BY created_at DESC`,
+		WHERE ($1::timestamptz IS NULL OR created_at < $1)
+		ORDER BY created_at DESC
+		LIMIT $2`,
 
 	StmtGetKeyMetadata: `
 		SELECT metadata FROM keys 

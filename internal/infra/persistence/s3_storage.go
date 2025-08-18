@@ -163,7 +163,7 @@ func (s *S3Storage) putKey(ctx context.Context, key *domain.Key) error {
 	return nil
 }
 
-func (s *S3Storage) ListKeys(ctx context.Context) ([]*domain.Key, error) {
+func (s *S3Storage) ListKeys(ctx context.Context, lastCreatedAt *time.Time, limit int) ([]*domain.Key, error) {
 	prefix := "keys/"
 	input := &s3.ListObjectsV2Input{
 		Bucket:    &s.bucketName,
