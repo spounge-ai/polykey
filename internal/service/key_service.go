@@ -47,15 +47,15 @@ type keyServiceImpl struct {
 	logger              *slog.Logger
 	cfg                 *config.Config
 	errorClassifier     *app_errors.ErrorClassifier
-	dekPools            map[pk.KeyType]*memory.BufferPool
+	dekPools            map[pk.KeyType]*memory.SecureDEKPool
 	auditLogger         domain.AuditLogger
 	keyRotationPipeline *pipelines.KeyRotationPipeline
 }
 
 func NewKeyService(cfg *config.Config, keyRepo domain.KeyRepository, kmsProviders map[string]kms.KMSProvider, logger *slog.Logger, errorClassifier *app_errors.ErrorClassifier, auditLogger domain.AuditLogger) KeyService {
-	dekPools := make(map[pk.KeyType]*memory.BufferPool)
+	dekPools := make(map[pk.KeyType]*memory.SecureDEKPool)
 	if size, _, err := crypto.GetCryptoDetails(pk.KeyType_KEY_TYPE_AES_256); err == nil {
-		dekPools[pk.KeyType_KEY_TYPE_AES_256] = memory.NewBufferPool(size)
+		dekPools[pk.KeyType_KEY_TYPE_AES_256] = memory.NewSecureDEKPool(size)
 	}
 
 	rotationPipeline := pipelines.NewKeyRotationPipeline(keyRepo, logger, 5, 100) // 5 workers, 100 queue depth

@@ -10,6 +10,7 @@ import (
 	app_errors "github.com/spounge-ai/polykey/internal/errors"
 	"github.com/spounge-ai/polykey/pkg/crypto"
 	"github.com/spounge-ai/polykey/pkg/memory"
+	"github.com/spounge-ai/polykey/pkg/patterns/batch"
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -130,92 +131,52 @@ func (s *keyServiceImpl) BatchGetKeys(ctx context.Context, req *pk.BatchGetKeysR
 		return nil, app_errors.ErrInvalidInput
 	}
 
-	var ( 
-		successCount int32
-		failedCount  int32
-		results      []*pk.BatchGetKeysResult
-	)
-
 	keyIDs := make([]domain.KeyID, len(req.GetKeys()))
 	for i, item := range req.GetKeys() {
 		keyID, err := domain.KeyIDFromString(item.GetKeyId())
 		if err != nil {
-			failedCount++
-			results = append(results, &pk.BatchGetKeysResult{
-				KeyId: item.GetKeyId(),
-				Result: &pk.BatchGetKeysResult_Error{Error: err.Error()},
-			})
-			if !req.GetContinueOnError() {
-				return nil, fmt.Errorf("invalid key ID in batch request: %w", err)
-			}
-			continue
+			return nil, fmt.Errorf("invalid key ID in batch request: %w", err)
 		}
 		keyIDs[i] = keyID
 	}
 
-	// Fetch all keys from the repository in a batch
 	keys, err := s.keyRepo.GetBatchKeys(ctx, keyIDs)
 	if err != nil {
-		// If the entire batch fetch fails, return a single error unless continue_on_error is true
-		if !req.GetContinueOnError() {
-			return nil, fmt.Errorf("failed to retrieve batch keys from repository: %w", err)
-		}
-		// If continue_on_error is true, mark all as failed
-		for _, id := range keyIDs {
-			failedCount++
-			results = append(results, &pk.BatchGetKeysResult{
-				KeyId: id.String(),
-				Result: &pk.BatchGetKeysResult_Error{Error: err.Error()},
-			})
-		}
-		return &pk.BatchGetKeysResponse{
-			Results:           results,
-			ResponseTimestamp: timestamppb.Now(),
-			SuccessfulCount:   successCount,
-			FailedCount:       failedCount,
-		}, nil
+		return nil, fmt.Errorf("failed to retrieve batch keys from repository: %w", err)
 	}
 
-	// Map results back to the original request order and handle individual errors
 	keyMap := make(map[string]*domain.Key)
 	for _, key := range keys {
 		keyMap[key.ID.String()] = key
 	}
 
-	for _, item := range req.GetKeys() {
-		keyIDStr := item.GetKeyId()
-		if key, ok := keyMap[keyIDStr]; ok {
-			// Key found, now decrypt and construct response
+	processor := batch.BatchProcessor[*pk.KeyRequestItem, *pk.GetKeyResponse]{
+		MaxConcurrency: 10, // Make this configurable
+		Validate: func(item *pk.KeyRequestItem) error {
+			_, ok := keyMap[item.GetKeyId()]
+			if !ok {
+				return fmt.Errorf("key not found: %s", item.GetKeyId())
+			}
+			return nil
+		},
+		Process: func(ctx context.Context, item *pk.KeyRequestItem) (*pk.GetKeyResponse, error) {
+			key := keyMap[item.GetKeyId()]
+
 			kmsProvider, err := s.getKMSProvider(key.Metadata.GetStorageType())
 			if err != nil {
-				failedCount++
-				results = append(results, &pk.BatchGetKeysResult{
-					KeyId: keyIDStr,
-					Result: &pk.BatchGetKeysResult_Error{Error: fmt.Sprintf("failed to get KMS provider: %v", err)},
-				})
-				continue
+				return nil, fmt.Errorf("failed to get KMS provider: %w", err)
 			}
 
 			decryptedDEK, err := kmsProvider.DecryptDEK(ctx, key)
 			if err != nil {
-				failedCount++
-				s.auditLogger.AuditLog(ctx, req.GetRequesterContext().GetClientIdentity(), "BatchGetKeys", keyIDStr, "", false, err)
-				results = append(results, &pk.BatchGetKeysResult{
-					KeyId: keyIDStr,
-					Result: &pk.BatchGetKeysResult_Error{Error: fmt.Sprintf("KMS decryption failed: %v", err)},
-				})
-				continue
+				s.auditLogger.AuditLog(ctx, req.GetRequesterContext().GetClientIdentity(), "BatchGetKeys", key.ID.String(), "", false, err)
+				return nil, fmt.Errorf("%w: %w", app_errors.ErrKMSFailure, err)
 			}
 			defer memory.SecureZeroBytes(decryptedDEK)
 
 			_, algorithm, err := crypto.GetCryptoDetails(key.Metadata.GetKeyType())
 			if err != nil {
-				failedCount++
-				results = append(results, &pk.BatchGetKeysResult{
-					KeyId: keyIDStr,
-					Result: &pk.BatchGetKeysResult_Error{Error: fmt.Sprintf("failed to get crypto details: %v", err)},
-				})
-				continue
+				return nil, err
 			}
 
 			hash := sha256.Sum256(decryptedDEK)
@@ -233,24 +194,36 @@ func (s *keyServiceImpl) BatchGetKeys(ctx context.Context, req *pk.BatchGetKeysR
 			if !item.GetSkipMetadata() {
 				resp.Metadata = key.Metadata
 			}
-			s.auditLogger.AuditLog(ctx, req.GetRequesterContext().GetClientIdentity(), "BatchGetKeys", keyIDStr, "", true, nil)
-			successCount++
-			results = append(results, &pk.BatchGetKeysResult{
-				KeyId: keyIDStr,
-				Result: &pk.BatchGetKeysResult_Success{Success: resp},
-			})
-		} else {
-			// Key not found in the batch result from repo (e.g., due to previous error or not existing)
+			s.auditLogger.AuditLog(ctx, req.GetRequesterContext().GetClientIdentity(), "BatchGetKeys", key.ID.String(), "", true, nil)
+			return resp, nil
+		},
+	}
+
+	results, err := processor.ProcessBatch(ctx, req.Keys, req.GetContinueOnError())
+	if err != nil {
+		return nil, err
+	}
+
+	batchResults := make([]*pk.BatchGetKeysResult, len(results.Items))
+	var successCount, failedCount int32
+	for i, item := range results.Items {
+		if item.Error != nil {
 			failedCount++
-			results = append(results, &pk.BatchGetKeysResult{
-				KeyId: keyIDStr,
-				Result: &pk.BatchGetKeysResult_Error{Error: "key not found or could not be processed"},
-			})
+			batchResults[i] = &pk.BatchGetKeysResult{
+				KeyId:  req.Keys[i].GetKeyId(),
+				Result: &pk.BatchGetKeysResult_Error{Error: item.Error.Error()},
+			}
+		} else {
+			successCount++
+			batchResults[i] = &pk.BatchGetKeysResult{
+				KeyId:  req.Keys[i].GetKeyId(),
+				Result: &pk.BatchGetKeysResult_Success{Success: item.Result},
+			}
 		}
 	}
 
 	return &pk.BatchGetKeysResponse{
-		Results:           results,
+		Results:           batchResults,
 		ResponseTimestamp: timestamppb.Now(),
 		SuccessfulCount:   successCount,
 		FailedCount:       failedCount,

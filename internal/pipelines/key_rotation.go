@@ -16,7 +16,7 @@ import (
 type KeyRotationRequest struct {
 	KeyID              domain.KeyID
 	KMSProvider        kms.KMSProvider
-	DEKPool            *memory.BufferPool
+	DEKPool            *memory.SecureDEKPool
 	GracePeriodSeconds int32
 	KeyType            pk.KeyType
 }
