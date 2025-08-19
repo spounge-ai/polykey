@@ -68,7 +68,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// run migrations
-	mig, err := migrate.New("file://../../migrations", databaseUrl)
+	mig, err := migrate.New("file://migrations", databaseUrl)
 	if err != nil {
 		log.Fatalf("Could not create migrate instance: %s", err)
 	}

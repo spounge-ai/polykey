@@ -48,11 +48,14 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 		Server: infra_config.ServerConfig{
 			Port: 0, // Dynamic port
 			Mode: "test",
+			RateLimiter: infra_config.RateLimiterConfig{
+				Enabled: false,
+			},
 		},
 		Authorization: infra_config.AuthorizationConfig{
 			Roles: map[string]infra_config.RoleConfig{
 				"user": {
-					AllowedOperations: []string{"create_key", "get_key"},
+					AllowedOperations: []string{"keys:create", "keys:read"},
 				},
 				"unauthorized": {
 					AllowedOperations: []string{},
@@ -63,6 +66,7 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 			PolykeyMasterKey: "/kH+AgL+tN2qrA8I+nXL7is4ORj23p2YVhpTjAz2YIs=", // generated for integration test
 			JWTRSAPrivateKey: string(privateKeyPEM),
 		},
+		DefaultKMSProvider: "local",
 	}
 
 	// --- Dependency Initialization ---
@@ -80,7 +84,7 @@ func setup(t *testing.T) (pk.PolykeyServiceClient, *auth.TokenManager, func(), c
 
 	authorizer := auth.NewAuthorizer(cfg.Authorization, keyRepo, auditLogger)
 
-	clientStore, err := auth.NewFileClientStore("../../configs/config.client.dev.yaml")
+	clientStore, err := auth.NewFileClientStore("configs/dev_client/config.client.dev.yaml")
 	require.NoError(t, err)
 
 	tokenStore := auth.NewInMemoryTokenStore()
@@ -146,7 +150,7 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 	t.Run("CreateKey - Authorized", func(t *testing.T) {
 		createReq := &pk.CreateKeyRequest{
 			KeyType:          pk.KeyType_KEY_TYPE_AES_256,
-			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_creator"},
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test-user"},
 			InitialAuthorizedContexts: []string{"test-user"},
 		}
 		resp, err := client.CreateKey(ctx, createReq)
@@ -158,7 +162,7 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 	t.Run("GetKey - Authorized", func(t *testing.T) {
 		createReq := &pk.CreateKeyRequest{
 			KeyType:          pk.KeyType_KEY_TYPE_AES_256,
-			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_creator"},
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test-user"},
 			InitialAuthorizedContexts: []string{"test-user"},
 		}
 		createResp, err := client.CreateKey(ctx, createReq)
@@ -166,7 +170,7 @@ func TestKeyOperations_HappyPath(t *testing.T) {
 
 		resp, err := client.GetKey(ctx, &pk.GetKeyRequest{
 			KeyId:            createResp.KeyId,
-			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test-user"},
 		})
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
@@ -188,7 +192,7 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 
 		createReq := &pk.CreateKeyRequest{
 			KeyType:          pk.KeyType_KEY_TYPE_AES_256,
-			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_creator"},
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test-user"},
 			InitialAuthorizedContexts: []string{"test-user"},
 		}
 		createResp, err := client.CreateKey(ctx, createReq)
@@ -196,7 +200,7 @@ func TestKeyOperations_ErrorConditions(t *testing.T) {
 
 		_, err = client.GetKey(ctxUnauth, &pk.GetKeyRequest{
 			KeyId:            createResp.KeyId,
-			RequesterContext: &pk.RequesterContext{ClientIdentity: "test_client"},
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "test-user"},
 		})
 		assert.Error(t, err)
 		s, _ := status.FromError(err)

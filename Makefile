@@ -127,8 +127,10 @@ test-race: ## Run tests with race detector
 	@go test -race -v -json ./... | tparse -all
 
 test-integration: ## Run integration tests
+	@echo "$(CYAN)Building integration test binary...$(RESET)"
+	@go test -c -o tests/integration.test github.com/spounge-ai/polykey/tests/integration
 	@echo "$(CYAN)Running integration tests...$(RESET)"
-	@POLYKEY_CONFIG_PATH=../../configs/config.minimal.yaml go test -v ./tests/integration/...
+	@POLYKEY_CONFIG_PATH=$(shell pwd)/configs/config.minimal.yaml ./tests/integration.test -test.v
 
 test-persistence: ## Run persistence tests
 	@echo "$(CYAN)Running persistence tests...$(RESET)"

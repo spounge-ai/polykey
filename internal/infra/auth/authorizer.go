@@ -171,15 +171,19 @@ func (a *realAuthorizer) authenticateAndAuthorize(ctx context.Context, operation
 		return nil, false, "missing_user_identity"
 	}
 
-	// Check for wildcard admin permission first.
-	if slices.Contains(user.Permissions, "*") {
-		return user, true, "authorized"
+	for _, roleName := range user.Permissions { // user.Permissions are roles
+		if roleName == "*" {
+			return user, true, "authorized" // Wildcard admin role
+		}
+		if role, ok := a.cfg.Roles[roleName]; ok {
+			if slices.Contains(role.AllowedOperations, "*") {
+				return user, true, "authorized" // Wildcard operation in role
+			}
+			if slices.Contains(role.AllowedOperations, operation) {
+				return user, true, "authorized"
+			}
+		}
 	}
 
-	// Check for the specific operation permission.
-	if !slices.Contains(user.Permissions, operation) {
-		return nil, false, "operation_not_allowed"
-	}
-
-	return user, true, "authorized"
+	return nil, false, "operation_not_allowed"
 }
