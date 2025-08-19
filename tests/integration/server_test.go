@@ -206,3 +206,125 @@ func TestUnauthorized(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, codes.Unauthenticated, st.Code())
 }
+
+func TestListKeys(t *testing.T) {
+	client, cleanup := setupServer(t)
+	defer cleanup()
+
+	ctx := getAuthorizedContext(t, client)
+
+	// Create some keys
+	for i := 0; i < 5; i++ {
+		_, err := client.CreateKey(ctx, &pk.CreateKeyRequest{
+			KeyType:          pk.KeyType_KEY_TYPE_AES_256,
+			RequesterContext: &pk.RequesterContext{ClientIdentity: "polykey-dev-client"},
+		})
+		require.NoError(t, err)
+	}
+
+	// List keys
+	listResp, err := client.ListKeys(ctx, &pk.ListKeysRequest{
+		PageSize:         10,
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "polykey-dev-client"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, listResp)
+	require.Len(t, listResp.Keys, 5)
+}
+
+func TestBatchOperations(t *testing.T) {
+	client, cleanup := setupServer(t)
+	defer cleanup()
+
+	ctx := getAuthorizedContext(t, client)
+
+	// Batch Create
+	createItems := []*pk.CreateKeyItem{
+		{KeyType: pk.KeyType_KEY_TYPE_AES_256, Description: "key 1"},
+		{KeyType: pk.KeyType_KEY_TYPE_AES_256, Description: "key 2"},
+	}
+	batchCreateResp, err := client.BatchCreateKeys(ctx, &pk.BatchCreateKeysRequest{
+		Keys:             createItems,
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "polykey-dev-client"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, batchCreateResp)
+	require.Len(t, batchCreateResp.Results, 2)
+	require.True(t, batchCreateResp.Results[0].GetSuccess() != nil)
+	require.True(t, batchCreateResp.Results[1].GetSuccess() != nil)
+
+	keyId1 := batchCreateResp.Results[0].GetSuccess().KeyId
+	keyId2 := batchCreateResp.Results[1].GetSuccess().KeyId
+
+	// Batch Get
+	batchGetResp, err := client.BatchGetKeys(ctx, &pk.BatchGetKeysRequest{
+		Keys: []*pk.KeyRequestItem{
+			{KeyId: keyId1},
+			{KeyId: keyId2},
+		},
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "polykey-dev-client"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, batchGetResp)
+	require.Len(t, batchGetResp.Results, 2)
+	require.True(t, batchGetResp.Results[0].GetSuccess() != nil)
+	require.True(t, batchGetResp.Results[1].GetSuccess() != nil)
+
+	// Batch Get Metadata
+	batchGetMetaResp, err := client.BatchGetKeyMetadata(ctx, &pk.BatchGetKeyMetadataRequest{
+		Keys: []*pk.GetKeyMetadataItem{
+			{KeyId: keyId1},
+			{KeyId: keyId2},
+		},
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "polykey-dev-client"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, batchGetMetaResp)
+	require.Len(t, batchGetMetaResp.Results, 2)
+	require.True(t, batchGetMetaResp.Results[0].GetSuccess() != nil)
+	require.True(t, batchGetMetaResp.Results[1].GetSuccess() != nil)
+
+	// Batch Update Metadata
+	desc1 := "new desc 1"
+	desc2 := "new desc 2"
+	batchUpdateMetaResp, err := client.BatchUpdateKeyMetadata(ctx, &pk.BatchUpdateKeyMetadataRequest{
+		Keys: []*pk.UpdateKeyMetadataItem{
+			{KeyId: keyId1, Description: &desc1},
+			{KeyId: keyId2, Description: &desc2},
+		},
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "polykey-dev-client"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, batchUpdateMetaResp)
+	require.Len(t, batchUpdateMetaResp.Results, 2)
+	require.True(t, batchUpdateMetaResp.Results[0].GetSuccess())
+	require.True(t, batchUpdateMetaResp.Results[1].GetSuccess())
+
+	// Batch Rotate
+	batchRotateResp, err := client.BatchRotateKeys(ctx, &pk.BatchRotateKeysRequest{
+		Keys: []*pk.RotateKeyItem{
+			{KeyId: keyId1},
+			{KeyId: keyId2},
+		},
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "polykey-dev-client"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, batchRotateResp)
+	require.Len(t, batchRotateResp.Results, 2)
+	require.True(t, batchRotateResp.Results[0].GetSuccess() != nil)
+	require.True(t, batchRotateResp.Results[1].GetSuccess() != nil)
+
+	// Batch Revoke
+	batchRevokeResp, err := client.BatchRevokeKeys(ctx, &pk.BatchRevokeKeysRequest{
+		Keys: []*pk.RevokeKeyItem{
+			{KeyId: keyId1},
+			{KeyId: keyId2},
+		},
+		RequesterContext: &pk.RequesterContext{ClientIdentity: "polykey-dev-client"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, batchRevokeResp)
+	require.Len(t, batchRevokeResp.Results, 2)
+	require.True(t, batchRevokeResp.Results[0].GetSuccess())
+	require.True(t, batchRevokeResp.Results[1].GetSuccess())
+}
