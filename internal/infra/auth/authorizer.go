@@ -123,6 +123,18 @@ func (a *realAuthorizer) checkIdentityMatch(ctx context.Context, user *domain.Au
 }
 
 func (a *realAuthorizer) checkAuthorization(ctx context.Context, user *domain.AuthenticatedUser, operation string, keyID domain.KeyID, reqContext *pk.RequesterContext) (bool, string) {
+	// Check if the user has an admin role that bypasses resource-specific checks.
+	for _, roleName := range user.Permissions {
+		if roleName == "*" {
+			return true, "authorized_by_admin_role"
+		}
+		if role, ok := a.cfg.Roles[roleName]; ok {
+			if slices.Contains(role.AllowedOperations, "*") {
+				return true, "authorized_by_admin_role"
+			}
+		}
+	}
+
 	// If keyID is not provided, we can't do resource-based authorization.
 	// This applies to operations like CreateKey or ListKeys.
 	if keyID.IsZero() {

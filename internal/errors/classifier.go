@@ -21,6 +21,7 @@ const (
 	ClassConflict
 	ClassRateLimit
 	ClassExternal
+	ClassFailedPrecondition
 )
 
 type ClassifiedError struct {
@@ -61,6 +62,7 @@ var classificationRules = []struct {
 	{ErrConflict, ClassConflict, "A conflict occurred"},
 	{ErrRateLimit, ClassRateLimit, "You have exceeded the rate limit"},
 	{ErrExternal, ClassExternal, "External service temporarily unavailable"},
+	{ErrKeyRevoked, ClassFailedPrecondition, "The operation cannot be completed because the key is revoked"},
 }
 
 func (ec *ErrorClassifier) Classify(err error, operation string) *ClassifiedError {
@@ -119,6 +121,7 @@ var grpcCodeMap = map[ErrorClass]codes.Code{
 	ClassConflict:       codes.AlreadyExists,
 	ClassExternal:       codes.Unavailable,
 	ClassInternal:       codes.Internal, 
+	ClassFailedPrecondition: codes.FailedPrecondition,
 }
 
 func (ec *ErrorClassifier) toGRPCError(classified *ClassifiedError) error {

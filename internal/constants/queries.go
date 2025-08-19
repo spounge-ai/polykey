@@ -26,7 +26,7 @@ var Queries = map[string]string{
 		LIMIT 1`,
 
 	StmtGetKeyByVersion: `
-		SELECT metadata, encrypted_dek, status, storage_type, created_at, updated_at, revoked_at 
+		SELECT version, metadata, encrypted_dek, status, storage_type, created_at, updated_at, revoked_at 
 		FROM keys 
 		WHERE id = $1::uuid AND version = $2`,
 

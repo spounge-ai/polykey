@@ -38,6 +38,10 @@ func (s *keyServiceImpl) GetKey(ctx context.Context, req *pk.GetKeyRequest) (*pk
 		return nil, err
 	}
 
+	if key.Status == domain.KeyStatusRevoked {
+		return nil, app_errors.ErrKeyRevoked
+	}
+
 	if key.Metadata == nil {
 		return nil, ErrMissingMetadata
 	}

@@ -12,4 +12,5 @@ var (
 	ErrRateLimit      = errors.New("rate limit exceeded")
 	ErrExternal       = errors.New("external service error")
 	ErrKeyRotationLocked = errors.New("key rotation is locked")
+	ErrKeyRevoked     = errors.New("key is revoked")
 )
