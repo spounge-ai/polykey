@@ -15,9 +15,10 @@ func (s *BatchSuite) Name() string {
 }
 
 func (s *BatchSuite) Run(tc core.TestClient) error {
-	authToken := tc.Authenticate()
-	if authToken == "" {
-		return nil // Skip suite if auth fails
+	authToken, err := tc.Authenticate()
+	if err != nil {
+		tc.Logger().Error("suite auth failed, skipping", "suite", s.Name(), "error", err)
+		return err
 	}
 	authedCtx := tc.CreateAuthenticatedContext(authToken)
 

@@ -8,7 +8,6 @@ import (
 	pk "github.com/spounge-ai/spounge-proto/gen/go/polykey/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -34,11 +33,7 @@ func (s *ErrorSuite) Run(tc core.TestClient) error {
 				return client.ListKeys(ctx, req)
 			},
 			Validate: func(tc core.TestClient, resp *pk.ListKeysResponse, err error, duration time.Duration) {
-				if s, ok := status.FromError(err); ok && s.Code() == codes.Unauthenticated {
-					tc.Logger().Info("Unauthenticated access test passed", "code", s.Code().String(), "duration", duration)
-				} else {
-					tc.Logger().Error("Unauthenticated access test failed", "error", err, "duration", duration)
-				}
+				core.ExpectGrpcError(tc, "Unauthenticated access test", err, codes.Unauthenticated, duration)
 			},
 		},
 		{
@@ -51,11 +46,7 @@ func (s *ErrorSuite) Run(tc core.TestClient) error {
 				return client.ListKeys(ctx, req)
 			},
 			Validate: func(tc core.TestClient, resp *pk.ListKeysResponse, err error, duration time.Duration) {
-				if s, ok := status.FromError(err); ok && s.Code() == codes.Unauthenticated {
-					tc.Logger().Info("Invalid token test passed", "code", s.Code().String(), "duration", duration)
-				} else {
-					tc.Logger().Error("Invalid token test failed", "error", err, "duration", duration)
-				}
+				core.ExpectGrpcError(tc, "Invalid token test", err, codes.Unauthenticated, duration)
 			},
 		},
 	}

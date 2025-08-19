@@ -111,10 +111,6 @@ func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info("Stopping gRPC server...")
 	s.healthSrv.SetServingStatus("polykey.v2.PolykeyService", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 	s.grpcServer.GracefulStop()
-	if err := s.lis.Close(); err != nil {
-		s.logger.Error("failed to close listener", "error", err)
-		return err
-	}
 	s.logger.Info("gRPC server stopped.")
 	return nil
 }
