@@ -3,6 +3,7 @@ package integration_test
 
 import (
 	"context"
+	"path/filepath"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -44,6 +45,10 @@ func setupServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 		Bytes: privateKeyBytes,
 	})
 
+		moduleRoot, err := findModuleRoot()
+	require.NoError(t, err)
+	clientConfigPath := filepath.Join(moduleRoot, "configs", "dev_client", "config.client.dev.yaml")
+
 	cfg := &infra_config.Config{
 		Server: infra_config.ServerConfig{
 			Port: 0, // Dynamic port
@@ -69,7 +74,7 @@ func setupServer(t *testing.T) (pk.PolykeyServiceClient, func()) {
 			JWTRSAPrivateKey: string(privateKeyPEM),
 		},
 		DefaultKMSProvider:    "local",
-		ClientCredentialsPath: "configs/dev_client/config.client.dev.yaml",
+		ClientCredentialsPath: clientConfigPath,
 	}
 
 	kmsProviders := make(map[string]kms.KMSProvider)

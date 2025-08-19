@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"path/filepath" // Added import
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -16,6 +17,27 @@ import (
 )
 
 var dbpool *pgxpool.Pool
+
+// findModuleRoot finds the directory containing go.mod by traversing up from the current directory.
+func findModuleRoot() (string, error) {
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	for {
+		goModPath := filepath.Join(currentDir, "go.mod")
+		if _, err := os.Stat(goModPath); err == nil {
+			return currentDir, nil // Found go.mod
+		}
+
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir { // Reached root directory
+			return "", fmt.Errorf("go.mod not found in any parent directory")
+		}
+		currentDir = parentDir
+	}
+}
 
 func TestMain(m *testing.M) {
 	pool, err := dockertest.NewPool("")
@@ -68,7 +90,13 @@ func TestMain(m *testing.M) {
 	}
 
 	// run migrations
-	mig, err := migrate.New("file://migrations", databaseUrl)
+	moduleRoot, err := findModuleRoot() // Use the new helper
+	if err != nil {
+		log.Fatalf("Could not find module root: %s", err)
+	}
+	migrationsPath := filepath.Join(moduleRoot, "migrations") // Construct path relative to module root
+
+	mig, err := migrate.New("file://" + migrationsPath, databaseUrl)
 	if err != nil {
 		log.Fatalf("Could not create migrate instance: %s", err)
 	}
