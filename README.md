@@ -17,7 +17,7 @@
 </div>
 
 
-> Note (08/18/25): Finishing up unit and integration testing then containerizing.
+> Note (08/21/25): Containerized, configuring for EC2 (testing only for EKS)
 
 <hr style="width: 100%; height: 4px; background-color: #888; border: none; margin: 2em auto 1em;" />
 

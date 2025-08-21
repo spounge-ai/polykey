@@ -43,6 +43,23 @@ RUN if [ "$COMPRESS_BINARIES" = "true" ]; then \
       upx --best --lzma /app/bin/polykey; \
     fi
 
+# Install AWS CLI v2 with caching
+RUN --mount=type=cache,target=/tmp/awscli-cache \
+    set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) arch=x86_64 ;; \
+      arm64) arch=aarch64 ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    apk --no-cache add python3 py3-pip unzip curl; \
+    AWS_CLI_ZIP=/tmp/awscli-cache/awscliv2.zip; \
+    if [ ! -f "$AWS_CLI_ZIP" ]; then \
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${arch}.zip" -o "$AWS_CLI_ZIP"; \
+    fi; \
+    unzip -o "$AWS_CLI_ZIP" -d /tmp/awscli-cache; \
+    /tmp/awscli-cache/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli; \
+    rm -rf /tmp/awscli-cache/aws
+
 # --- Pull grpc-health-probe from its official image (cache-friendly) ---
 FROM ghcr.io/grpc-ecosystem/grpc-health-probe:${GRPC_HEALTH_PROBE_VERSION} AS grpc-health-probe
 
@@ -69,8 +86,9 @@ CMD ["make", "test"]
 FROM gcr.io/distroless/static-debian12:nonroot AS production
 COPY --link --from=builder /app/bin/polykey /polykey
 COPY --link --from=grpc-health-probe --chmod=0755 /ko-app/grpc-health-probe /bin/grpc_health_probe
-COPY --link ../../certs /etc/polykey/certs
-EXPOSE 50051
+COPY --link ../../configs /etc/polykey/configs
+
+EXPOSE 50053
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD ["/bin/grpc_health_probe","-addr=localhost:50051"]
 ENTRYPOINT ["/polykey"]
 
@@ -81,8 +99,8 @@ RUN apk --no-cache add ca-certificates && \
 WORKDIR /app
 COPY --link --from=grpc-health-probe --chmod=0755 /ko-app/grpc-health-probe /bin/grpc_health_probe
 COPY --link --from=builder /app/bin/polykey ./polykey
-COPY --link ../../certs /etc/polykey/certs
-EXPOSE 50051
+
+EXPOSE 50053
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD ["/bin/grpc_health_probe","-addr=localhost:50051"]
 USER appuser:appgroup
 ENTRYPOINT ["./polykey"]

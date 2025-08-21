@@ -138,7 +138,6 @@ client-server: lint ## Build, run server, wait, and run client (uses CONFIG_NAME
 DOCKER_IMAGE        ?= polykey-dev
 DOCKERFILE_PATH     := deployments/docker/Dockerfile
 COMPOSE_FILE        := deployments/docker/compose.yml
-OVERRIDE_COMPOSE    := deployments/docker/docker-compose.override.yml
 DOCKER_BUILD_CMD     = docker build --file $(DOCKERFILE_PATH) --tag $(DOCKER_IMAGE)
 DOCKER_COMPOSE_CMD   = docker compose -p polykey -f $(COMPOSE_FILE)
 
@@ -162,10 +161,6 @@ docker-clean: docker-down ## Remove image, containers, and prune unused resource
 docker-up: ## Start services in detached mode
 	@$(call echo_step_macro,Starting Docker Compose stack...)
 	@$(DOCKER_COMPOSE_CMD) up -d
-
-docker-up-dev: ## Start services with override config (dev mode)
-	@$(call echo_step_macro,Starting Docker Compose stack (dev override)...)
-	@$(DOCKER_COMPOSE_CMD) -f $(OVERRIDE_COMPOSE) up -d
 
 docker-down: ## Stop and remove services
 	@$(call echo_step_macro,Stopping Docker Compose stack...)
@@ -192,10 +187,15 @@ docker-client-server: docker-build
 	@$(call echo_step_macro,Starting client-server in Docker...)
 	@$(DOCKER_COMPOSE_CMD) up --build
 
-# Run integration tests inside the container
 docker-test-integration: docker-build
-	@$(call echo_step_macro,Running integration tests in Docker...)
-	@$(DOCKER_COMPOSE_CMD) run --rm polykey make test-integration
+	@$(call echo_step_macro,Running integration tests in Docker securely...)
+	@$(DOCKER_COMPOSE_CMD) run --rm \
+		-u $(shell id -u):$(shell id -g) \
+		-v $(HOME)/.aws:/root/.aws:ro \
+		-v $(PWD)/certs:/app/certs:ro \
+		-e AWS_REGION=us-east-1 \
+		-e AWS_EC2_METADATA_DISABLED=true \
+		polykey make test
 
 # Run unit tests inside the container
 docker-test: docker-build

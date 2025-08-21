@@ -1,4 +1,3 @@
-
 services:
   polykey:
     build:
@@ -6,15 +5,23 @@ services:
       dockerfile: deployments/docker/Dockerfile
     container_name: polykey
     ports:
-      - "50051:50051"
+      - "50053:50053"
     volumes:
       - ../../certs:/app/certs:ro
       - ../../configs:/app/configs:ro
+      - ~/.aws:/app/.aws:ro
     environment:
       - POLYKEY_CONFIG_PATH=/app/configs/config.minimal.yaml
+      - AWS_SHARED_CREDENTIALS_FILE=/app/.aws/credentials
+      - AWS_CONFIG_FILE=/app/.aws/config
+      - AWS_REGION=us-east-1
+      - AWS_PROFILE=default
+      - AWS_EC2_METADATA_DISABLED=true
+      - POLYKEY_DEV_MODE=1
     networks:
       - polykey-net
     restart: unless-stopped
+
 
   dev_client:
     build:
@@ -26,7 +33,14 @@ services:
       - polykey
     volumes:
       - ../../certs:/app/certs:ro
-      - ../../configs/dev_client:/app/configs/dev_client:ro
+      - ../../configs:/app/configs:ro
+      - ~/.aws:/app/.aws:ro               # <-- mount credentials for dev_client too
+    environment:
+      - AWS_SHARED_CREDENTIALS_FILE=/root/.aws/credentials
+      - AWS_CONFIG_FILE=/root/.aws/config
+      - AWS_REGION=us-east-1
+      - AWS_PROFILE=default
+      - AWS_EC2_METADATA_DISABLED=true
     networks:
       - polykey-net
     restart: unless-stopped
