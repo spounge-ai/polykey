@@ -10,7 +10,7 @@ RUN apk --no-cache add git make upx ca-certificates
 WORKDIR /app
 
 # Copy dependency files first for better caching
-COPY go.mod go.sum ./
+COPY ../../go.mod ../../go.sum ./
 
 # Download dependencies with build cache
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 # Copy source code
-COPY . .
+COPY ../.. .
 
 # Build polykey binary
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -51,7 +51,7 @@ CMD ["make", "test"]
 FROM gcr.io/distroless/static-debian12:nonroot AS production
 COPY --from=builder /app/bin/polykey /polykey
 COPY --from=builder /bin/grpc_health_probe /bin/grpc_health_probe
-COPY certs /etc/polykey/certs
+COPY ../../certs /etc/polykey/certs
 EXPOSE 50051
 ENTRYPOINT ["/polykey"]
 
@@ -62,7 +62,7 @@ RUN apk --no-cache add ca-certificates && \
 WORKDIR /app
 COPY --from=builder /bin/grpc_health_probe /bin/
 COPY --from=builder /app/bin/polykey .
-COPY certs /etc/polykey/certs
+COPY ../../certs /etc/polykey/certs
 EXPOSE 50051
 USER appuser:appgroup
 ENTRYPOINT ["./polykey"]

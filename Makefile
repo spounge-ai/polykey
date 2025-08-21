@@ -20,22 +20,12 @@ PORT          := 50053
 PK_ENV        := POLYKEY_GRPC_PORT=$(PORT)
 
 # --- CONFIGURATION SELECTION ---
-# This variable controls which configuration is used for development tasks
-# like `make server`, `make migrate`, and `make test-integration`.
-# It can be 'minimal', 'test', or 'production'.
-# Override from the command line: `make server CONFIG_NAME=test`
 CONFIG_NAME ?= minimal
-# ---
-
-# Configuration Files and Derived Settings
 CONFIG_DIR        := configs
-# Dynamically set the config file path based on CONFIG_NAME
 CONFIG_FILE       := $(CONFIG_DIR)/config.$(CONFIG_NAME).yaml
-# Use 'local_mocks' build tag automatically if the config is 'test'
 SERVER_BUILD_TAGS := $(if $(filter test,$(CONFIG_NAME)),local_mocks)
 
 # Test Configuration
-# Enable race detector with `make test race=true`
 ifeq ($(race),true)
     RACE_FLAG := -race
 endif
@@ -49,7 +39,15 @@ RESET  := \033[0m
 # ============================================================================
 # Phony Targets
 # ============================================================================
-.PHONY: all build clean test coverage lint server server-test server-prod server-minimal client client-debug migrate kill help init client-setup client-server test-integration test-persistence test-cockroachdb vuln-check sbom
+.PHONY: \
+	all init lint build clean kill help \
+	server server-test server-prod server-minimal \
+	client client-debug client-setup client-server \
+	docker-setup docker-build docker-rebuild docker-clean \
+	compose-up compose-down compose-logs compose-restart \
+	docker-all \
+	test test-race test-integration test-persistence coverage \
+	migrate vuln-check sbom
 
 # ============================================================================
 # Core Targets
@@ -115,15 +113,60 @@ client-server: lint ## Build, run server, wait, and run client (uses CONFIG_NAME
 	@echo "$(CYAN)Waiting for server to be ready on port $(PORT)...$(RESET)"; \
 	timeout=10; \
 	while ! nc -z localhost $(PORT) >/dev/null 2>&1; do \
-		timeout=$$((timeout-1)); \
+		timeout=$$(expr $$timeout - 1); \
 		if [ $$timeout -eq 0 ]; then \
 			echo "$(YELLOW)Error: Server failed to start within 10 seconds.$(RESET)"; \
 			exit 1; \
 		fi; \
 		sleep 1; \
 	done; \
-	echo "$(GREEN)Server is ready! Starting client...$(RESET)";
+	echo "$(GREEN)Server is ready! Starting client...$(RESET)"
 	@$(MAKE) --silent client
+
+# ==============================================================================
+# Docker & Compose Targets
+# ==============================================================================
+DOCKER_IMAGE ?= polykey-dev
+
+docker-setup: docker-build compose-up ## 🐳 Build image and start services with Docker Compose
+	$(call echo_success_macro,Docker environment setup complete!)
+
+docker-build: ## 🐳 Build the Docker image
+	$(call echo_step_macro,Building Docker image: $(DOCKER_IMAGE))
+	@docker build -t $(DOCKER_IMAGE) .
+	$(call echo_success_macro,Docker image built: $(DOCKER_IMAGE))
+
+docker-rebuild: compose-down ## 🐳 Rebuild Docker image (clean + build)
+	$(call echo_step_macro,Rebuilding Docker image: $(DOCKER_IMAGE))
+	@docker build --no-cache -t $(DOCKER_IMAGE) .
+	$(call echo_success_macro,Docker image rebuilt: $(DOCKER_IMAGE))
+
+docker-clean: compose-down ## 🐳 Remove image and containers
+	$(call echo_step_macro,Cleaning up Docker resources...)
+	@docker rmi -f $(DOCKER_IMAGE) || true
+	$(call echo_success_macro,Docker resources cleaned!)
+
+COMPOSE_FILE := deployments/docker/compose.yml
+
+compose-up: ## 🐳 Start the Docker Compose stack in detached mode
+	$(call echo_step_macro,Starting Docker Compose stack...)
+	@docker compose -f $(COMPOSE_FILE) up -d
+	$(call echo_success_macro,Compose stack started!)
+
+compose-down: ## 🐳 Stop and remove the Docker Compose stack
+	$(call echo_step_macro,Stopping Docker Compose stack...)
+	@docker compose -f $(COMPOSE_FILE) down
+	$(call echo_success_macro,Compose stack stopped!)
+
+compose-logs: ## 🐳 Tail logs from Docker Compose services
+	$(call echo_step_macro,Viewing Docker Compose logs...)
+	@docker compose -f $(COMPOSE_FILE) logs -f
+
+compose-restart: compose-down compose-up ## 🐳 Restart Docker Compose stack
+	$(call echo_success_macro,Docker Compose stack restarted!)
+
+docker-all: docker-clean docker-build compose-up ## 🐳 Clean, rebuild, and start Docker stack
+	$(call echo_success_macro,Full Docker/Compose rebuild complete!)
 
 # ============================================================================
 # Test & Coverage Targets
@@ -135,7 +178,6 @@ test: ## Run tests (use 'race=true' to enable the race detector)
 test-race: ## Alias for 'make test race=true'
 	@$(MAKE) test race=true
 
-# Note: All subsequent test targets will use the config specified by CONFIG_NAME
 test-integration:
 	@echo "$(CYAN)Running integration tests with gotestsum...$(RESET)"
 	@POLYKEY_CONFIG_PATH=$(abspath $(CONFIG_FILE)) gotestsum --format=testname -- ./tests/integration/...
@@ -143,10 +185,6 @@ test-integration:
 test-persistence: ## Run persistence tests
 	@echo "$(CYAN)Running persistence tests with config '$(CONFIG_FILE)'...$(RESET)"
 	@POLYKEY_CONFIG_PATH=$(abspath $(CONFIG_FILE)) go test -v ./internal/infra/persistence/...
-
-test-cockroachdb: ## Run CockroachDB tests
-	@echo "$(CYAN)Running CockroachDB persistence tests with config '$(CONFIG_FILE)'...$(RESET)"
-	@POLYKEY_CONFIG_PATH=$(abspath $(CONFIG_FILE)) go test -v ./tests/integration/persistence_cockroachdb_test.go
 
 coverage: ## Generate and display test coverage report
 	@echo "$(CYAN)Generating coverage report...$(RESET)"
@@ -186,7 +224,7 @@ kill: ## Kill any running server processes on the configured port
 # ============================================================================
 help: ## Show this help message
 	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(RESET)"
-	@echo "$(CYAN)║                 Polykey Development                 ║$(RESET)"
+	@echo "$(CYAN)║                 Polykey Development                       ║$(RESET)"
 	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(RESET)"
 	@echo ""
 	@echo "$(YELLOW)Default config for dev/test is: $(CYAN)$(CONFIG_NAME) ($(CONFIG_FILE))$(RESET)"
