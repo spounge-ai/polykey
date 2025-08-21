@@ -18,7 +18,7 @@ func main() {
 
 	log.Println("INFO: running database migrations...")
 
-	m, err := migrate.New("file://migrations", cfg.BootstrapSecrets.NeonDBURLDevelopment)
+	m, err := migrate.New("file://migrations", cfg.BootstrapSecrets.NeonDBURL)
 	if err != nil {
 		log.Fatalf("FATAL: failed to create migration instance: %v", err)
 	}

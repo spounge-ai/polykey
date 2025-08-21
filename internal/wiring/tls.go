@@ -25,7 +25,7 @@ func ConfigureTLS(cfg config.TLS) (*tls.Config, error) {
 		return nil, nil
 	}
 
-	serverCert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+	serverCert, err := tls.X509KeyPair([]byte(cfg.CertFile), []byte(cfg.KeyFile))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load server TLS key pair: %w", err)
 	}
@@ -36,10 +36,7 @@ func ConfigureTLS(cfg config.TLS) (*tls.Config, error) {
 	}
 
 	if cfg.ClientCAFile != "" {
-		caCert, err := os.ReadFile(cfg.ClientCAFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read client CA file: %w", err)
-		}
+		caCert := []byte(cfg.ClientCAFile)
 		caCertPool := x509.NewCertPool()
 		if !caCertPool.AppendCertsFromPEM(caCert) {
 			return nil, fmt.Errorf("failed to add client CA certificate")

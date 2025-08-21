@@ -9,6 +9,7 @@ import (
 
 	aws_config "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/go-playground/validator/v10"
+	"github.com/joho/godotenv"
 	infra_secrets "github.com/spounge-ai/polykey/internal/infra/secrets"
 	"github.com/spounge-ai/polykey/internal/secrets"
 	"github.com/spf13/viper"
@@ -16,34 +17,47 @@ import (
 )
 
 type BootstrapSecrets struct {
-	PolykeyMasterKey     string `secretpath:"/polykey/polykey_master_key"`
-	NeonDBURLDevelopment string `secretpath:"/polykey/databases/neondb_url_development"`
-	JWTRSAPrivateKey     string `secretpath:"/polykey/jwt_secret"`
+	PolykeyMasterKey string `secretpath:"/kms/polykey_master_key"`
+	NeonDBURL        string `secretpath:"/db/neondb_url"`
+	JWTRSAPrivateKey string `secretpath:"/jwt/jwt_rsa_private_key"`
+	TLSServerCert    string `secretpath:"/tls/server-cert.pem"`
+	TLSServerKey     string `secretpath:"/tls/server-key.pem"`
+	RateLimiter      string `secretpath:"/server/rate_limiter"`
+	Asynchronous     string `secretpath:"/auditing/asynchronous"`
 }
 
 type Config struct {
-	Server           ServerConfig         `mapstructure:"server"`
-	Persistence      PersistenceConfig    `mapstructure:"persistence"`
-	NeonDB           *NeonDBConfig        `mapstructure:"neondb"`
-	CockroachDB      *CockroachDBConfig   `mapstructure:"cockroachdb"`
-	Vault            *VaultConfig         `mapstructure:"vault"`
-	AWS              *AWSConfig           `mapstructure:"aws"`
-	Auditing         AuditingConfig       `mapstructure:"auditing"`
-	Authorization        AuthorizationConfig  `mapstructure:"authorization"`
-	ClientCredentialsPath string               `mapstructure:"client_credentials_path"`
-	DefaultKMSProvider    string               `mapstructure:"default_kms_provider"`
-	StorageBackend       string               `mapstructure:"storage_backend"`
-	ServiceVersion   string
-	BuildCommit      string
-	BootstrapSecrets BootstrapSecrets
+	Server                      ServerConfig         `mapstructure:"server"`
+	Persistence                 PersistenceConfig    `mapstructure:"persistence"`
+	NeonDB                      *NeonDBConfig        `mapstructure:"neondb"`
+	CockroachDB                 *CockroachDBConfig   `mapstructure:"cockroachdb"`
+	Vault                       *VaultConfig         `mapstructure:"vault"`
+	AWS                         *AWSConfig           `mapstructure:"aws"`
+	Auditing                    AuditingConfig       `mapstructure:"auditing"`
+	Authorization               AuthorizationConfig  `mapstructure:"authorization"`
+	ClientCredentialsPath       string               `mapstructure:"client_credentials_path"`
+	DefaultKMSProvider          string               `mapstructure:"default_kms_provider"`
+	StorageBackend              string               `mapstructure:"storage_backend"`
+	BootstrapSecretsBasePath    string               `mapstructure:"bootstrap_secrets_base_path"`
+	SpoungeCA                   string               `mapstructure:"spounge_ca"`
+	PolykeyAWSKMSKeyARNPath     string               `mapstructure:"polykey_aws_kms_key_arn_path"`
+	ServiceVersion              string
+	BuildCommit                 string
+	BootstrapSecrets            BootstrapSecrets
 }
 
 func Load(path string) (*Config, error) {
+	// Attempt to load .env file from the configs directory.
+	// We ignore the error because the file may not exist in all environments
+	// (e.g., production, where env vars are injected directly).
+	_ = godotenv.Load("configs/.env")
+
 	vip := viper.New()
+	vip.SetEnvPrefix("POLYKEY")
 	if path != "" {
 		vip.SetConfigFile(path)
 	} else {
-		vip.SetConfigName("config")
+		vip.SetConfigName("config.minimal")
 		vip.AddConfigPath("./configs")
 		vip.AddConfigPath(".")
 	}
@@ -52,10 +66,21 @@ func Load(path string) (*Config, error) {
 	vip.AutomaticEnv()
 	vip.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
+	// Explicitly bind environment variables to be safe.
+	//nolint:errcheck
+	vip.BindEnv("aws.s3_bucket", "POLYKEY_AWS_S3_BUCKET")
+	//nolint:errcheck
+	vip.BindEnv("aws.region", "POLYKEY_AWS_REGION")
+	//nolint:errcheck
+	vip.BindEnv("spounge_ca", "POLYKEY_SPOUNGE_CA")
+	//nolint:errcheck
+	vip.BindEnv("polykey_aws_kms_key_arn_path", "POLYKEY_AWS_KMS_KEY_ARN_PATH")
+
 	vip.SetDefault("server.port", 50053)
 	vip.SetDefault("aws.cache_ttl", "5m")
 	vip.SetDefault("storage_backend", "neondb")
 	vip.SetDefault("default_kms_provider", "local")
+	vip.SetDefault("bootstrap_secrets_base_path", "/spounge/dev/polykey")
 
 	vip.SetDefault("persistence.circuit_breaker.enabled", true)
 	vip.SetDefault("persistence.circuit_breaker.max_failures", 5)
@@ -95,11 +120,12 @@ func Load(path string) (*Config, error) {
 			return nil, fmt.Errorf("failed to load aws config: %w", err)
 		}
 		secretProvider := infra_secrets.NewParameterStore(awsCfg)
-		bootstrapSecrets, err := loadBootstrapSecrets(secretProvider)
+		bootstrapSecrets, err := loadBootstrapSecrets(secretProvider, cfg.BootstrapSecretsBasePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load bootstrap secrets: %w", err)
 		}
 		cfg.BootstrapSecrets = *bootstrapSecrets
+
 	}
 
 	if err := validate.Struct(&cfg); err != nil {
@@ -114,6 +140,9 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	cfg.Server.TLS.CertFile = cfg.BootstrapSecrets.TLSServerCert
+	cfg.Server.TLS.KeyFile = cfg.BootstrapSecrets.TLSServerKey
+
 	cfg.ServiceVersion = getenv("POLYKEY_SERVICE_VERSION", "unknown")
 	cfg.BuildCommit = getenv("POLYKEY_BUILD_COMMIT", "unknown")
 
@@ -127,7 +156,7 @@ func getenv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func loadBootstrapSecrets(secretProvider secrets.BootstrapSecretProvider) (*BootstrapSecrets, error) {
+func loadBootstrapSecrets(secretProvider secrets.BootstrapSecretProvider, basePath string) (*BootstrapSecrets, error) {
 	secrets := &BootstrapSecrets{}
 	secretsVal := reflect.ValueOf(secrets).Elem()
 	secretsType := secretsVal.Type()
@@ -141,7 +170,9 @@ func loadBootstrapSecrets(secretProvider secrets.BootstrapSecretProvider) (*Boot
 			continue
 		}
 
-		secretValue, err := secretProvider.GetSecret(context.Background(), secretPath)
+		fullPath := basePath + secretPath
+
+		secretValue, err := secretProvider.GetSecret(context.Background(), fullPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load secret for %s: %w", fieldType.Name, err)
 		}
@@ -178,18 +209,22 @@ func validateSecurity(cfg *Config) error {
 	}
 
 	if cfg.Server.TLS.Enabled {
-		if cfg.Server.TLS.CertFile == "" {
+		if cfg.BootstrapSecrets.TLSServerCert == "" {
 			return fmt.Errorf("security validation failed: TLS cert file is required when TLS is enabled")
 		}
-		if _, err := os.Stat(cfg.Server.TLS.CertFile); os.IsNotExist(err) {
-			return fmt.Errorf("security validation failed: TLS cert file not found at %s", cfg.Server.TLS.CertFile)
-		}
-		if cfg.Server.TLS.KeyFile == "" {
+		if cfg.BootstrapSecrets.TLSServerKey == "" {
 			return fmt.Errorf("security validation failed: TLS key file is required when TLS is enabled")
 		}
-		if _, err := os.Stat(cfg.Server.TLS.KeyFile); os.IsNotExist(err) {
-			return fmt.Errorf("security validation failed: TLS key file not found at %s", cfg.Server.TLS.KeyFile)
+		// Validate CA path if TLS is enabled
+		if cfg.SpoungeCA == "" {
+			return fmt.Errorf("security validation failed: CA cert path is required when TLS is enabled")
 		}
 	}
+
+	// Validate KMS ARN path if AWS is enabled
+	if cfg.AWS.Enabled && cfg.PolykeyAWSKMSKeyARNPath == "" {
+		return fmt.Errorf("security validation failed: AWS KMS Key ARN path is required when AWS is enabled")
+	}
+
 	return nil
 }
