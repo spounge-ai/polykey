@@ -36,6 +36,16 @@ YELLOW := \033[33m
 GREEN  := \033[32m
 RESET  := \033[0m
 
+# --- Helper Macros ---
+define echo_step_macro
+	@printf "$(CYAN)▶ %s$(RESET)\n" "$(1)"
+endef
+
+define echo_success_macro
+	@printf "$(GREEN)✔ %s$(RESET)\n" "$(1)"
+endef
+
+
 # ============================================================================
 # Phony Targets
 # ============================================================================
@@ -138,7 +148,7 @@ docker-build: ## 🐳 Build the Docker image
 
 docker-rebuild: compose-down ## 🐳 Rebuild Docker image (clean + build)
 	$(call echo_step_macro,Rebuilding Docker image: $(DOCKER_IMAGE))
-	@docker build --no-cache -t $(DOCKER_IMAGE) .
+	@docker build --no-cache -f deployments/docker/Dockerfile -t $(DOCKER_IMAGE) .
 	$(call echo_success_macro,Docker image rebuilt: $(DOCKER_IMAGE))
 
 docker-clean: compose-down ## 🐳 Remove image and containers

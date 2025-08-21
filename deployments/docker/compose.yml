@@ -1,14 +1,15 @@
 services:
   polykey-server:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: ./deployments/docker/Dockerfile
       target: server
       args:
         - COMPRESS_BINARIES=false  # Enable for production
     ports:
       - "50051:50051"
     environment:
+      - POLYKEY_SERVER_PORT=50051
       - POLYKEY_ENV=docker
       - POLYKEY_LOG_LEVEL=debug
     networks:
