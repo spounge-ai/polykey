@@ -20,12 +20,13 @@ type ClientTLSConfig struct {
 
 // ConfigureTLS creates a new tls.Config from the given TLS configuration.
 // It handles loading the server certificate, client CA, and setting the client auth policy.
-func ConfigureTLS(cfg config.TLS) (*tls.Config, error) {
+func ConfigureTLS(cfg config.TLS, bootstrapSecrets config.BootstrapSecrets) (*tls.Config, error) {
 	if !cfg.Enabled {
 		return nil, nil
 	}
 
-	serverCert, err := tls.X509KeyPair([]byte(cfg.CertFile), []byte(cfg.KeyFile))
+	// Use bootstrap secrets data, not file paths
+	serverCert, err := tls.X509KeyPair([]byte(bootstrapSecrets.TLSServerCert), []byte(bootstrapSecrets.TLSServerKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load server TLS key pair: %w", err)
 	}
@@ -35,8 +36,9 @@ func ConfigureTLS(cfg config.TLS) (*tls.Config, error) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	if cfg.ClientCAFile != "" {
-		caCert := []byte(cfg.ClientCAFile)
+	// Use CA from bootstrap secrets
+	if bootstrapSecrets.SpoungeCA != "" {
+		caCert := []byte(bootstrapSecrets.SpoungeCA)
 		caCertPool := x509.NewCertPool()
 		if !caCertPool.AppendCertsFromPEM(caCert) {
 			return nil, fmt.Errorf("failed to add client CA certificate")

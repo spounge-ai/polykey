@@ -29,7 +29,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tlsConfig, err := wiring.ConfigureTLS(cfg.Server.TLS)
+	tlsConfig, err := wiring.ConfigureTLS(cfg.Server.TLS, cfg.BootstrapSecrets)
 	if err != nil {
 		logger.Error("failed to configure TLS", "error", err)
 		os.Exit(1)

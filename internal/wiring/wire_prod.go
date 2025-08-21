@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spounge-ai/polykey/internal/domain"
@@ -16,7 +15,6 @@ import (
 	infra_auth "github.com/spounge-ai/polykey/internal/infra/auth"
 	infra_config "github.com/spounge-ai/polykey/internal/infra/config"
 	"github.com/spounge-ai/polykey/internal/infra/persistence"
-	infra_secrets "github.com/spounge-ai/polykey/internal/infra/secrets"
 	"github.com/spounge-ai/polykey/internal/kms"
 	"github.com/spounge-ai/polykey/internal/service"
 )
@@ -173,44 +171,21 @@ func (c *Container) initKMSProviders(ctx context.Context) error {
 		c.logger.Debug("initialized local KMS provider")
 	}
 
-	var secretProvider *infra_secrets.ParameterStore
-	var awsCfg aws.Config
-	var err error
-
 	// Initialize AWS provider if configured
-	if c.config.AWS.Enabled {
-		awsCfg, err = config.LoadDefaultConfig(ctx, config.WithRegion(c.config.AWS.Region))
+	if c.config.AWS.Enabled && c.config.BootstrapSecrets.AWSKMSKeyARN != "" {
+		awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(c.config.AWS.Region))
 		if err != nil {
 			return fmt.Errorf("failed to load AWS config: %w", err)
 		}
-		secretProvider = infra_secrets.NewParameterStore(awsCfg)
 
-		// Fetch KMS Key ARN from the specified path
-		kmsKeyARN, err := secretProvider.GetSecret(ctx, c.config.PolykeyAWSKMSKeyARNPath)
-		if err != nil {
-			return fmt.Errorf("failed to load AWS KMS Key ARN from %s: %w", c.config.PolykeyAWSKMSKeyARNPath, err)
-		}
-
+		kmsKeyARN := c.config.BootstrapSecrets.AWSKMSKeyARN
 		c.kmsProviders["aws"] = kms.NewAWSKMSProvider(awsCfg, kmsKeyARN)
 		c.logger.Debug("initialized AWS KMS provider", "region", c.config.AWS.Region)
 	}
 
-	// Fetch CA cert from the specified path and store it in TLS config
-	if c.config.Server.TLS.Enabled && c.config.SpoungeCA != "" {
-		if secretProvider == nil {
-			// If AWS is not enabled, we still need to load a default config to get a secretProvider
-			awsCfg, err = config.LoadDefaultConfig(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to load default AWS config for CA cert: %w", err)
-			}
-			secretProvider = infra_secrets.NewParameterStore(awsCfg)
-		}
-
-		caCert, err := secretProvider.GetSecret(ctx, c.config.SpoungeCA)
-		if err != nil {
-			return fmt.Errorf("failed to load CA cert from %s: %w", c.config.SpoungeCA, err)
-		}
-		c.config.Server.TLS.ClientCAFile = caCert
+	// Set CA cert in TLS config
+	if c.config.Server.TLS.Enabled && c.config.BootstrapSecrets.SpoungeCA != "" {
+		c.config.Server.TLS.ClientCAFile = c.config.BootstrapSecrets.SpoungeCA
 	}
 
 	if len(c.kmsProviders) == 0 {
