@@ -2,9 +2,9 @@
 .DEFAULT_GOAL := help
 MAKEFLAGS += --no-print-directory
 
-# ============================================================================
+# ============================================================================ 
 # Variables
-# ============================================================================
+# ============================================================================ 
 # Binaries and Directories
 BIN_DIR       := bin
 SERVER_BINARY := $(BIN_DIR)/polykey
@@ -13,7 +13,7 @@ CLIENT_BINARY := $(BIN_DIR)/dev_client
 # Go Build Configuration
 LDFLAGS       := -ldflags="-s -w"
 # Allow overriding build tags, e.g., `make build BUILD_TAGS=local_mocks`
-BUILD_TAGS    ?=
+BUILD_TAGS    ?= 
 
 # Server Configuration
 PORT          := 50053
@@ -46,22 +46,22 @@ define echo_success_macro
 endef
 
 
-# ============================================================================
+# ============================================================================ 
 # Phony Targets
-# ============================================================================
+# ============================================================================ 
 .PHONY: \
 	all init lint build clean kill help \
 	server server-test server-prod server-minimal \
 	client client-debug client-setup client-server \
-	docker-setup docker-build docker-rebuild docker-clean \
-	compose-up compose-down compose-logs compose-restart \
-	docker-all \
+	docker-setup docker-build docker-rebuild docker-test docker-clean \
+	docker-up docker-down docker-logs docker-restart docker-ps docker-up-dev \
 	test test-race test-integration test-persistence coverage \
 	migrate vuln-check sbom
 
-# ============================================================================
+
+# ============================================================================ 
 # Core Targets
-# ============================================================================
+# ============================================================================ 
 all: build
 
 init: ## Initialize the project and make scripts executable
@@ -80,9 +80,9 @@ build: ## Build binaries (use BUILD_TAGS=local_mocks for test build)
 	@go build $(LDFLAGS) -o $(CLIENT_BINARY) ./cmd/dev_client
 	@echo "$(GREEN)Build complete!$(RESET)"
 
-# ============================================================================
+# ============================================================================ 
 # Server Targets
-# ============================================================================
+# ============================================================================ 
 server: kill ## Run server with the config specified by CONFIG_NAME (default: minimal)
 	@echo "$(CYAN)Building server for config profile: '$(CONFIG_NAME)'...$(RESET)"
 	@$(MAKE) --silent build BUILD_TAGS="$(SERVER_BUILD_TAGS)"
@@ -98,9 +98,9 @@ server-prod: ## Alias for 'make server CONFIG_NAME=production'
 server-minimal: ## Alias for 'make server CONFIG_NAME=minimal'
 	@$(MAKE) server CONFIG_NAME=minimal
 
-# ============================================================================
+# ============================================================================ 
 # Client Targets
-# ============================================================================
+# ============================================================================ 
 client-setup: ## Setup the development client
 	@echo "$(CYAN)Setting up development client...$(RESET)"
 	@./scripts/setup-dev-client.sh
@@ -132,58 +132,82 @@ client-server: lint ## Build, run server, wait, and run client (uses CONFIG_NAME
 	done; \
 	echo "$(GREEN)Server is ready! Starting client...$(RESET)"
 	@$(MAKE) --silent client
+# ============================================================================
+# 🐳 Docker & Compose Targets
+# ============================================================================
+DOCKER_IMAGE        ?= polykey-dev
+DOCKERFILE_PATH     := deployments/docker/Dockerfile
+COMPOSE_FILE        := deployments/docker/compose.yml
+OVERRIDE_COMPOSE    := deployments/docker/docker-compose.override.yml
+DOCKER_BUILD_CMD     = docker build --file $(DOCKERFILE_PATH) --tag $(DOCKER_IMAGE)
+DOCKER_COMPOSE_CMD   = docker compose -p polykey -f $(COMPOSE_FILE)
 
-# ==============================================================================
-# Docker & Compose Targets
-# ==============================================================================
-DOCKER_IMAGE ?= polykey-dev
+docker-setup: docker-build docker-up ## Build image and start services
+	@$(call echo_success_macro,Docker environment is ready!)
 
-docker-setup: docker-build compose-up ## 🐳 Build image and start services with Docker Compose
-	$(call echo_success_macro,Docker environment setup complete!)
+docker-build: ## Build the production Docker image
+	@$(call echo_step_macro,Building Docker image: $(DOCKER_IMAGE))
+	@$(DOCKER_BUILD_CMD) .
 
-docker-build: ## 🐳 Build the Docker image
-	$(call echo_step_macro,Building Docker image: $(DOCKER_IMAGE))
-	@docker build -t $(DOCKER_IMAGE) .
-	$(call echo_success_macro,Docker image built: $(DOCKER_IMAGE))
+docker-rebuild: docker-down ## Rebuild Docker image from scratch
+	@$(call echo_step_macro,Rebuilding Docker image: $(DOCKER_IMAGE))
+	@$(DOCKER_BUILD_CMD) --no-cache .
+	@$(MAKE) docker-up
 
-docker-rebuild: compose-down ## 🐳 Rebuild Docker image (clean + build)
-	$(call echo_step_macro,Rebuilding Docker image: $(DOCKER_IMAGE))
-	@docker build --no-cache -f deployments/docker/Dockerfile -t $(DOCKER_IMAGE) .
-	$(call echo_success_macro,Docker image rebuilt: $(DOCKER_IMAGE))
-
-docker-clean: compose-down ## 🐳 Remove image and containers
-	$(call echo_step_macro,Cleaning up Docker resources...)
+docker-clean: docker-down ## Remove image, containers, and prune unused resources
+	@$(call echo_step_macro,Cleaning up Docker resources...)
 	@docker rmi -f $(DOCKER_IMAGE) || true
-	$(call echo_success_macro,Docker resources cleaned!)
+	@docker system prune -f --volumes
 
-COMPOSE_FILE := deployments/docker/compose.yml
+docker-up: ## Start services in detached mode
+	@$(call echo_step_macro,Starting Docker Compose stack...)
+	@$(DOCKER_COMPOSE_CMD) up -d
 
-compose-up: ## 🐳 Start the Docker Compose stack in detached mode
-	$(call echo_step_macro,Starting Docker Compose stack...)
-	@docker compose -f $(COMPOSE_FILE) up -d
-	$(call echo_success_macro,Compose stack started!)
+docker-up-dev: ## Start services with override config (dev mode)
+	@$(call echo_step_macro,Starting Docker Compose stack (dev override)...)
+	@$(DOCKER_COMPOSE_CMD) -f $(OVERRIDE_COMPOSE) up -d
 
-compose-down: ## 🐳 Stop and remove the Docker Compose stack
-	$(call echo_step_macro,Stopping Docker Compose stack...)
-	@docker compose -f $(COMPOSE_FILE) down
-	$(call echo_success_macro,Compose stack stopped!)
+docker-down: ## Stop and remove services
+	@$(call echo_step_macro,Stopping Docker Compose stack...)
+	@$(DOCKER_COMPOSE_CMD) down --remove-orphans
 
-compose-logs: ## 🐳 Tail logs from Docker Compose services
-	$(call echo_step_macro,Viewing Docker Compose logs...)
-	@docker compose -f $(COMPOSE_FILE) logs -f
+docker-logs: ## Tail service logs
+	@$(call echo_step_macro,Viewing Docker Compose logs...)
+	@$(DOCKER_COMPOSE_CMD) logs -f
 
-compose-restart: compose-down compose-up ## 🐳 Restart Docker Compose stack
-	$(call echo_success_macro,Docker Compose stack restarted!)
+docker-restart: ## Restart services
+	@$(call echo_step_macro,Restarting Docker Compose stack...)
+	@$(DOCKER_COMPOSE_CMD) restart
 
-docker-all: docker-clean docker-build compose-up ## 🐳 Clean, rebuild, and start Docker stack
-	$(call echo_success_macro,Full Docker/Compose rebuild complete!)
+docker-ps: ## Show running containers
+	@$(call echo_step_macro,Listing running containers...)
+	@$(DOCKER_COMPOSE_CMD) ps
 
 # ============================================================================
+# 🧪 Testing Targets inside Docker
+# ============================================================================
+
+# Run client-server stack for local testing
+docker-client-server: docker-build
+	@$(call echo_step_macro,Starting client-server in Docker...)
+	@$(DOCKER_COMPOSE_CMD) up --build
+
+# Run integration tests inside the container
+docker-test-integration: docker-build
+	@$(call echo_step_macro,Running integration tests in Docker...)
+	@$(DOCKER_COMPOSE_CMD) run --rm polykey make test-integration
+
+# Run unit tests inside the container
+docker-test: docker-build
+	@$(call echo_step_macro,Running unit tests in Docker...)
+	@$(DOCKER_COMPOSE_CMD) run --rm polykey make test
+
+# ============================================================================ 
 # Test & Coverage Targets
-# ============================================================================
-test: ## Run tests (use 'race=true' to enable the race detector)
-	@echo "$(CYAN)Running tests... $(if $(RACE_FLAG),(with race detector))$(RESET)"
-	@go test $(RACE_FLAG) -v -json ./... | tparse -all
+# ============================================================================ 
+test: ## Run unit tests (use 'race=true' to enable the race detector)
+	@echo "$(CYAN)Running unit tests... $(if $(RACE_FLAG),(with race detector))$(RESET)"
+	@go test $(RACE_FLAG) -v -json ./cmd/... ./internal/... ./pkg/... | tparse -all
 
 test-race: ## Alias for 'make test race=true'
 	@$(MAKE) test race=true
@@ -202,9 +226,9 @@ coverage: ## Generate and display test coverage report
 	@echo "$(GREEN)Opening coverage report in browser...$(RESET)"
 	@go tool cover -html=coverage.out
 
-# ============================================================================
+# ============================================================================ 
 # Utility Targets
-# ============================================================================
+# ============================================================================ 
 migrate: ## Run database migrations
 	@echo "$(CYAN)Running database migrations with config '$(CONFIG_FILE)'...$(RESET)"
 	@POLYKEY_CONFIG_PATH=$(CONFIG_FILE) go run cmd/utils/migrate.go
@@ -217,9 +241,9 @@ sbom: ## Generate SBOM
 	@echo "$(CYAN)Generating SBOM...$(RESET)"
 	@./scripts/generate_sbom.sh
 
-# ============================================================================
+# ============================================================================ 
 # Cleanup Targets
-# ============================================================================
+# ============================================================================ 
 clean: kill ## Clean build artifacts and logs
 	@echo "$(YELLOW)Cleaning build artifacts...$(RESET)"
 	@rm -rf $(BIN_DIR) .server_pid server.log coverage.out tests/integration.test
@@ -229,9 +253,9 @@ kill: ## Kill any running server processes on the configured port
 	@echo "$(CYAN)Stopping server process on port $(PORT)...$(RESET)"
 	@-lsof -ti:$(PORT) | xargs kill -9 >/dev/null 2>&1 || true
 
-# ============================================================================
+# ============================================================================ 
 # Help Target
-# ============================================================================
+# ============================================================================ 
 help: ## Show this help message
 	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(RESET)"
 	@echo "$(CYAN)║                 Polykey Development                       ║$(RESET)"

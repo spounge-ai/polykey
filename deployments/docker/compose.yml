@@ -1,42 +1,36 @@
+
 services:
-  polykey-server:
+  polykey:
     build:
-      context: ../..
-      dockerfile: ./deployments/docker/Dockerfile
-      target: server
-      args:
-        - COMPRESS_BINARIES=false  # Enable for production
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
+    container_name: polykey
     ports:
       - "50051:50051"
+    volumes:
+      - ../../certs:/app/certs:ro
+      - ../../configs:/app/configs:ro
     environment:
-      - POLYKEY_SERVER_PORT=50051
-      - POLYKEY_ENV=docker
-      - POLYKEY_LOG_LEVEL=debug
+      - POLYKEY_CONFIG_PATH=/app/configs/config.minimal.yaml
     networks:
-      - polykey-network
-    # Optimized healthcheck - less frequent checks
-    healthcheck:
-      test: ["CMD", "/bin/grpc_health_probe", "-addr=:50051"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    # Resource limits for better container management
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
-    # Restart policy for resilience
+      - polykey-net
+    restart: unless-stopped
+
+  dev_client:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
+    container_name: dev_client
+    command: ["./bin/dev_client", "--config", "/app/configs/dev_client/config.client.dev.yaml"]
+    depends_on:
+      - polykey
+    volumes:
+      - ../../certs:/app/certs:ro
+      - ../../configs/dev_client:/app/configs/dev_client:ro
+    networks:
+      - polykey-net
     restart: unless-stopped
 
 networks:
-  polykey-network:
+  polykey-net:
     driver: bridge
-    # Add network configuration for better performance
-    driver_opts:
-      com.docker.network.bridge.name: polykey-br0
-      com.docker.network.driver.mtu: 1500
