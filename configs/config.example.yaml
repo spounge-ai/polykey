@@ -7,6 +7,8 @@ server:
     enabled: true
     client_auth: "RequireAndVerifyClientCert"
 
+
+# defaults for local testing
 persistence:
   type: neondb
   database:
@@ -21,6 +23,7 @@ persistence:
     max_retries: 3
     retry_backoff: 1s
 
+# if true, all configurations are bootstrapped from ssm
 aws:
   enabled: true
   region: "<example-region>"
@@ -35,7 +38,7 @@ authorization:
   zero_trust:
     enforce_mtls_identity_match: true
 
-# Optional overrides for secrets (if aws is configured, we dont need this)
+# Optional overrides for secrets, local testing
 default_kms_provider: "<example-kms-provider>"
 
 client_credentials_path: "<example-client-credentials-path>"

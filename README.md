@@ -17,7 +17,7 @@
 </div>
 
 
-> Note (08/21/25): Containerized, configuring for EC2 (testing only for EKS)
+> Note (08/22/25): Polykey v.0.1.0: containerized, development now [@Nodus](https://github.com/spounge-ai/nodus)
 
 <hr style="width: 100%; height: 4px; background-color: #888; border: none; margin: 2em auto 1em;" />
 
