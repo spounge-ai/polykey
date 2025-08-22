@@ -3,45 +3,21 @@ name: Polykey CI
 on:
   push:
     branches: [main, CI]
-
   pull_request:
+  workflow_dispatch:  # Allow manual triggering
+
+# Global environment variables
+env:
+  GO_VERSION: '1.22'  # Fixed: Go 1.25 doesn't exist yet
+  POSTGRES_VERSION: '17.2'  # Using stable version
 
 jobs:
   # ==============================
-  # Build Job
+  # Build and Test Job (Combined for efficiency)
   # ==============================
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/*.go') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
- 
-      - name: Build Binaries
-        run: |
-          echo "::group::Building Polykey"
-          make build
-          echo "::endgroup::"
-
-  # ==============================
-  # Integration Tests Job
-  # ==============================
-  integration-tests:
-    runs-on: ubuntu-latest
-    needs: build
+    
     services:
       postgres:
         image: postgres:17.6
@@ -51,58 +27,154 @@ jobs:
           POSTGRES_DB: polykey
         ports:
           - 5432:5432
+        # Health checks to ensure postgres is ready
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history for better caching
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: ${{ env.GO_VERSION }}
+          cache: true  # Enable built-in Go caching
 
-      # Leaving here in case needed
-      # - name: Setup AWS credentials
-      #   uses: aws-actions/configure-aws-credentials@v2
-      #   with:
-      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      #     aws-region: <your-region>
-
-      - name: Cache tparse
-        uses: actions/cache@v3
+      # Enhanced Go module caching
+      - name: Cache Go modules and build cache
+        uses: actions/cache@v4
         with:
-          path: ~/go/bin/tparse
-          key: tparse-${{ runner.os }}-v1
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum', '**/go.mod') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ env.GO_VERSION }}-
+            ${{ runner.os }}-go-
 
-      - name: Install tparse
-        run: |
-          if ! command -v tparse &> /dev/null; then
-            go install github.com/nikandfor/tparse@latest
-          fi
+      # Cache tools separately with better key
+      - name: Cache Go tools
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin
+          key: ${{ runner.os }}-go-tools-${{ hashFiles('tools.go') }}-v2
+          restore-keys: |
+            ${{ runner.os }}-go-tools-
 
-      - name: Run Integration Tests
+      - name: Install test dependencies
+        run: go install github.com/mfridman/tparse@latest
+
+
+      - name: Verify Go installation
         run: |
-          echo "::group::Running Integration Tests"
-          make tests
+          go version
+          go env
+
+      - name: Download Go dependencies
+        run: |
+          echo "::group::Downloading Go dependencies"
+          go mod download
+          go mod verify
           echo "::endgroup::"
 
+      - name: Build application
+        run: |
+          echo "::group::Building Polykey"
+          make build
+          echo "::endgroup::"
+
+      # Run tests with better output formatting
+      - name: Run tests
+        run: |
+          echo "::group::Integration Tests"
+          make test
+          echo "::endgroup::"s
+        env:
+          # Test environment variables
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: polykey
+
   # ==============================
-  # Security Checks Job
+  # Security and Quality Checks Job
   # ==============================
-  security-checks:
+  security-quality:
     runs-on: ubuntu-latest
-    needs: integration-tests
+    # Run in parallel with build-and-test, remove dependency
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Setup Trivy
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # Cache security tools
+      - name: Cache security tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/trivy
+            ~/bin/trivy
+          key: ${{ runner.os }}-security-tools-v1
+
+      # Use official Trivy action instead of manual installation
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          exit-code: '1'
+          severity: 'HIGH,CRITICAL'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      # Upload security scan results
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      # Install and run govulncheck properly
+      - name: Install govulncheck
         run: |
-          if ! command -v trivy &> /dev/null; then
-            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -
+          if ! command -v govulncheck &> /dev/null; then
+            go install golang.org/x/vuln/cmd/govulncheck@latest
           fi
 
-      - name: Run Security Checks
+      - name: Run Go vulnerability check
         run: |
-          echo "::group::Running Security Checks"
-          trivy fs --exit-code 1 --severity HIGH,CRITICAL .
-          vulncheck --exit-code 1
+          echo "::group::Running Go Vulnerability Check"
+          govulncheck ./...
           echo "::endgroup::"
+
+      # Optional: Add code quality checks
+      - name: Run go vet
+        run: |
+          echo "::group::Running go vet"
+          go vet ./...
+          echo "::endgroup::"
+
+      # Optional: Add staticcheck for additional static analysis
+      - name: Install and run staticcheck
+        run: |
+          if ! command -v staticcheck &> /dev/null; then
+            go install honnef.co/go/tools/cmd/staticcheck@latest
+          fi
+          echo "::group::Running staticcheck"
+          staticcheck ./...
+          echo "::endgroup::"
+
+ 
