@@ -1,235 +1,158 @@
-name: PolyKey CI
+name: Polykey CI
 
 on:
   push:
-    branches: ["ci" ]
+    branches: [main, CI]
   pull_request:
-    branches: ["ci" ]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  GO_VERSION: '1.25' 
 
 jobs:
-  lint:
-    name: Lint Codebase
+  build-and-test:
+    if: false # temporary false until I add a spounge-sdk credidential gen for authority
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: polykey
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.5'
+          go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Cache golangci-lint
+
+      - name: Cache Go modules and build cache
         uses: actions/cache@v4
         with:
-          path: ~/.local/bin/golangci-lint
-          key: golangci-lint-${{ runner.os }}-v1.61.0
-      - name: Install golangci-lint
-        run: |
-          if [ ! -f ~/.local/bin/golangci-lint ]; then
-            mkdir -p ~/.local/bin
-            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ~/.local/bin v2.2.2
-          fi
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Run golangci-lint
-        run: golangci-lint run
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum', '**/go.mod') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ env.GO_VERSION }}-
+            ${{ runner.os }}-go-
 
-  test:
-    name: Run Unit Tests
-    runs-on: ubuntu-latest
-    needs: lint
-    timeout-minutes: 15
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build tester image and populate cache
-        id: build-tester
-        uses: docker/build-push-action@v6
+      - name: Cache Go tools
+        uses: actions/cache@v4
         with:
-          context: .
-          target: tester
-          load: true
-          tags: polykey-tester:ci-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Run Unit Tests
-        run: docker run --rm polykey-tester:ci-${{ github.sha }} make test
-
-  integration-test:
-    name: Run Integration Tests
-    runs-on: ubuntu-latest
-    needs: lint
-    timeout-minutes: 20
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24.5'
-          cache: true
+          path: ~/go/bin
+          key: ${{ runner.os }}-go-tools-${{ hashFiles('tools.go') }}-v2
+          restore-keys: |
+            ${{ runner.os }}-go-tools-
 
       - name: Install test dependencies
         run: go install github.com/mfridman/tparse@latest
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build server image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: server
-          load: true
-          tags: polykey-server:ci-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Start server container
+      - name: Verify Go installation
         run: |
-          docker run -d \
-            --name polykey-server \
-            --health-cmd="/bin/grpc_health_probe -addr=:50051" \
-            --health-interval=5s \
-            --health-timeout=3s \
-            --health-retries=5 \
-            --health-start-period=20s \
-            -p 50051:50051 \
-            -e POLYKEY_ENV=docker \
-            -e POLYKEY_LOG_LEVEL=info \
-            polykey-server:ci-${{ github.sha }}
+          go version
+          go env
 
-      - name: Wait for server to be healthy
+      - name: Download Go dependencies
         run: |
-          echo "Waiting for server to become healthy..."
-          timeout 60s bash -c 'while [ "$(docker inspect --format="{{.State.Health.Status}}" polykey-server)" != "healthy" ]; do sleep 2; done'
-          echo "Server is healthy!"
+          echo "::group::Downloading Go dependencies"
+          go mod download
+          go mod verify
+          echo "::endgroup::"
 
-      - name: Run integration tests
+      - name: Build application
         run: |
-          POLYKEY_SERVER_ADDR=localhost:50051 go test -v -json -tags=integration ./... | tparse
+          echo "::group::Building Polykey"
+          make build
+          echo "::endgroup::"
+
+      - name: Run tests
+        run: |
+          echo "::group::Integration Tests"
+          make client-setup
+          make test
+          echo "::endgroup::"
         env:
-          CGO_ENABLED: 0
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: polykey
 
-      - name: Show server logs on failure
-        if: failure()
-        run: docker logs polykey-server
-
-      - name: Cleanup
-        if: always()
-        run: docker rm -f polykey-server || true
-
-  build-and-push:
-    name: Build and Push Production Image
+  security-quality:
     runs-on: ubuntu-latest
-    needs: [test, integration-test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image: ${{ steps.meta.outputs.tags }}
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Cache security tools
+        uses: actions/cache@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix={{branch}}-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+          path: |
+            ~/.cache/trivy
+            ~/bin/trivy
+          key: ${{ runner.os }}-security-tools-v1
 
-      - name: Build and push production image
-        id: build
-        uses: docker/build-push-action@v6
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
         with:
-          context: .
-          target: production
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64  # TODO: Add linux/arm64 back later
-          # platforms: linux/amd64,linux/arm64
-          build-args: |
-            COMPRESS_BINARIES=true
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          cache-to: type=gha,mode=max
+          scan-type: 'fs'
+          scan-ref: '.'
+          exit-code: '1'
+          severity: 'HIGH,CRITICAL'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
 
-  scan:
-      name: Scan Production Image
-      runs-on: ubuntu-latest
-      needs: build-and-push
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      timeout-minutes: 10
-      permissions:
-        contents: read
-        packages: read
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
 
-        - name: Log in to GitHub Container Registry
-          uses: docker/login-action@v3
-          with:
-            registry: ${{ env.REGISTRY }}
-            username: ${{ github.actor }}
-            password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install govulncheck
+        run: |
+          if ! command -v govulncheck &> /dev/null; then
+            go install golang.org/x/vuln/cmd/govulncheck@latest
+          fi
 
-        - name: Extract first image tag
-          id: image
-          run: |
-            FIRST_TAG=$(echo "${{ needs.build-and-push.outputs.image }}" | head -n1 | xargs)
-            if [ -z "$FIRST_TAG" ]; then
-              echo "Error: No image tag found"
-              exit 1
-            fi
-            echo "tag=$FIRST_TAG" >> $GITHUB_OUTPUT
-            echo "Using image: $FIRST_TAG"
+      - name: Run Go vulnerability check
+        run: |
+          echo "::group::Running Go Vulnerability Check"
+          govulncheck ./...
+          echo "::endgroup::"
 
-        - name: Scan image for vulnerabilities
-          uses: aquasecurity/trivy-action@master
-          with:
-            image-ref: '${{ steps.image.outputs.tag }}'  
-            format: 'table'
-            exit-code: '1'
-            ignore-unfixed: true
-            vuln-type: 'os,library'
-            severity: 'CRITICAL,HIGH'
+      - name: Run go vet
+        run: |
+          echo "::group::Running go vet"
+          go vet ./...
+          echo "::endgroup::"
 
-        - name: Generate SBOM
-          uses: anchore/sbom-action@v0
-          with:
-            image: '${{ steps.image.outputs.tag }}'   
-            format: spdx-json
-            output-file: sbom.spdx.json
+      - name: Install and run staticcheck
+        run: |
+          if ! command -v staticcheck &> /dev/null; then
+            go install honnef.co/go/tools/cmd/staticcheck@latest
+          fi
+          echo "::group::Running staticcheck"
+          staticcheck ./...
+          echo "::endgroup::"

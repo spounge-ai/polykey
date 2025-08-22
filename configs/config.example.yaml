@@ -1,15 +1,14 @@
+# Polykey microservice configuration example
+
 server:
   port: 50053
   mode: "development"
   tls:
-    enabled: false
-    cert_file: "<path-to-your-server-cert.pem>"
-    key_file: "<path-to-your-server-key.pem>"
-    client_ca_file: "<path-to-your-ca-cert.pem>"
-    client_auth: "" # Options: NoClientCert, RequestClientCert, RequireAnyClientCert, VerifyClientCertIfGiven, RequireAndVerifyClientCert
+    enabled: true
+    client_auth: "RequireAndVerifyClientCert"
 
 persistence:
-  type: "neondb" # Supported types: neondb, cockroachdb, s3
+  type: neondb
   database:
     connection:
       max_conns: 25
@@ -19,38 +18,29 @@ persistence:
       health_check_period: 1m
     tls:
       enabled: false
-      ssl_mode: "disable" # e.g., disable, require, verify-ca, verify-full
-      ssl_cert: "<path-to-your-db-client-cert.pem>"
-      ssl_key: "<path-to-your-db-client-key.pem>"
-      ssl_root_cert: "<path-to-your-db-ca-cert.pem>"
     max_retries: 3
     retry_backoff: 1s
 
 aws:
-  enabled: false # Set to true to use AWS services (S3, KMS)
-  region: "us-east-1"
-  s3_bucket: "<your-s3-bucket-for-s3-persistence>"
-  kms_key_arn: "<your-kms-key-arn-for-aws-kms-provider>"
-
-# Path to the file containing client credentials (ID, hashed secret, permissions).
-client_credentials_path: "configs/dev_client/config.client.dev.yaml"
-
-# Default KMS provider to use for operations that don't have a specific tier-based provider.
-default_kms_provider: "local" # Options: local, aws
+  enabled: true
+  region: "<example-region>"
+  s3_bucket: "<example-s3-bucket>"
 
 authorization:
   roles:
     admin:
-      allowed_operations: ["*"]
-    premium_user:
-      allowed_operations:
-        - "create_key"
-        - "get_key"
-        - "list_keys"
-        - "rotate_key"
-    free_user:
-      allowed_operations:
-        - "create_key"
-        - "get_key"
+      - "<example-admin-role>"
+    user:
+      - "<example-user-role>"
   zero_trust:
     enforce_mtls_identity_match: true
+
+# Optional overrides for secrets (if aws is configured, we dont need this)
+default_kms_provider: "<example-kms-provider>"
+
+client_credentials_path: "<example-client-credentials-path>"
+
+bootstrap_secrets_base_path: "<example-bootstrap-secrets-base-path>"
+
+spounge_ca: "<example-ca-arn>"
+polykey_kms_arn: "<example-kms-arn>"

@@ -48,3 +48,6 @@ certs/
 !certs/public.pem
 
 sbom.xml
+
+.cache/
+docs/phases/

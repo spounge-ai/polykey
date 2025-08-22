@@ -11,7 +11,9 @@ echo "--- Setting up Development Client: ${CLIENT_ID} ---"
 # The client certificate CN is set to the CLIENT_ID.
 echo "
 [1/3] Generating PKI for mTLS..."
-bash scripts/generate-certs.sh "${CLIENT_ID}"
+bash scripts/generate-ca.sh
+bash scripts/generate-server.sh localhost
+bash scripts/generate-client.sh "${CLIENT_ID}"
 
 # Step 2: Generate the server-side configuration for the client
 # This tells the server about the new client, its ID, and its hashed secret.

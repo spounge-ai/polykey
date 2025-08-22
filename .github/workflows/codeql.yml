@@ -2,9 +2,9 @@ name: "CodeQL Security Scan"
 
 on:
   push:
-    branches: [ "ci" ]
+    branches: [main, CI]
   pull_request:
-    branches: [ "ci" ]
+
   schedule:
     - cron: '33 6 * * 2'
 
