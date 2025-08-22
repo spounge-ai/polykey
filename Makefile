@@ -137,9 +137,11 @@ client-server: lint ## Build, run server, wait, and run client (uses CONFIG_NAME
 # ============================================================================
 DOCKER_IMAGE        ?= polykey-dev
 DOCKERFILE_PATH     := deployments/docker/Dockerfile
-COMPOSE_FILE        := deployments/docker/compose.yml
+COMPOSE_FILE        := deployments/docker/docker-compose.yml
 DOCKER_BUILD_CMD     = docker build --file $(DOCKERFILE_PATH) --tag $(DOCKER_IMAGE)
 DOCKER_COMPOSE_CMD   = docker compose -p polykey -f $(COMPOSE_FILE)
+INTEGRATION_COMPOSE_FILE := deployments/docker/docker-compose.integration.yml
+INTEGRATION_COMPOSE_CMD  := docker compose -p polykey-integration -f $(INTEGRATION_COMPOSE_FILE)
 
 docker-setup: docker-build docker-up ## Build image and start services
 	@$(call echo_success_macro,Docker environment is ready!)
@@ -159,9 +161,10 @@ docker-clean: docker-down ## Remove image, containers, and prune unused resource
 	@docker system prune -f --volumes
 
 docker-up: ## Start services in detached mode
-	@$(call echo_step_macro,Starting Docker Compose stack...)
+	@if [ ! -f ~/.aws/credentials ]; then \
+		echo "$(YELLOW)Warning: AWS credentials not found at ~/.aws/credentials$(RESET)"; \
+	fi
 	@$(DOCKER_COMPOSE_CMD) up -d
-
 docker-down: ## Stop and remove services
 	@$(call echo_step_macro,Stopping Docker Compose stack...)
 	@$(DOCKER_COMPOSE_CMD) down --remove-orphans
@@ -183,19 +186,33 @@ docker-ps: ## Show running containers
 # ============================================================================
 
 # Run client-server stack for local testing
-docker-client-server: docker-build
-	@$(call echo_step_macro,Starting client-server in Docker...)
-	@$(DOCKER_COMPOSE_CMD) up --build
+docker-client-server: docker-build ## Build, run server in Docker, wait, and run client
+	@$(call echo_step_macro,Starting server in Docker...)
+	@$(DOCKER_COMPOSE_CMD) up -d polykey
+	@$(call echo_step_macro,Waiting for server to be ready on port $(PORT)...)
+	@timeout=30; \
+	while ! nc -z localhost $(PORT) >/dev/null 2>&1; do \
+		timeout=$(expr $timeout - 1); \
+		if [ $timeout -eq 0 ]; then \
+			echo "$(YELLOW)Error: Server failed to start within 30 seconds.$(RESET)"; \
+			$(DOCKER_COMPOSE_CMD) logs polykey; \
+			$(DOCKER_COMPOSE_CMD) down; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+	@$(call echo_success_macro,Server is ready! Starting client...)
+	@$(DOCKER_COMPOSE_CMD) run --rm dev_client
 
 docker-test-integration: docker-build
-	@$(call echo_step_macro,Running integration tests in Docker securely...)
+	@$(call echo_step_macro, Running integration tests in Docker securely...)
 	@$(DOCKER_COMPOSE_CMD) run --rm \
 		-u $(shell id -u):$(shell id -g) \
-		-v $(HOME)/.aws:/root/.aws:ro \
-		-v $(PWD)/certs:/app/certs:ro \
-		-e AWS_REGION=us-east-1 \
-		-e AWS_EC2_METADATA_DISABLED=true \
-		polykey make test
+		-v $(HOME)/.aws:$(HOME)/.aws:ro \
+		-e AWS_SHARED_CREDENTIALS_FILE=$(HOME)/.aws/credentials \
+		-e AWS_CONFIG_FILE=$(HOME)/.aws/config \
+		polykey make test-integration
+
 
 # Run unit tests inside the container
 docker-test: docker-build

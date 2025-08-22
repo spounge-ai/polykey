@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
@@ -15,6 +16,7 @@ import (
 	"github.com/spounge-ai/polykey/internal/secrets"
 	"github.com/spf13/viper"
 	customvalidator "github.com/spounge-ai/polykey/pkg/validator"
+	"gopkg.in/yaml.v3"
 )
 
 // BootstrapSecrets are loaded only from SSM Parameter Store
@@ -26,6 +28,11 @@ type BootstrapSecrets struct {
 	TLSServerKey     string `secretpath:"polykey/tls/server-key.pem"`
 	AWSKMSKeyARN     string `secretpath:"polykey/kms/aws_kms_key_arn"`
 	SpoungeCA        string `secretpath:"tls/ca.pem"`
+
+	// Dynamic config values
+	CircuitBreakerConfig string `secretpath:"polykey/persistence/circuit_breaker"`
+	RateLimiterConfig    string `secretpath:"polykey/server/rate_limiter"`
+	AsyncAuditingConfig  string `secretpath:"polykey/auditing/asynchronous"`
 }
 
 // Config holds the runtime configuration
@@ -53,19 +60,36 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
+	// Load bootstrap secrets first if AWS is enabled
+	var bootstrapSecrets *BootstrapSecrets
 	var cfg Config
 	if err := vip.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	// Load bootstrap secrets if AWS is enabled
 	if cfg.AWS != nil && cfg.AWS.Enabled {
-		if err := loadAWSBootstrapSecrets(&cfg); err != nil {
+		var err error
+		bootstrapSecrets, err = loadAWSBootstrapSecrets(&cfg)
+		if err != nil {
 			return nil, fmt.Errorf("failed to load bootstrap secrets: %w", err)
+		}
+
+		// Apply dynamic config overrides from bootstrap secrets
+		if err := applyBootstrapConfigOverrides(vip, bootstrapSecrets); err != nil {
+			return nil, fmt.Errorf("failed to apply bootstrap config overrides: %w", err)
 		}
 	}
 
-	
+	// Re-unmarshal config after applying overrides
+	if err := vip.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config after bootstrap overrides: %w", err)
+	}
+
+	// Set bootstrap secrets
+	if bootstrapSecrets != nil {
+		cfg.BootstrapSecrets = *bootstrapSecrets
+	}
+
 	// Validate
 	if err := validateConfig(&cfg); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
@@ -102,32 +126,89 @@ func setDefaults(vip *viper.Viper) {
 
 	vip.SetDefault("persistence.type", "neondb")
 
+	vip.SetDefault("persistence.circuit_breaker.enabled", true)
+	vip.SetDefault("persistence.circuit_breaker.max_failures", 5)
+	vip.SetDefault("persistence.circuit_breaker.reset_timeout", "30s")
+
+	vip.SetDefault("server.rate_limiter.enabled", true)
+	vip.SetDefault("server.rate_limiter.rate", 10)
+	vip.SetDefault("server.rate_limiter.burst", 20)
+
+	vip.SetDefault("auditing.asynchronous.enabled", true)
+	vip.SetDefault("auditing.asynchronous.channel_buffer_size", 10000)
+	vip.SetDefault("auditing.asynchronous.worker_count", 3)
+	vip.SetDefault("auditing.asynchronous.batch_size", 500)
+	vip.SetDefault("auditing.asynchronous.batch_timeout", "1s")
+
 	vip.SetDefault("aws.enabled", true)
 	vip.SetDefault("aws.region", "us-east-1")
 
 	vip.SetDefault("default_kms_provider", "local")
 	vip.SetDefault("bootstrap_secrets_base_path", "/spounge/dev/")
-	vip.SetDefault("client_credentials_path", "configs/dev_client/config.client.dev.yaml")
-
 	vip.SetDefault("authorization.zero_trust.enforce_mtls_identity_match", true)
 }
 
-func loadAWSBootstrapSecrets(cfg *Config) error {
+func loadAWSBootstrapSecrets(cfg *Config) (*BootstrapSecrets, error) {
 	awsCfg, err := aws_config.LoadDefaultConfig(
 		context.Background(),
 		aws_config.WithRegion(cfg.AWS.Region),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	secretProvider := infra_secrets.NewParameterStore(awsCfg)
-	bootstrapSecrets, err := loadBootstrapSecrets(secretProvider, cfg.BootstrapSecretsBasePath)
-	if err != nil {
-		return err
+	return loadBootstrapSecrets(secretProvider, cfg.BootstrapSecretsBasePath)
+}
+
+// applyBootstrapConfigOverrides parses dynamic config from bootstrap secrets and applies to viper
+func applyBootstrapConfigOverrides(vip *viper.Viper, secrets *BootstrapSecrets) error {
+	// Apply circuit breaker config
+	if secrets.CircuitBreakerConfig != "" {
+		if err := applyConfigOverride(vip, "persistence.circuit_breaker", secrets.CircuitBreakerConfig); err != nil {
+			return fmt.Errorf("failed to apply circuit breaker config: %w", err)
+		}
 	}
 
-	cfg.BootstrapSecrets = *bootstrapSecrets
+	// Apply rate limiter config
+	if secrets.RateLimiterConfig != "" {
+		if err := applyConfigOverride(vip, "server.rate_limiter", secrets.RateLimiterConfig); err != nil {
+			return fmt.Errorf("failed to apply rate limiter config: %w", err)
+		}
+	}
+
+	// Apply async auditing config
+	if secrets.AsyncAuditingConfig != "" {
+		if err := applyConfigOverride(vip, "auditing.asynchronous", secrets.AsyncAuditingConfig); err != nil {
+			return fmt.Errorf("failed to apply async auditing config: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// applyConfigOverride parses a JSON/YAML config string and applies it to viper at the given key prefix
+func applyConfigOverride(vip *viper.Viper, keyPrefix, configData string) error {
+	configData = strings.TrimSpace(configData)
+	if configData == "" {
+		return nil
+	}
+
+	var config map[string]interface{}
+
+	// Try JSON first, then YAML
+	if err := json.Unmarshal([]byte(configData), &config); err != nil {
+		if err := yaml.Unmarshal([]byte(configData), &config); err != nil {
+			return fmt.Errorf("failed to parse config as JSON or YAML: %w", err)
+		}
+	}
+
+	// Apply each key-value pair to viper
+	for key, value := range config {
+		fullKey := keyPrefix + "." + key
+		vip.Set(fullKey, value)
+	}
+
 	return nil
 }
 

@@ -32,6 +32,8 @@ func (s *HappyPathSuite) Run(tc core.TestClient) error {
 
 	var createdKeyID string
 	core.RunTestCases(tc, s.createKeyCases(authedCtx, &createdKeyID))
+	core.RunTestCases(tc, s.getKeyCases(authedCtx, createdKeyID))
+	core.RunTestCases(tc, s.createKeyCases(authedCtx, &createdKeyID))
 
 	if createdKeyID != "" {
 		core.RunTestCases(tc, s.getKeyCases(authedCtx, createdKeyID))

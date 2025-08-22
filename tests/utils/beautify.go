@@ -256,4 +256,24 @@ var logHandlers = map[string]LogHandler{
 		TestName: func(e LogEntry) string { return "BatchGetKeys OK" },
 		Status:   func(e LogEntry) string { return "PASS" },
 	},
+	"BatchGetKeyMetadata successful": {
+	Suite:    "BATCH OPERATIONS",
+	TestName: func(e LogEntry) string { return "BatchGetKeyMetadata OK" },
+	Status:   func(e LogEntry) string { return "PASS" },
+	},
+	"BatchUpdateKeyMetadata successful": {
+		Suite:    "BATCH OPERATIONS",
+		TestName: func(e LogEntry) string { return "BatchUpdateKeyMetadata OK" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
+	"BatchRotateKeys successful": {
+		Suite:    "BATCH OPERATIONS",
+		TestName: func(e LogEntry) string { return "BatchRotateKeys OK" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
+	"BatchRevokeKeys successful": {
+		Suite:    "BATCH OPERATIONS",
+		TestName: func(e LogEntry) string { return "BatchRevokeKeys OK" },
+		Status:   func(e LogEntry) string { return "PASS" },
+	},
 }
