@@ -5,27 +5,26 @@ MAKEFLAGS += --no-print-directory
 # ============================================================================ 
 # Variables
 # ============================================================================ 
-# Binaries and Directories
+# Directories and Binaries
 BIN_DIR       := bin
 SERVER_BINARY := $(BIN_DIR)/polykey
 CLIENT_BINARY := $(BIN_DIR)/dev_client
+CONFIG_DIR    := configs
 
 # Go Build Configuration
 LDFLAGS       := -ldflags="-s -w"
-# Allow overriding build tags, e.g., `make build BUILD_TAGS=local_mocks`
 BUILD_TAGS    ?= 
 
 # Server Configuration
 PORT          := 50053
 PK_ENV        := POLYKEY_GRPC_PORT=$(PORT)
 
-# --- CONFIGURATION SELECTION ---
-CONFIG_NAME ?= minimal
-CONFIG_DIR        := configs
-CONFIG_FILE       := $(CONFIG_DIR)/config.$(CONFIG_NAME).yaml
-SERVER_BUILD_TAGS := $(if $(filter test,$(CONFIG_NAME)),local_mocks)
+# Config Selection
+CONFIG_NAME        ?= minimal
+CONFIG_FILE        := $(CONFIG_DIR)/config.$(CONFIG_NAME).yaml
+SERVER_BUILD_TAGS  := $(if $(filter test,$(CONFIG_NAME)),local_mocks)
 
-# Test Configuration
+# Race detector
 ifeq ($(race),true)
     RACE_FLAG := -race
 endif
@@ -33,10 +32,10 @@ endif
 # Colors
 CYAN   := \033[36m
 YELLOW := \033[33m
-GREEN  := \033[32m
+GREEN  := \033[92m
 RESET  := \033[0m
 
-# --- Helper Macros ---
+# Helper Macros
 define echo_step_macro
 	@printf "$(CYAN)▶ %s$(RESET)\n" "$(1)"
 endef
@@ -45,19 +44,16 @@ define echo_success_macro
 	@printf "$(GREEN)✔ %s$(RESET)\n" "$(1)"
 endef
 
-
 # ============================================================================ 
 # Phony Targets
 # ============================================================================ 
-.PHONY: \
-	all init lint build clean kill help \
+.PHONY: all init lint build clean kill help \
 	server server-test server-prod server-minimal \
 	client client-debug client-setup client-server \
 	docker-setup docker-build docker-rebuild docker-test docker-clean \
-	docker-up docker-down docker-logs docker-restart docker-ps docker-up-dev \
+	docker-up docker-down docker-logs docker-restart docker-ps docker-client-server docker-test-integration \
 	test test-race test-integration test-persistence coverage \
 	migrate vuln-check sbom
-
 
 # ============================================================================ 
 # Core Targets
@@ -80,10 +76,20 @@ build: ## Build binaries (use BUILD_TAGS=local_mocks for test build)
 	@go build $(LDFLAGS) -o $(CLIENT_BINARY) ./cmd/dev_client
 	@echo "$(GREEN)Build complete!$(RESET)"
 
+clean: kill ## Clean build artifacts and logs
+	@echo "$(YELLOW)Cleaning build artifacts...$(RESET)"
+	@rm -rf $(BIN_DIR) .server_pid server.log coverage.out tests/integration.test .cache
+	@echo "$(GREEN)Cleanup complete!$(RESET)"
+
+
+kill: ## Kill any running server processes on the configured port
+	@echo "$(CYAN)Stopping server process on port $(PORT)...$(RESET)"
+	@-lsof -ti:$(PORT) | xargs kill -9 >/dev/null 2>&1 || true
+
 # ============================================================================ 
 # Server Targets
 # ============================================================================ 
-server: kill ## Run server with the config specified by CONFIG_NAME (default: minimal)
+server: kill ## Run server with the config specified by CONFIG_NAME
 	@echo "$(CYAN)Building server for config profile: '$(CONFIG_NAME)'...$(RESET)"
 	@$(MAKE) --silent build BUILD_TAGS="$(SERVER_BUILD_TAGS)"
 	@echo "$(GREEN)Starting server with config '$(CONFIG_FILE)' on port $(PORT)...$(RESET)"
@@ -118,7 +124,7 @@ client-debug: ## Run the development client with debugging enabled
 	@echo "$(CYAN)Starting client with debugging...$(RESET)"
 	@POLYKEY_DEBUG=true go run cmd/dev_client/main.go
 
-client-server: lint ## Build, run server, wait, and run client (uses CONFIG_NAME)
+client-server: lint ## Build, run server, wait, and run client
 	@$(MAKE) --silent server
 	@echo "$(CYAN)Waiting for server to be ready on port $(PORT)...$(RESET)"; \
 	timeout=10; \
@@ -129,17 +135,18 @@ client-server: lint ## Build, run server, wait, and run client (uses CONFIG_NAME
 			exit 1; \
 		fi; \
 		sleep 1; \
-	done; \
-	echo "$(GREEN)Server is ready! Starting client...$(RESET)"
+	done
+	@echo "$(GREEN)Server is ready! Starting client...$(RESET)"
 	@$(MAKE) --silent client
-# ============================================================================
-# 🐳 Docker & Compose Targets
-# ============================================================================
+
+# ============================================================================ 
+# Docker & Compose Targets
+# ============================================================================ 
 DOCKER_IMAGE        ?= polykey-dev
 DOCKERFILE_PATH     := deployments/docker/Dockerfile
 COMPOSE_FILE        := deployments/docker/docker-compose.yml
-DOCKER_BUILD_CMD     = docker build --file $(DOCKERFILE_PATH) --tag $(DOCKER_IMAGE)
-DOCKER_COMPOSE_CMD   = docker compose -p polykey -f $(COMPOSE_FILE)
+DOCKER_BUILD_CMD    = docker build --file $(DOCKERFILE_PATH) --tag $(DOCKER_IMAGE)
+DOCKER_COMPOSE_CMD  = docker compose -p polykey -f $(COMPOSE_FILE)
 INTEGRATION_COMPOSE_FILE := deployments/docker/docker-compose.integration.yml
 INTEGRATION_COMPOSE_CMD  := docker compose -p polykey-integration -f $(INTEGRATION_COMPOSE_FILE)
 
@@ -165,6 +172,7 @@ docker-up: ## Start services in detached mode
 		echo "$(YELLOW)Warning: AWS credentials not found at ~/.aws/credentials$(RESET)"; \
 	fi
 	@$(DOCKER_COMPOSE_CMD) up -d
+
 docker-down: ## Stop and remove services
 	@$(call echo_step_macro,Stopping Docker Compose stack...)
 	@$(DOCKER_COMPOSE_CMD) down --remove-orphans
@@ -181,19 +189,14 @@ docker-ps: ## Show running containers
 	@$(call echo_step_macro,Listing running containers...)
 	@$(DOCKER_COMPOSE_CMD) ps
 
-# ============================================================================
-# 🧪 Testing Targets inside Docker
-# ============================================================================
-
-# Run client-server stack for local testing
-docker-client-server: docker-build ## Build, run server in Docker, wait, and run client
+docker-client-server: docker-build ## Run client-server stack in Docker
 	@$(call echo_step_macro,Starting server in Docker...)
 	@$(DOCKER_COMPOSE_CMD) up -d polykey
 	@$(call echo_step_macro,Waiting for server to be ready on port $(PORT)...)
 	@timeout=30; \
 	while ! nc -z localhost $(PORT) >/dev/null 2>&1; do \
-		timeout=$(expr $timeout - 1); \
-		if [ $timeout -eq 0 ]; then \
+		timeout=$(expr $$timeout - 1); \
+		if [ $$timeout -eq 0 ]; then \
 			echo "$(YELLOW)Error: Server failed to start within 30 seconds.$(RESET)"; \
 			$(DOCKER_COMPOSE_CMD) logs polykey; \
 			$(DOCKER_COMPOSE_CMD) down; \
@@ -205,7 +208,7 @@ docker-client-server: docker-build ## Build, run server in Docker, wait, and run
 	@$(DOCKER_COMPOSE_CMD) run --rm dev_client
 
 docker-test-integration: docker-build
-	@$(call echo_step_macro, Running integration tests in Docker securely...)
+	@$(call echo_step_macro,Running integration tests in Docker securely...)
 	@$(DOCKER_COMPOSE_CMD) run --rm \
 		-u $(shell id -u):$(shell id -g) \
 		-v $(HOME)/.aws:$(HOME)/.aws:ro \
@@ -213,14 +216,12 @@ docker-test-integration: docker-build
 		-e AWS_CONFIG_FILE=$(HOME)/.aws/config \
 		polykey make test-integration
 
-
-# Run unit tests inside the container
-docker-test: docker-build
+docker-test: docker-build ## Run unit tests inside Docker
 	@$(call echo_step_macro,Running unit tests in Docker...)
 	@$(DOCKER_COMPOSE_CMD) run --rm polykey make test
 
 # ============================================================================ 
-# Test & Coverage Targets
+# Testing Targets
 # ============================================================================ 
 test: ## Run unit tests (use 'race=true' to enable the race detector)
 	@echo "$(CYAN)Running unit tests... $(if $(RACE_FLAG),(with race detector))$(RESET)"
@@ -229,7 +230,7 @@ test: ## Run unit tests (use 'race=true' to enable the race detector)
 test-race: ## Alias for 'make test race=true'
 	@$(MAKE) test race=true
 
-test-integration:
+test-integration: ## Run integration tests
 	@echo "$(CYAN)Running integration tests with gotestsum...$(RESET)"
 	@POLYKEY_CONFIG_PATH=$(abspath $(CONFIG_FILE)) gotestsum --format=testname -- ./tests/integration/...
 
@@ -258,30 +259,43 @@ sbom: ## Generate SBOM
 	@echo "$(CYAN)Generating SBOM...$(RESET)"
 	@./scripts/generate_sbom.sh
 
-# ============================================================================ 
-# Cleanup Targets
-# ============================================================================ 
-clean: kill ## Clean build artifacts and logs
-	@echo "$(YELLOW)Cleaning build artifacts...$(RESET)"
-	@rm -rf $(BIN_DIR) .server_pid server.log coverage.out tests/integration.test
-	@echo "$(GREEN)Cleanup complete!$(RESET)"
+trivy-docker: ## Run Trivy security scan
+	@echo "$(CYAN)Running Trivy security scan...$(RESET)"
+	@mkdir -p .cache/trivy
+	@if docker image inspect $(DOCKER_IMAGE) >/dev/null 2>&1; then \
+		echo "Scanning Docker image: $(DOCKER_IMAGE)"; \
+		trivy image --cache-dir .cache/trivy $(DOCKER_IMAGE); \
+	else \
+		echo "Docker image '$(DOCKER_IMAGE)' not found, skipping image scan"; \
+	fi
+	@echo "Scanning filesystem..."
+	@trivy fs --cache-dir .cache/trivy --skip-dirs certs .
+	@echo "$(GREEN)Trivy scan completed!$(RESET)"
 
-kill: ## Kill any running server processes on the configured port
-	@echo "$(CYAN)Stopping server process on port $(PORT)...$(RESET)"
-	@-lsof -ti:$(PORT) | xargs kill -9 >/dev/null 2>&1 || true
+trivy-local: ## Run Trivy security scan on local filesystem
+	@echo "$(CYAN)Running Trivy security scan on local filesystem...$(RESET)"
+	@mkdir -p .cache/trivy
+	@trivy fs --cache-dir .cache/trivy --skip-dirs certs .
+	@echo "$(GREEN)Local Trivy scan completed!$(RESET)"
+
+check-security: ## Run comprehensive security checks (vulnerability + trivy)
+	@echo "$(CYAN)Running comprehensive security checks...$(RESET)"
+	@$(MAKE) --silent vuln-check
+	@$(MAKE) --silent trivy
+	@echo "$(GREEN)All security checks completed!$(RESET)"
 
 # ============================================================================ 
 # Help Target
-# ============================================================================ 
+# ============================================================================
 help: ## Show this help message
-	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(RESET)"
-	@echo "$(CYAN)║                 Polykey Development                       ║$(RESET)"
-	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(RESET)"
-	@echo ""
-	@echo "$(YELLOW)Default config for dev/test is: $(CYAN)$(CONFIG_NAME) ($(CONFIG_FILE))$(RESET)"
-	@echo "$(YELLOW)To override, use 'make <target> CONFIG_NAME=<name>', e.g., 'make server CONFIG_NAME=test'$(RESET)"
-	@echo ""
-	@echo "$(YELLOW)Available targets:$(RESET)"
+	@printf "╔═══════════════════════════════════════════════════════════╗\n"
+	@printf "║                 Polykey Development                       ║\n"
+	@printf "╚═══════════════════════════════════════════════════════════╝\n"
+	@printf "\n"
+	@printf "Default config for dev/test is: %s (%s)\n" "$(CONFIG_NAME)" "$(CONFIG_FILE)"
+	@printf "To override, use 'make <target> CONFIG_NAME=<name>', e.g., 'make server CONFIG_NAME=test'\n"
+	@printf "\n"
+	@printf "Available targets:\n"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-18s$(RESET) %s\n", $$1, $$2}'
-	@echo ""
+		awk -v cyan="$(CYAN)" -v reset="$(RESET)" 'BEGIN {FS = ":.*?## "}; {printf "  " cyan "%-18s" reset " %s\n", $$1, $$2}'
+	@printf "\n"
