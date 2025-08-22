@@ -225,7 +225,7 @@ docker-test: docker-build ## Run unit tests inside Docker
 # ============================================================================ 
 test: ## Run unit tests (use 'race=true' to enable the race detector)
 	@echo "$(CYAN)Running unit tests... $(if $(RACE_FLAG),(with race detector))$(RESET)"
-	@go test $(RACE_FLAG) -v -json ./cmd/... ./internal/... ./pkg/... | tparse -all
+	@go test $(RACE_FLAG) -v -json ./cmd/... ./internal/... ./pkg/... ./tests/... | tparse -all
 
 test-race: ## Alias for 'make test race=true'
 	@$(MAKE) test race=true

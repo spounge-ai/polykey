@@ -29,7 +29,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/*.go') }}
           restore-keys: |
             ${{ runner.os }}-go-
-
+ 
       - name: Build Binaries
         run: |
           echo "::group::Building Polykey"
@@ -67,10 +67,22 @@ jobs:
       #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       #     aws-region: <your-region>
 
+      - name: Cache tparse
+        uses: actions/cache@v3
+        with:
+          path: ~/go/bin/tparse
+          key: tparse-${{ runner.os }}-v1
+
+      - name: Install tparse
+        run: |
+          if ! command -v tparse &> /dev/null; then
+            go install github.com/nikandfor/tparse@latest
+          fi
+
       - name: Run Integration Tests
         run: |
           echo "::group::Running Integration Tests"
-          make test-integration
+          make tests
           echo "::endgroup::"
 
   # ==============================
