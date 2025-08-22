@@ -1,0 +1,47 @@
+services:
+  polykey:
+    user: "appuser:appgroup"
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
+    container_name: polykey
+    ports:
+      - "50053:50053"
+    volumes:
+      - ../../configs:/app/configs:ro
+      - ~/.aws/credentials:/home/appuser/.aws/credentials:ro
+      - ~/.aws/config:/home/appuser/.aws/config:ro
+    environment:
+      - POLYKEY_CONFIG_PATH=/app/configs/config.minimal.yaml
+      - AWS_REGION=us-east-1
+      - AWS_EC2_METADATA_DISABLED=true
+      - AWS_PROFILE=${AWS_PROFILE:-default}
+      - POLYKEY_DEV_MODE=1
+    networks:
+      - polykey-net
+    restart: unless-stopped
+
+  dev_client:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
+    container_name: dev_client
+    command: ["./bin/dev_client", "--config", "/app/configs/dev_client/config.client.dev.yaml"]
+    depends_on:
+      - polykey
+    volumes:
+      - ../../certs:/app/certs:ro
+      - ../../configs:/app/configs:ro
+      - ~/.aws/credentials:/home/appuser/.aws/credentials:ro
+      - ~/.aws/config:/home/appuser/.aws/config:ro
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_EC2_METADATA_DISABLED=true
+      - AWS_PROFILE=${AWS_PROFILE:-default}
+    networks:
+      - polykey-net
+    restart: unless-stopped
+
+networks:
+  polykey-net:
+    driver: bridge
