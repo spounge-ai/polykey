@@ -4,17 +4,12 @@ on:
   push:
     branches: [main, CI]
   pull_request:
-  workflow_dispatch:  # Allow manual triggering
+  workflow_dispatch:
 
-# Global environment variables
 env:
-  GO_VERSION: '1.22'  # Fixed: Go 1.25 doesn't exist yet
-  POSTGRES_VERSION: '17.2'  # Using stable version
+  GO_VERSION: '1.25' 
 
 jobs:
-  # ==============================
-  # Build and Test Job (Combined for efficiency)
-  # ==============================
   build-and-test:
     runs-on: ubuntu-latest
     
@@ -27,27 +22,24 @@ jobs:
           POSTGRES_DB: polykey
         ports:
           - 5432:5432
-        # Health checks to ensure postgres is ready
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U user"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          # Fetch full history for better caching
           fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true  # Enable built-in Go caching
+          cache: true
 
-      # Enhanced Go module caching
       - name: Cache Go modules and build cache
         uses: actions/cache@v4
         with:
@@ -59,7 +51,6 @@ jobs:
             ${{ runner.os }}-go-${{ env.GO_VERSION }}-
             ${{ runner.os }}-go-
 
-      # Cache tools separately with better key
       - name: Cache Go tools
         uses: actions/cache@v4
         with:
@@ -70,7 +61,6 @@ jobs:
 
       - name: Install test dependencies
         run: go install github.com/mfridman/tparse@latest
-
 
       - name: Verify Go installation
         run: |
@@ -90,29 +80,24 @@ jobs:
           make build
           echo "::endgroup::"
 
-      # Run tests with better output formatting
       - name: Run tests
         run: |
           echo "::group::Integration Tests"
+          make client-setup
           make test
-          echo "::endgroup::"s
+          echo "::endgroup::"
         env:
-          # Test environment variables
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
           POSTGRES_USER: user
           POSTGRES_PASSWORD: secret
           POSTGRES_DB: polykey
 
-  # ==============================
-  # Security and Quality Checks Job
-  # ==============================
   security-quality:
     runs-on: ubuntu-latest
-    # Run in parallel with build-and-test, remove dependency
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -120,7 +105,6 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      # Cache security tools
       - name: Cache security tools
         uses: actions/cache@v4
         with:
@@ -129,7 +113,6 @@ jobs:
             ~/bin/trivy
           key: ${{ runner.os }}-security-tools-v1
 
-      # Use official Trivy action instead of manual installation
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -140,14 +123,12 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
 
-      # Upload security scan results
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
 
-      # Install and run govulncheck properly
       - name: Install govulncheck
         run: |
           if ! command -v govulncheck &> /dev/null; then
@@ -160,14 +141,12 @@ jobs:
           govulncheck ./...
           echo "::endgroup::"
 
-      # Optional: Add code quality checks
       - name: Run go vet
         run: |
           echo "::group::Running go vet"
           go vet ./...
           echo "::endgroup::"
 
-      # Optional: Add staticcheck for additional static analysis
       - name: Install and run staticcheck
         run: |
           if ! command -v staticcheck &> /dev/null; then
@@ -176,5 +155,3 @@ jobs:
           echo "::group::Running staticcheck"
           staticcheck ./...
           echo "::endgroup::"
-
- 
