@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 	// pull postgres docker image for version 13
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "postgres",
-		Tag:        "13",
+		Tag:        "17.6",
 		Env: []string{
 			"POSTGRES_PASSWORD=secret",
 			"POSTGRES_USER=user",
