@@ -107,9 +107,9 @@ server-minimal: ## Alias for 'make server CONFIG_NAME=minimal'
 # ============================================================================ 
 # Client Targets
 # ============================================================================ 
-client-setup: ## Setup the development client
+setup-credentials: ## Setup the development client
 	@echo "$(CYAN)Setting up development client...$(RESET)"
-	@./scripts/setup-dev-client.sh
+	@./scripts/setup-credentials.sh
 	@echo "$(GREEN)Client setup complete!$(RESET)"
 
 client: build ## Run client (depends on a running server)
